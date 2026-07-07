@@ -1,4 +1,4 @@
-# espial
+# wisp
 
 Zero-dependency runtime observability for agent teams: live "who is
 working, on what, who is blocked" for an agentic run, self-reported by the
@@ -30,13 +30,13 @@ Pieces:
 | File | Role |
 |---|---|
 | `protocol.ts` | functional core — event schema, parse, team-state reducer (tested in `test/protocol.test.ts`) |
-| `bus.ts` | file transport (append-only NDJSON at `.espalier/runtime/events.ndjson`, override with `$ESPALIER_EVENTS`) |
+| `bus.ts` | file transport (append-only NDJSON at `.grove/runtime/events.ndjson`, override with `$GROVE_EVENTS`) |
 | `emit.ts` | agent CLI — status/heartbeat/verdict/question + command check/ack |
 | `server.ts` | zero-dep HTTP shell — dashboard + `/api/state` + `/api/events` + `POST /api/command` |
 | `dashboard.html` | self-contained UI, light/dark |
 | `demo.ts` | synthetic furrow replay modeled on the Espalier prototype's furrow 1 |
 
-Runtime state under `.espalier/` is gitignored: telemetry is a
+Runtime state under `.grove/` is gitignored: telemetry is a
 self-reported claim, never artifact-derived truth — the invariant this
 protocol was designed to preserve.
 
@@ -52,7 +52,7 @@ comments (e.g. `emit.ts`, `server.ts`, `demo.ts` usage examples, and the
 as-is from the prototype and have not yet been reconciled to this repo's
 layout or docs — flagged here rather than silently left stale.
 
-`demo.ts` is the one file that stays Espalier-vocabulary-coupled
+`demo.ts` is the one file that stays Grove-vocabulary-coupled
 (furrows, gardeners, ADR-0030 framing) — adapting or replacing it for a
 generic agent-team story, and wiring up real emitter adapters, is
 out of scope for this bootstrap step and is tracked as follow-up work

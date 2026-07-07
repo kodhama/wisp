@@ -4,7 +4,7 @@
 // (with a mid-run parked question) → conformance gate → validator.
 // Lifted into kodhama/espial from the math-quest prototype
 // (tools/espalier/viz/demo.ts) — see this repo's README for provenance.
-// This demo's vocabulary (furrows, gardeners) is Espalier-specific; the
+// This demo's vocabulary (furrows, gardeners) is Grove-specific; the
 // README's "lift recipe" flags it for rewrite/drop by adopters (out of
 // scope for this bootstrap step).
 //
@@ -18,13 +18,13 @@
 // question is not answered from the dashboard within its patience window,
 // it answers itself so the replay always terminates.
 import { appendEvent, busPath, readBus } from "./bus.ts";
-import { makeEvent, reduceTeamState, type AgentState, type EspalierEvent } from "./protocol.ts";
+import { makeEvent, reduceTeamState, type AgentState, type GroveEvent } from "./protocol.ts";
 
 const FAST = process.argv.includes("--fast");
 const RUN = "furrow-demo";
 const sleep = (ms: number) => (FAST ? Promise.resolve() : new Promise((r) => setTimeout(r, ms)));
 
-function emit(agent: string, partial: Omit<EspalierEvent, "v" | "ts" | "run" | "agent">): void {
+function emit(agent: string, partial: Omit<GroveEvent, "v" | "ts" | "run" | "agent">): void {
   appendEvent(busPath(), makeEvent({ ts: new Date().toISOString(), run: RUN, agent, ...partial }));
 }
 function status(agent: string, state: AgentState, activity?: string, refs?: string[]): void {
