@@ -43,7 +43,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="description" content="Zero-dependency runtime observability for agent teams — protocol, bus, emitter, dashboard. Node ≥22.18, no runtime dependencies. The hero below replays a real captured demo furrow.">
-<title>espial — runtime observability for agent teams</title>
+<title>wisp — runtime observability for agent teams</title>
 <style>
 /* ============================================================
    kodhama-ds tokens.css — read at v0.1.0, inlined verbatim below,
@@ -323,9 +323,9 @@ section.section h2 { font-size: 1.6rem; }
 <body>
 
 <header class="site">
-  <div class="brand"><i class="dot" aria-hidden="true"></i> espial</div>
+  <div class="brand"><i class="dot" aria-hidden="true"></i> wisp</div>
   <nav>
-    <a class="gh" href="https://github.com/kodhama/espial">GitHub ↗</a>
+    <a class="gh" href="https://github.com/kodhama/wisp">GitHub ↗</a>
     <button class="toggle" id="themeToggle" aria-label="Toggle color theme">theme</button>
   </nav>
 </header>
@@ -339,7 +339,7 @@ section.section h2 { font-size: 1.6rem; }
 
     <div class="cta">
       <a class="btn btn-primary" href="#install">Vendor it →</a>
-      <a class="btn btn-ghost" href="https://github.com/kodhama/espial">View on GitHub →</a>
+      <a class="btn btn-ghost" href="https://github.com/kodhama/wisp">View on GitHub →</a>
     </div>
 
     <!-- Furrow-replay graph: aria-hidden, see deviation note 4 above. -->
@@ -444,7 +444,7 @@ section.section h2 { font-size: 1.6rem; }
     <div class="card">
       <p class="num">02</p>
       <h3>Bus</h3>
-      <p>The file transport: append-only NDJSON at <code>.espalier/runtime/events.ndjson</code> (override with <code>$ESPALIER_EVENTS</code>). Runtime state is gitignored — telemetry is a self-reported claim, never artifact-derived truth.</p>
+      <p>The file transport: append-only NDJSON at <code>.grove/runtime/events.ndjson</code> (override with <code>$GROVE_EVENTS</code>). Runtime state is gitignored — telemetry is a self-reported claim, never artifact-derived truth.</p>
     </div>
     <div class="card">
       <p class="num">03</p>
@@ -459,7 +459,7 @@ section.section h2 { font-size: 1.6rem; }
     <div class="card">
       <p class="num">05</p>
       <h3>Demo furrow</h3>
-      <p><code>demo.ts</code> — a synthetic furrow replay, modeled on the Espalier prototype's furrow 1, that feeds the bus so the dashboard is watchable without a real swarm. It's what the hero above is built from.</p>
+      <p><code>demo.ts</code> — a synthetic furrow replay, modeled on the Grove prototype's furrow 1, that feeds the bus so the dashboard is watchable without a real swarm. It's what the hero above is built from.</p>
     </div>
     <div class="card">
       <p class="num">06</p>
@@ -472,8 +472,8 @@ section.section h2 { font-size: 1.6rem; }
 <section class="section wrap" id="install">
   <p class="eyebrow">Install</p>
   <h2>Vendor it</h2>
-  <p class="muted" style="max-width:640px">espial ships as source, not a package, today. The family's current distribution default is <strong style="color:var(--text)">vendored-copy</strong>: clone the repo, or copy its flat files straight into your project.</p>
-  <div class="terminal" role="group" aria-label="Install espial">
+  <p class="muted" style="max-width:640px">wisp ships as source, not a package, today. The family's current distribution default is <strong style="color:var(--text)">vendored-copy</strong>: clone the repo, or copy its flat files straight into your project.</p>
+  <div class="terminal" role="group" aria-label="Install wisp">
     <div class="tt">
       <i class="dot"></i><i class="dot"></i><i class="dot"></i>
       <div class="tabs" role="tablist" aria-label="Install method">
@@ -483,21 +483,21 @@ section.section h2 { font-size: 1.6rem; }
       <button class="copy" id="copyBtn" aria-label="Copy commands">copy</button>
     </div>
     <div class="panel active" data-panel="clone">
-      <div class="cmd"><code><span class="prompt">$ </span>git clone https://github.com/kodhama/espial.git</code></div>
-      <div class="cmd"><code><span class="prompt">$ </span>cd espial &amp;&amp; node server.ts<span class="cmt">    # dashboard on :4177</span></code></div>
+      <div class="cmd"><code><span class="prompt">$ </span>git clone https://github.com/kodhama/wisp.git</code></div>
+      <div class="cmd"><code><span class="prompt">$ </span>cd wisp &amp;&amp; node server.ts<span class="cmt">    # dashboard on :4177</span></code></div>
     </div>
     <div class="panel" data-panel="vendor">
-      <div class="cmd"><code><span class="prompt">$ </span>cp path/to/espial/{protocol,bus,emit,server}.ts path/to/espial/dashboard.html your-project/</code></div>
+      <div class="cmd"><code><span class="prompt">$ </span>cp path/to/wisp/{protocol,bus,emit,server}.ts path/to/wisp/dashboard.html your-project/</code></div>
       <div class="cmd"><code><span class="prompt">$ </span>node server.ts<span class="cmt">    # no install step — plain node, nothing underneath it</span></code></div>
     </div>
   </div>
-  <p class="tnote">Publishing <code>@kodhama/espial</code> to npm (the name is already reserved in <code>package.json</code>) is a later option, not a commitment this page makes — vendored-copy is today's default.</p>
+  <p class="tnote">Publishing <code>@kodhama/wisp</code> to npm (the name is already reserved in <code>package.json</code>) is a later option, not a commitment this page makes — vendored-copy is today's default.</p>
 </section>
 
 <footer class="site">
   <div class="wrap">
-    <span>espial — MIT licensed.</span>
-    <span><a href="https://github.com/kodhama/espial">github.com/kodhama/espial</a></span>
+    <span>wisp — MIT licensed.</span>
+    <span><a href="https://github.com/kodhama/wisp">github.com/kodhama/wisp</a></span>
   </div>
 </footer>
 
@@ -509,7 +509,7 @@ section.section h2 { font-size: 1.6rem; }
   var root = document.documentElement;
   var toggle = document.getElementById("themeToggle");
   var saved = null;
-  try { saved = localStorage.getItem("espial-theme"); } catch (e) {}
+  try { saved = localStorage.getItem("wisp-theme"); } catch (e) {}
   if (saved) root.setAttribute("data-theme", saved);
   function themeNow() {
     return root.getAttribute("data-theme") ||
@@ -520,7 +520,7 @@ section.section h2 { font-size: 1.6rem; }
   toggle.addEventListener("click", function () {
     var next = themeNow() === "dark" ? "light" : "dark";
     root.setAttribute("data-theme", next);
-    try { localStorage.setItem("espial-theme", next); } catch (e) {}
+    try { localStorage.setItem("wisp-theme", next); } catch (e) {}
     syncToggle();
   });
 
@@ -555,9 +555,9 @@ section.section h2 { font-size: 1.6rem; }
   wireTerminal(document.querySelector('.terminal[aria-label="Run the real live dashboard"]'), {
     live: "node server.ts\nnode demo.ts"
   });
-  wireTerminal(document.querySelector('.terminal[aria-label="Install espial"]'), {
-    clone: "git clone https://github.com/kodhama/espial.git\ncd espial && node server.ts",
-    vendor: "cp path/to/espial/{protocol,bus,emit,server}.ts path/to/espial/dashboard.html your-project/\nnode server.ts"
+  wireTerminal(document.querySelector('.terminal[aria-label="Install wisp"]'), {
+    clone: "git clone https://github.com/kodhama/wisp.git\ncd wisp && node server.ts",
+    vendor: "cp path/to/wisp/{protocol,bus,emit,server}.ts path/to/wisp/dashboard.html your-project/\nnode server.ts"
   });
 
   // ============================================================

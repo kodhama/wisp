@@ -1,7 +1,7 @@
 // Provenance: lifted into kodhama/espial from the math-quest prototype
 // (test/espalier-viz-protocol.test.ts), originally discovery-espalier-runtime-viz
 // AC1–AC6 (prototype exploration, branch claude/agentic-runtime-viz-x1884q).
-// Tests the functional core of the espial event protocol: parse, event
+// Tests the functional core of the wisp event protocol: parse, event
 // construction, and the events → team-state reducer.
 import { describe, expect, it } from "vitest";
 import {
@@ -9,7 +9,7 @@ import {
   makeEvent,
   parseEvents,
   reduceTeamState,
-  type EspalierEvent,
+  type GroveEvent,
 } from "../protocol.ts";
 
 const T0 = "2026-07-07T10:00:00.000Z";
@@ -22,8 +22,8 @@ function status(
   agent: string,
   state: "spawned" | "working" | "blocked" | "awaiting_gate" | "done" | "failed",
   offsetSec: number,
-  extra: Partial<EspalierEvent> = {},
-): EspalierEvent {
+  extra: Partial<GroveEvent> = {},
+): GroveEvent {
   return makeEvent({
     ts: at(offsetSec),
     run: "furrow-test",

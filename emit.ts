@@ -1,4 +1,4 @@
-// Espalier status emitter — the CLI gardeners call to report themselves.
+// Grove status emitter — the CLI gardeners call to report themselves.
 // Lifted into kodhama/espial from the math-quest prototype
 // (tools/espalier/viz/emit.ts) — see this repo's README for provenance.
 // Usage below still shows the source repo's tools/espalier/viz/ path; from
@@ -29,7 +29,7 @@ import {
   makeEvent,
   reduceTeamState,
   type AgentState,
-  type EspalierEvent,
+  type GroveEvent,
 } from "./protocol.ts";
 
 function usageFail(message: string): never {
@@ -63,7 +63,7 @@ const run = values.run ?? usageFail("--run is required");
 const agent = values.agent ?? usageFail("--agent is required");
 const ts = new Date().toISOString();
 
-function emit(partial: Omit<EspalierEvent, "v" | "ts" | "run" | "agent">): void {
+function emit(partial: Omit<GroveEvent, "v" | "ts" | "run" | "agent">): void {
   const addressed = {
     ...partial,
     ...(values.to !== undefined ? { to: values.to } : {}),

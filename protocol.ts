@@ -1,4 +1,4 @@
-// Espalier runtime-viz event protocol — functional core (no I/O).
+// Grove runtime-viz event protocol — functional core (no I/O).
 // Lifted into kodhama/espial from the math-quest prototype
 // (tools/espalier/viz/protocol.ts) — see this repo's README for provenance.
 // Upstream: discovery-espalier-runtime-viz (prototype). Design constraints
@@ -7,8 +7,8 @@
 // distinguishable from "all quiet" (vacuity detection); failures are loud.
 //
 // The vocabulary is deliberately team-agnostic — agent/run/state/activity/refs
-// carry no math-quest or Espalier nouns — so the protocol lifts out with
-// Espalier and applies to any agentic team. Role semantics (gardener names,
+// carry no math-quest or Grove nouns — so the protocol lifts out with
+// Grove and applies to any agentic team. Role semantics (gardener names,
 // verdict grammars) ride in `verdict`, `refs`, and `meta`.
 
 export const PROTOCOL_VERSION = 1;
@@ -65,7 +65,7 @@ export interface QuestionBody {
   text: string;
 }
 
-export interface EspalierEvent {
+export interface GroveEvent {
   v: number;
   ts: string; // ISO-8601, emitter's clock
   run: string; // run/furrow instance id
@@ -101,7 +101,7 @@ export interface ParseError {
 // ---------------------------------------------------------------------------
 
 function fail(reason: string): never {
-  throw new Error(`invalid espalier event: ${reason}`);
+  throw new Error(`invalid grove event: ${reason}`);
 }
 
 function requireNonBlank(value: unknown, field: string): string {
@@ -112,7 +112,7 @@ function requireNonBlank(value: unknown, field: string): string {
 }
 
 /** Validate and stamp an event. Throws on structural problems. */
-export function makeEvent(input: Omit<EspalierEvent, "v"> & { v?: number | undefined }): EspalierEvent {
+export function makeEvent(input: Omit<GroveEvent, "v"> & { v?: number | undefined }): GroveEvent {
   const ts = requireNonBlank(input.ts, "ts");
   if (Number.isNaN(Date.parse(ts))) fail(`"ts" is not a parseable timestamp: ${ts}`);
   const run = requireNonBlank(input.run, "run");
@@ -154,8 +154,8 @@ export function makeEvent(input: Omit<EspalierEvent, "v"> & { v?: number | undef
  * Parse an NDJSON event log. Malformed lines become ParseErrors with their
  * line number — never silently dropped. Blank lines are skipped.
  */
-export function parseEvents(ndjson: string): { events: EspalierEvent[]; errors: ParseError[] } {
-  const events: EspalierEvent[] = [];
+export function parseEvents(ndjson: string): { events: GroveEvent[]; errors: ParseError[] } {
+  const events: GroveEvent[] = [];
   const errors: ParseError[] = [];
   const lines = ndjson.split("\n");
   for (let i = 0; i < lines.length; i++) {
@@ -169,7 +169,7 @@ export function parseEvents(ndjson: string): { events: EspalierEvent[]; errors: 
       continue;
     }
     try {
-      events.push(makeEvent(parsed as EspalierEvent));
+      events.push(makeEvent(parsed as GroveEvent));
     } catch (e) {
       errors.push({ line: i + 1, reason: (e as Error).message, raw });
     }
@@ -234,7 +234,7 @@ export interface TeamState {
 export const DEFAULT_STALE_AFTER_MS = 120_000;
 
 export function reduceTeamState(
-  events: EspalierEvent[],
+  events: GroveEvent[],
   now: string,
   staleAfterMs: number = DEFAULT_STALE_AFTER_MS,
 ): TeamState {
@@ -278,7 +278,7 @@ export function reduceTeamState(
       continue; // the issuer is not a run agent
     }
 
-    const key = `${ev.run} ${ev.agent}`;
+    const key = `${ev.run}\u0000${ev.agent}`;
     let acc = agents.get(key);
     if (!acc) {
       acc = {
@@ -388,7 +388,7 @@ export interface GraphView {
  * telemetry, not artifact truth.
  */
 export function deriveGraph(
-  events: EspalierEvent[],
+  events: GroveEvent[],
   run: string,
   opts: { hub?: string | undefined } = {},
 ): GraphView {
@@ -412,7 +412,7 @@ export function deriveGraph(
     from: string,
     to: string,
     kind: EdgeKind,
-    ev: EspalierEvent,
+    ev: GroveEvent,
     via?: string | undefined,
   ) => {
     if (from === to) return;

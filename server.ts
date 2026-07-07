@@ -1,4 +1,4 @@
-// Espalier runtime-viz server — zero-dependency imperative shell.
+// Wisp runtime-viz server — zero-dependency imperative shell.
 // Lifted into kodhama/espial from the math-quest prototype
 // (tools/espalier/viz/server.ts) — see this repo's README for provenance.
 // Serves the dashboard and a small JSON API over the file bus. Deliberately
@@ -8,7 +8,7 @@
 // Usage below still shows the source repo's tools/espalier/viz/ path; from
 // this repo's root, invoke as `node server.ts` (flat layout).
 //   node tools/espalier/viz/server.ts            # http://localhost:4177
-//   ESPALIER_PORT=5000 node tools/espalier/viz/server.ts
+//   WISP_PORT=5000 node tools/espalier/viz/server.ts
 //
 // API:
 //   GET  /api/state    → reduced TeamState + parse-error report
@@ -21,7 +21,7 @@ import { fileURLToPath } from "node:url";
 import { appendEvent, busPath, readBus } from "./bus.ts";
 import { deriveGraph, makeEvent, reduceTeamState, type CommandType } from "./protocol.ts";
 
-const PORT = Number(process.env.ESPALIER_PORT ?? 4177);
+const PORT = Number(process.env.WISP_PORT ?? 4177);
 const HERE = dirname(fileURLToPath(import.meta.url));
 let commandSeq = 0;
 
@@ -102,6 +102,6 @@ const server = createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   process.stdout.write(
-    `espalier viz on http://localhost:${PORT}  (bus: ${busPath()})\n`,
+    `wisp on http://localhost:${PORT}  (bus: ${busPath()})\n`,
   );
 });

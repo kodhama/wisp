@@ -1,7 +1,7 @@
-# espial — LP content
+# wisp — LP content
 
 Source content for `docs/index.html`, generated per `kodhama/design-system`'s
-`lp-generator.md` contract at tag `v0.1.0`. This file is espial's own copy —
+`lp-generator.md` contract at tag `v0.1.0`. This file is wisp's own copy —
 the DS supplies no content, only tokens and patterns.
 
 ## What it is
@@ -18,7 +18,7 @@ Four pieces, one story:
 1. **Protocol** (`protocol.ts`) — the functional core: event schema, parse,
    and a team-state reducer. Tested in isolation (`test/protocol.test.ts`).
 2. **Bus** (`bus.ts`) — the file transport: append-only NDJSON at
-   `.espalier/runtime/events.ndjson` (override with `$ESPALIER_EVENTS`).
+   `.grove/runtime/events.ndjson` (override with `$GROVE_EVENTS`).
    Runtime state is gitignored — telemetry is a self-reported claim, never
    artifact-derived truth. That's the invariant the whole protocol exists to
    preserve.
@@ -35,7 +35,7 @@ Four pieces, one story:
 
 `demo.ts` is the fifth piece worth naming on the LP even though it's not part
 of the shipped protocol surface: a synthetic furrow replay, modeled on the
-Espalier prototype's furrow 1, that feeds the bus so the dashboard can be
+Grove prototype's furrow 1, that feeds the bus so the dashboard can be
 seen live without a real swarm running. It's the thing that makes the product
 demonstrable in thirty seconds, and it's the thing the hero below is built
 from.
@@ -102,13 +102,13 @@ real two commands shows *what it's like to drive it*.
 
 ## Install notes
 
-espial ships as source, not a package, today. The family's current
+wisp ships as source, not a package, today. The family's current
 distribution default is **vendored-copy**: clone the repo (or copy its flat
 files — `protocol.ts`, `bus.ts`, `emit.ts`, `server.ts`, `dashboard.html`)
 straight into the consuming project. There is no build step and nothing to
 install — it's plain `.ts` run directly by Node's type stripping (Node ≥
 22.18).
 
-Publishing `@kodhama/espial` to npm (the `name` is already reserved in
+Publishing `@kodhama/wisp` to npm (the `name` is already reserved in
 `package.json`) is a later option, not a commitment made by this LP — noted
 so the install section doesn't imply an `npm install` that doesn't work yet.

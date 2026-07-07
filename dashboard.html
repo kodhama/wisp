@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Espalier — runtime</title>
+<title>Grove — runtime</title>
 <!-- kodhama-ds: v0.1.0 -->
 <style>
   /* Lifted into kodhama/espial from the math-quest prototype
@@ -282,7 +282,7 @@
 </head>
 <body>
 <header>
-  <h1><svg class="mark" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M2 9h20M2 15h20" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" opacity=".55"/><path d="M7.5 10.8 10 13.2M16.5 10.8 14 13.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="5.5" cy="9" r="2.1" stroke="currentColor" stroke-width="1.7"/><circle cx="18.5" cy="9" r="2.1" stroke="currentColor" stroke-width="1.7"/><circle cx="12" cy="15" r="2.1" fill="currentColor"/></svg>Espalier · runtime</h1>
+  <h1><svg class="mark" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M2 9h20M2 15h20" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" opacity=".55"/><path d="M7.5 10.8 10 13.2M16.5 10.8 14 13.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="5.5" cy="9" r="2.1" stroke="currentColor" stroke-width="1.7"/><circle cx="18.5" cy="9" r="2.1" stroke="currentColor" stroke-width="1.7"/><circle cx="12" cy="15" r="2.1" fill="currentColor"/></svg>Grove · runtime</h1>
   <span class="tag" title="Events are agent self-reports. Artifact state remains the source of truth (ADR-0030).">self-reported telemetry</span>
   <span class="sub" id="freshness">connecting…</span>
   <nav id="runs"></nav>
@@ -355,7 +355,7 @@ function render(state, events) {
   const now = Date.parse(state.generatedAt);
   const banners = [];
   if (!state.telemetry) {
-    banners.push('<div class="banner critical"><b>No telemetry on the bus.</b> This means “no data”, not “all quiet” — check that gardeners are emitting (skill: espalier-status).</div>');
+    banners.push('<div class="banner critical"><b>No telemetry on the bus.</b> This means “no data”, not “all quiet” — check that gardeners are emitting (skill: grove-status).</div>');
   }
   if (state.parseErrors?.length) {
     banners.push('<div class="banner critical"><b>' + state.parseErrors.length + ' malformed line(s) on the bus</b> — first at line ' + state.parseErrors[0].line + ': ' + esc(state.parseErrors[0].reason) + "</div>");
@@ -728,10 +728,10 @@ document.getElementById("themeToggle").addEventListener("click", () => {
   const next = cur === "dark" ? "light" : cur === "light" ? "" : (matchMedia("(prefers-color-scheme: dark)").matches ? "light" : "dark");
   if (next) document.documentElement.dataset.theme = next;
   else delete document.documentElement.dataset.theme;
-  try { localStorage.setItem("espalier-theme", next); } catch {}
+  try { localStorage.setItem("wisp-theme", next); } catch {}
 });
 try {
-  const saved = localStorage.getItem("espalier-theme");
+  const saved = localStorage.getItem("wisp-theme");
   if (saved) document.documentElement.dataset.theme = saved;
 } catch {}
 
