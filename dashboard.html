@@ -4,85 +4,153 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Espalier — runtime</title>
+<!-- kodhama-ds: v0.1.0 -->
 <style>
   /* Lifted into kodhama/espial from the math-quest prototype
      (tools/espalier/viz/dashboard.html) — see this repo's README for
      provenance.
-     Design tokens lifted from the Trellis landing page (gundisalwa/trellis
-     docs/index.html) — the shared design language for the trellis / espalier /
-     runtime-viz family. State colors stay functional (icon + label always,
-     never color alone); "good/working" adopts the Trellis accent green. */
+
+     kodhama-ds tokens.css — read at v0.1.0, inlined verbatim below. This
+     replaces the former hand-copied block ("design tokens lifted from the
+     Trellis landing page directly") that was never re-synced against the
+     design-system after that first copy — same shared origin, but drifted
+     out of design-system's own reach. Consuming an LP: paste tokens.css in
+     as-is — same mechanism this repo's own docs/index.html already uses.
+     No runtime fetch of design-system; fully self-contained.
+     Do not hand-edit the DS values below — open a PR upstream against
+     design-system's tokens.css instead, so every consumer gets the fix. */
   :root {
-    --page: #f5f7f4; --surface-1: #ffffff;
-    --ink: #16201b; --ink-2: #5a6b62; --muted: #7d8f85;
-    --grid: #e0e7e1; --baseline: #c2cfc6; --ring: #e0e7e1;
-    --accent: #1f9d68; --accent-ink: #0c5d3c;
-    --good: #1f9d68; --warning: #fab219; --serious: #ec835a; --critical: #b4432f;
-    --human-ch: #5b4fa0; --flow-dot: #2a78d6;
-    --code-bg: #0e1712; --code-text: #d7e6dd; --code-accent: #56d69b;
+    /* color — DS token, verbatim */
+    --bg: #f5f7f4;
+    --surface: #ffffff;
+    --text: #16201b;
+    --muted: #5a6b62;
+    --accent: #1f9d68;
+    --accent-ink: #0c5d3c;
+    --line: #e0e7e1;
+    --code-bg: #0e1712;
+    --code-text: #d7e6dd;
+    --code-accent: #56d69b;
+
+    /* layout — DS token, verbatim */
+    --maxw: 1080px;
+
+    /* type — DS token, verbatim */
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+
+    /* ---- page-local addendum — NOT DS tokens. This dashboard's own
+       status colors + swarm-graph edge styling; kept separate from the DS
+       block above, nothing here is defined upstream. State colors stay
+       functional throughout this file: icon + label always ship together,
+       never color alone (see the STATES table below). --muted-2 is this
+       file's former bare "--muted" — it collided in *name* (not value)
+       with the DS's own --muted once that was inlined above, so it moved
+       to a non-colliding name; the color and every call site are
+       otherwise unchanged. ---- */
+    --muted-2: #7d8f85;
+    --baseline: #c2cfc6;
+    --good: #1f9d68;
+    --warning: #fab219;
+    --serious: #ec835a;
+    --critical: #b4432f;
+    --human-ch: #5b4fa0;
+    --flow-dot: #2a78d6;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --page: #0d1411; --surface-1: #131c18;
-      --ink: #e2eae5; --ink-2: #91a59b; --muted: #6f8177;
-      --grid: #223029; --baseline: #33453b; --ring: #223029;
-      --accent: #4ccb90; --accent-ink: #9fe9c4;
-      --good: #4ccb90; --critical: #d05a45;
-      --human-ch: #a99df0; --flow-dot: #3987e5;
+      --bg: #0d1411;
+      --surface: #131c18;
+      --text: #e2eae5;
+      --muted: #91a59b;
+      --accent: #4ccb90;
+      --accent-ink: #9fe9c4;
+      --line: #223029;
+      --code-bg: #0a110d;
+      --code-text: #d7e6dd;
+      --code-accent: #56d69b;
+
+      --muted-2: #6f8177;
+      --baseline: #33453b;
+      --good: #4ccb90;
+      --critical: #d05a45;
+      --human-ch: #a99df0;
+      --flow-dot: #3987e5;
     }
   }
   :root[data-theme="light"] {
-    --page: #f5f7f4; --surface-1: #ffffff;
-    --ink: #16201b; --ink-2: #5a6b62; --muted: #7d8f85;
-    --grid: #e0e7e1; --baseline: #c2cfc6; --ring: #e0e7e1;
-    --accent: #1f9d68; --accent-ink: #0c5d3c;
-    --good: #1f9d68; --critical: #b4432f;
-    --human-ch: #5b4fa0; --flow-dot: #2a78d6;
+    --bg: #f5f7f4;
+    --surface: #ffffff;
+    --text: #16201b;
+    --muted: #5a6b62;
+    --accent: #1f9d68;
+    --accent-ink: #0c5d3c;
+    --line: #e0e7e1;
+    --code-bg: #0e1712;
+    --code-text: #d7e6dd;
+    --code-accent: #56d69b;
+
+    --muted-2: #7d8f85;
+    --baseline: #c2cfc6;
+    --good: #1f9d68;
+    --critical: #b4432f;
+    --human-ch: #5b4fa0;
+    --flow-dot: #2a78d6;
   }
   :root[data-theme="dark"] {
-    --page: #0d1411; --surface-1: #131c18;
-    --ink: #e2eae5; --ink-2: #91a59b; --muted: #6f8177;
-    --grid: #223029; --baseline: #33453b; --ring: #223029;
-    --accent: #4ccb90; --accent-ink: #9fe9c4;
-    --good: #4ccb90; --critical: #d05a45;
-    --human-ch: #a99df0; --flow-dot: #3987e5;
+    --bg: #0d1411;
+    --surface: #131c18;
+    --text: #e2eae5;
+    --muted: #91a59b;
+    --accent: #4ccb90;
+    --accent-ink: #9fe9c4;
+    --line: #223029;
+    --code-bg: #0a110d;
+    --code-text: #d7e6dd;
+    --code-accent: #56d69b;
+
+    --muted-2: #6f8177;
+    --baseline: #33453b;
+    --good: #4ccb90;
+    --critical: #d05a45;
+    --human-ch: #a99df0;
+    --flow-dot: #3987e5;
   }
   * { box-sizing: border-box; }
   body {
-    margin: 0; background: var(--page); color: var(--ink);
+    margin: 0; background: var(--bg); color: var(--text);
     font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
   }
   header {
     display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px;
-    padding: 14px 20px; border-bottom: 1px solid var(--grid);
+    padding: 14px 20px; border-bottom: 1px solid var(--line);
   }
   header h1 { font-size: 16px; margin: 0; font-weight: 650; letter-spacing: -0.01em; display: flex; align-items: center; gap: 9px; }
   header h1 .mark { width: 19px; height: 19px; flex: none; color: var(--accent); }
   .toggle {
     font-family: var(--mono); font-size: 11px; cursor: pointer;
-    background: transparent; color: var(--ink-2); border: 1px solid var(--grid);
+    background: transparent; color: var(--muted); border: 1px solid var(--line);
     border-radius: 999px; padding: 4px 10px;
   }
-  .toggle:hover { color: var(--ink); border-color: var(--accent); }
-  header .sub { color: var(--muted); font-size: 12px; }
+  .toggle:hover { color: var(--text); border-color: var(--accent); }
+  header .sub { color: var(--muted-2); font-size: 12px; }
   .tag {
     font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.04em;
-    color: var(--ink-2); border: 1px solid var(--ring);
+    color: var(--muted); border: 1px solid var(--line);
     border-radius: 999px; padding: 2px 9px;
   }
   #runs { display: flex; gap: 6px; margin-left: auto; }
   #runs button {
     font: inherit; font-size: 12px; padding: 3px 10px; border-radius: 999px;
-    border: 1px solid var(--ring); background: var(--surface-1);
-    color: var(--ink-2); cursor: pointer;
+    border: 1px solid var(--line); background: var(--surface);
+    color: var(--muted); cursor: pointer;
   }
-  #runs button.active { color: var(--ink); font-weight: 650; border-color: var(--baseline); }
+  #runs button.active { color: var(--text); font-weight: 650; border-color: var(--baseline); }
   main { padding: 16px 20px 40px; max-width: 1080px; margin: 0 auto; }
   .banner {
-    border: 1px solid var(--ring); border-left: 3px solid var(--warning);
-    background: var(--surface-1); border-radius: 10px;
-    padding: 10px 14px; margin: 0 0 14px; color: var(--ink-2);
+    border: 1px solid var(--line); border-left: 3px solid var(--warning);
+    background: var(--surface); border-radius: 10px;
+    padding: 10px 14px; margin: 0 0 14px; color: var(--muted);
   }
   .banner.critical { border-left-color: var(--critical); }
   section h2 {
@@ -93,7 +161,7 @@
   /* Agent cards */
   #agents { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
   .card {
-    background: var(--surface-1); border: 1px solid var(--ring);
+    background: var(--surface); border: 1px solid var(--line);
     border-radius: 14px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px;
   }
   .card .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -102,64 +170,64 @@
     display: inline-flex; align-items: center; gap: 5px;
     font-family: var(--mono); font-size: 10.5px; letter-spacing: .03em;
     font-weight: 600; border-radius: 999px; padding: 2px 9px;
-    border: 1px solid var(--ring); color: var(--ink-2);
+    border: 1px solid var(--line); color: var(--muted);
   }
   .chip .dot { font-size: 10px; }
-  .activity { color: var(--ink-2); min-height: 1.4em; }
+  .activity { color: var(--muted); min-height: 1.4em; }
   .refs { display: flex; flex-wrap: wrap; gap: 4px; }
   .refs span {
-    font-size: 11px; color: var(--muted); border: 1px solid var(--grid);
+    font-size: 11px; color: var(--muted-2); border: 1px solid var(--line);
     border-radius: 4px; padding: 0 5px;
     font-variant-numeric: tabular-nums;
   }
-  .meta { display: flex; gap: 8px; align-items: center; font-size: 11px; color: var(--muted); }
+  .meta { display: flex; gap: 8px; align-items: center; font-size: 11px; color: var(--muted-2); }
   .meta .age { font-variant-numeric: tabular-nums; }
-  .stalebadge { color: var(--ink); background: var(--warning); border-radius: 4px; padding: 0 5px; font-weight: 650; }
-  .verdict { font-size: 11px; color: var(--ink-2); }
+  .stalebadge { color: var(--text); background: var(--warning); border-radius: 4px; padding: 0 5px; font-weight: 650; }
+  .verdict { font-size: 11px; color: var(--muted); }
   .verdict b { letter-spacing: .04em; }
   .cmds { display: flex; gap: 5px; margin-top: 2px; flex-wrap: wrap; }
   .cmds button {
     font-family: var(--mono); font-size: 11px; padding: 3px 10px; border-radius: 999px;
-    border: 1px solid var(--ring); background: transparent; color: var(--ink-2); cursor: pointer;
+    border: 1px solid var(--line); background: transparent; color: var(--muted); cursor: pointer;
   }
-  .cmds button:hover { border-color: var(--accent); color: var(--ink); }
-  .pending { font-size: 11px; color: var(--ink-2); }
+  .cmds button:hover { border-color: var(--accent); color: var(--text); }
+  .pending { font-size: 11px; color: var(--muted); }
   .pending .dot { color: var(--warning); }
   /* Questions */
   .question {
-    background: var(--surface-1); border: 1px solid var(--ring);
+    background: var(--surface); border: 1px solid var(--line);
     border-left: 3px solid var(--serious); border-radius: 6px;
     padding: 10px 12px; margin-bottom: 8px;
   }
   .question form { display: flex; gap: 6px; margin-top: 6px; }
   .question input {
     flex: 1; font: inherit; font-size: 12px; padding: 4px 8px;
-    border: 1px solid var(--grid); border-radius: 5px; background: var(--page); color: var(--ink);
+    border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--text);
   }
   .question button {
     font: inherit; font-size: 12px; padding: 4px 10px; border-radius: 5px;
-    border: 1px solid var(--baseline); background: var(--surface-1); color: var(--ink); cursor: pointer;
+    border: 1px solid var(--baseline); background: var(--surface); color: var(--text); cursor: pointer;
   }
-  .answered { color: var(--muted); }
+  .answered { color: var(--muted-2); }
   /* Timeline */
-  #timeline { background: var(--surface-1); border: 1px solid var(--ring); border-radius: 14px; padding: 14px; overflow-x: auto; }
+  #timeline { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px; overflow-x: auto; }
   .lane { display: grid; grid-template-columns: 150px 1fr; align-items: center; gap: 10px; margin: 4px 0; }
-  .lane .lbl { font-size: 12px; color: var(--ink-2); text-align: right; }
-  .lane .bar { display: flex; height: 14px; border-radius: 4px; overflow: hidden; background: var(--page); }
-  .seg { min-width: 2px; border-right: 2px solid var(--surface-1); } /* 2px surface gap between fills */
+  .lane .lbl { font-size: 12px; color: var(--muted); text-align: right; }
+  .lane .bar { display: flex; height: 14px; border-radius: 4px; overflow: hidden; background: var(--bg); }
+  .seg { min-width: 2px; border-right: 2px solid var(--surface); } /* 2px surface gap between fills */
   .seg:last-child { border-right: 0; }
-  #legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px; font-size: 11px; color: var(--ink-2); }
+  #legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px; font-size: 11px; color: var(--muted); }
   #legend .k { display: inline-flex; align-items: center; gap: 5px; }
   #legend .sw { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
   .axis { display: grid; grid-template-columns: 150px 1fr; gap: 10px; margin-top: 6px; }
-  .axis .t { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .axis .t { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted-2); font-variant-numeric: tabular-nums; }
   /* Swarm graph */
-  #graphwrap { position: relative; background: var(--surface-1); border: 1px solid var(--ring); border-radius: 14px; padding: 6px; overflow: hidden; }
+  #graphwrap { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 6px; overflow: hidden; }
   #graphwrap::before { /* the Trellis lattice motif */
     content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0.5;
     background-image:
-      linear-gradient(to right, var(--grid) 1px, transparent 1px),
-      linear-gradient(to bottom, var(--grid) 1px, transparent 1px);
+      linear-gradient(to right, var(--line) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--line) 1px, transparent 1px);
     background-size: 42px 42px;
     -webkit-mask-image: radial-gradient(120% 85% at 70% 0%, #000 30%, transparent 74%);
             mask-image: radial-gradient(120% 85% at 70% 0%, #000 30%, transparent 74%);
@@ -171,12 +239,12 @@
   #graph .edge.command { stroke: var(--human-ch); }
   #graph .edge.ack { stroke: var(--human-ch); stroke-dasharray: 2 4; }
   #graph .node { cursor: pointer; }
-  #graph .node .ringbg { fill: var(--surface-1); }
+  #graph .node .ringbg { fill: var(--surface); }
   #graph .node .ring { fill: none; stroke-width: 2.5; }
   #graph .node.stale .ring { stroke-dasharray: 4 4; }
   #graph .node .icon { font-size: 15px; text-anchor: middle; }
-  #graph .node .name { font-size: 11.5px; font-weight: 650; text-anchor: middle; fill: var(--ink); }
-  #graph .node .statelbl { font-size: 10px; text-anchor: middle; fill: var(--ink-2); }
+  #graph .node .name { font-size: 11.5px; font-weight: 650; text-anchor: middle; fill: var(--text); }
+  #graph .node .statelbl { font-size: 10px; text-anchor: middle; fill: var(--muted); }
   #graph .pulse { fill: none; stroke-width: 2; opacity: 0; }
   .node.live .pulse { animation: pulse 1.6s ease-out infinite; }
   @keyframes pulse { 0% { opacity: .8; transform: scale(1); } 100% { opacity: 0; transform: scale(1.45); } }
@@ -184,16 +252,16 @@
   #graph .msg.flow { fill: var(--flow-dot); }
   #graph .msg.command, #graph .msg.ack { fill: var(--human-ch); }
   #graph .msg.question { fill: var(--serious); }
-  #glegend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 11px; color: var(--ink-2); padding: 6px 8px 4px; }
+  #glegend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 11px; color: var(--muted); padding: 6px 8px 4px; }
   #glegend .k { display: inline-flex; align-items: center; gap: 6px; }
   #glegend svg { overflow: visible; }
   #popover {
     position: absolute; display: none; z-index: 5; min-width: 170px;
-    background: var(--surface-1); border: 1px solid var(--baseline); border-radius: 12px;
+    background: var(--surface); border: 1px solid var(--baseline); border-radius: 12px;
     padding: 8px 10px; box-shadow: 0 4px 16px rgba(0,0,0,.18);
   }
   #popover h3 { margin: 0 0 2px; font-size: 12.5px; }
-  #popover .st { font-size: 11px; color: var(--ink-2); margin-bottom: 6px; }
+  #popover .st { font-size: 11px; color: var(--muted); margin-bottom: 6px; }
   #popover .cmds { margin-top: 4px; }
   /* Feed */
   #feed {
@@ -239,7 +307,7 @@
 /* Status states → fixed status palette. Every state ships icon + label —
    color never carries meaning alone. */
 const STATES = {
-  spawned:       { icon: "○", label: "spawned",       css: "var(--muted)" },
+  spawned:       { icon: "○", label: "spawned",       css: "var(--muted-2)" },
   working:       { icon: "●", label: "working",       css: "var(--good)" },
   awaiting_gate: { icon: "◆", label: "awaiting gate", css: "var(--warning)" },
   blocked:       { icon: "■", label: "blocked",       css: "var(--serious)" },
@@ -329,13 +397,13 @@ function render(state, events) {
           "<button onclick=\"cmd('" + esc(run.run) + "','" + t + "','" + esc(a.agent) + "')\">" + t + "</button>").join("") +
         "</div>") +
       "</div>";
-  }).join("") || '<span class="sub" style="color:var(--muted)">no agents reported in this run</span>';
+  }).join("") || '<span class="sub" style="color:var(--muted-2)">no agents reported in this run</span>';
 
   const questions = run?.questions ?? [];
   document.getElementById("qsec").hidden = questions.length === 0;
   document.getElementById("questions").innerHTML = questions.map((q) =>
     '<div class="question">' +
-    "<div><b>" + esc(q.agent) + "</b> asks <span style=\"color:var(--muted)\">(" + esc(q.id) + ")</span>: " + esc(q.text) + "</div>" +
+    "<div><b>" + esc(q.agent) + "</b> asks <span style=\"color:var(--muted-2)\">(" + esc(q.id) + ")</span>: " + esc(q.text) + "</div>" +
     (q.open
       ? '<form onsubmit="answer(event,\'' + esc(run.run) + "','" + esc(q.agent) + "','" + esc(q.id) + '\')"><input placeholder="Answer — lands as an answer command">' + "<button>Answer</button></form>"
       : '<div class="answered">✓ answered: ' + esc(q.answer ?? "") + "</div>") +
@@ -357,7 +425,7 @@ function render(state, events) {
 
 function renderTimeline(run, events, now) {
   const el = document.getElementById("timeline");
-  if (!run || !events.length) { el.innerHTML = '<span style="color:var(--muted);font-size:12px">no events yet</span>'; return; }
+  if (!run || !events.length) { el.innerHTML = '<span style="color:var(--muted-2);font-size:12px">no events yet</span>'; return; }
   const t0 = Date.parse(run.firstTs);
   const t1 = Math.max(now, Date.parse(run.lastTs));
   const span = Math.max(1, t1 - t0);
@@ -554,8 +622,8 @@ function updateGraphNodes(run) {
     const st = a ? (STATES[a.state] ?? STATES.spawned) : null;
     const ring = nd.querySelector(".ring");
     const pulse = nd.querySelector(".pulse");
-    ring.style.stroke = a ? st.css : "var(--muted)";
-    if (pulse) pulse.style.stroke = a ? st.css : "var(--muted)";
+    ring.style.stroke = a ? st.css : "var(--muted-2)";
+    if (pulse) pulse.style.stroke = a ? st.css : "var(--muted-2)";
     nd.querySelector(".icon").textContent = a ? st.icon : (nd.getAttribute("data-kind") === "human" ? "☺" : "○");
     nd.querySelector(".statelbl").textContent = a ? st.label + (a.stale ? " · ⚠ stale" : "") : (nd.getAttribute("data-kind") === "human" ? "human" : "");
     nd.classList.toggle("live", !!a && a.state === "working");
