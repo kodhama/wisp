@@ -1,0 +1,674 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Espalier — runtime</title>
+<style>
+  /* Lifted into kodhama/espial from the math-quest prototype
+     (tools/espalier/viz/dashboard.html) — see this repo's README for
+     provenance.
+     Design tokens lifted from the Trellis landing page (gundisalwa/trellis
+     docs/index.html) — the shared design language for the trellis / espalier /
+     runtime-viz family. State colors stay functional (icon + label always,
+     never color alone); "good/working" adopts the Trellis accent green. */
+  :root {
+    --page: #f5f7f4; --surface-1: #ffffff;
+    --ink: #16201b; --ink-2: #5a6b62; --muted: #7d8f85;
+    --grid: #e0e7e1; --baseline: #c2cfc6; --ring: #e0e7e1;
+    --accent: #1f9d68; --accent-ink: #0c5d3c;
+    --good: #1f9d68; --warning: #fab219; --serious: #ec835a; --critical: #b4432f;
+    --human-ch: #5b4fa0; --flow-dot: #2a78d6;
+    --code-bg: #0e1712; --code-text: #d7e6dd; --code-accent: #56d69b;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --page: #0d1411; --surface-1: #131c18;
+      --ink: #e2eae5; --ink-2: #91a59b; --muted: #6f8177;
+      --grid: #223029; --baseline: #33453b; --ring: #223029;
+      --accent: #4ccb90; --accent-ink: #9fe9c4;
+      --good: #4ccb90; --critical: #d05a45;
+      --human-ch: #a99df0; --flow-dot: #3987e5;
+    }
+  }
+  :root[data-theme="light"] {
+    --page: #f5f7f4; --surface-1: #ffffff;
+    --ink: #16201b; --ink-2: #5a6b62; --muted: #7d8f85;
+    --grid: #e0e7e1; --baseline: #c2cfc6; --ring: #e0e7e1;
+    --accent: #1f9d68; --accent-ink: #0c5d3c;
+    --good: #1f9d68; --critical: #b4432f;
+    --human-ch: #5b4fa0; --flow-dot: #2a78d6;
+  }
+  :root[data-theme="dark"] {
+    --page: #0d1411; --surface-1: #131c18;
+    --ink: #e2eae5; --ink-2: #91a59b; --muted: #6f8177;
+    --grid: #223029; --baseline: #33453b; --ring: #223029;
+    --accent: #4ccb90; --accent-ink: #9fe9c4;
+    --good: #4ccb90; --critical: #d05a45;
+    --human-ch: #a99df0; --flow-dot: #3987e5;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--page); color: var(--ink);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  header {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px;
+    padding: 14px 20px; border-bottom: 1px solid var(--grid);
+  }
+  header h1 { font-size: 16px; margin: 0; font-weight: 650; letter-spacing: -0.01em; display: flex; align-items: center; gap: 9px; }
+  header h1 .mark { width: 19px; height: 19px; flex: none; color: var(--accent); }
+  .toggle {
+    font-family: var(--mono); font-size: 11px; cursor: pointer;
+    background: transparent; color: var(--ink-2); border: 1px solid var(--grid);
+    border-radius: 999px; padding: 4px 10px;
+  }
+  .toggle:hover { color: var(--ink); border-color: var(--accent); }
+  header .sub { color: var(--muted); font-size: 12px; }
+  .tag {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.04em;
+    color: var(--ink-2); border: 1px solid var(--ring);
+    border-radius: 999px; padding: 2px 9px;
+  }
+  #runs { display: flex; gap: 6px; margin-left: auto; }
+  #runs button {
+    font: inherit; font-size: 12px; padding: 3px 10px; border-radius: 999px;
+    border: 1px solid var(--ring); background: var(--surface-1);
+    color: var(--ink-2); cursor: pointer;
+  }
+  #runs button.active { color: var(--ink); font-weight: 650; border-color: var(--baseline); }
+  main { padding: 16px 20px 40px; max-width: 1080px; margin: 0 auto; }
+  .banner {
+    border: 1px solid var(--ring); border-left: 3px solid var(--warning);
+    background: var(--surface-1); border-radius: 10px;
+    padding: 10px 14px; margin: 0 0 14px; color: var(--ink-2);
+  }
+  .banner.critical { border-left-color: var(--critical); }
+  section h2 {
+    font-family: var(--mono); font-size: 11.5px; text-transform: uppercase;
+    letter-spacing: .18em; color: var(--accent-ink); font-weight: 600;
+    margin: 26px 0 10px;
+  }
+  /* Agent cards */
+  #agents { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+  .card {
+    background: var(--surface-1); border: 1px solid var(--ring);
+    border-radius: 14px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px;
+  }
+  .card .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .card .name { font-weight: 650; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .03em;
+    font-weight: 600; border-radius: 999px; padding: 2px 9px;
+    border: 1px solid var(--ring); color: var(--ink-2);
+  }
+  .chip .dot { font-size: 10px; }
+  .activity { color: var(--ink-2); min-height: 1.4em; }
+  .refs { display: flex; flex-wrap: wrap; gap: 4px; }
+  .refs span {
+    font-size: 11px; color: var(--muted); border: 1px solid var(--grid);
+    border-radius: 4px; padding: 0 5px;
+    font-variant-numeric: tabular-nums;
+  }
+  .meta { display: flex; gap: 8px; align-items: center; font-size: 11px; color: var(--muted); }
+  .meta .age { font-variant-numeric: tabular-nums; }
+  .stalebadge { color: var(--ink); background: var(--warning); border-radius: 4px; padding: 0 5px; font-weight: 650; }
+  .verdict { font-size: 11px; color: var(--ink-2); }
+  .verdict b { letter-spacing: .04em; }
+  .cmds { display: flex; gap: 5px; margin-top: 2px; flex-wrap: wrap; }
+  .cmds button {
+    font-family: var(--mono); font-size: 11px; padding: 3px 10px; border-radius: 999px;
+    border: 1px solid var(--ring); background: transparent; color: var(--ink-2); cursor: pointer;
+  }
+  .cmds button:hover { border-color: var(--accent); color: var(--ink); }
+  .pending { font-size: 11px; color: var(--ink-2); }
+  .pending .dot { color: var(--warning); }
+  /* Questions */
+  .question {
+    background: var(--surface-1); border: 1px solid var(--ring);
+    border-left: 3px solid var(--serious); border-radius: 6px;
+    padding: 10px 12px; margin-bottom: 8px;
+  }
+  .question form { display: flex; gap: 6px; margin-top: 6px; }
+  .question input {
+    flex: 1; font: inherit; font-size: 12px; padding: 4px 8px;
+    border: 1px solid var(--grid); border-radius: 5px; background: var(--page); color: var(--ink);
+  }
+  .question button {
+    font: inherit; font-size: 12px; padding: 4px 10px; border-radius: 5px;
+    border: 1px solid var(--baseline); background: var(--surface-1); color: var(--ink); cursor: pointer;
+  }
+  .answered { color: var(--muted); }
+  /* Timeline */
+  #timeline { background: var(--surface-1); border: 1px solid var(--ring); border-radius: 14px; padding: 14px; overflow-x: auto; }
+  .lane { display: grid; grid-template-columns: 150px 1fr; align-items: center; gap: 10px; margin: 4px 0; }
+  .lane .lbl { font-size: 12px; color: var(--ink-2); text-align: right; }
+  .lane .bar { display: flex; height: 14px; border-radius: 4px; overflow: hidden; background: var(--page); }
+  .seg { min-width: 2px; border-right: 2px solid var(--surface-1); } /* 2px surface gap between fills */
+  .seg:last-child { border-right: 0; }
+  #legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px; font-size: 11px; color: var(--ink-2); }
+  #legend .k { display: inline-flex; align-items: center; gap: 5px; }
+  #legend .sw { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+  .axis { display: grid; grid-template-columns: 150px 1fr; gap: 10px; margin-top: 6px; }
+  .axis .t { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  /* Swarm graph */
+  #graphwrap { position: relative; background: var(--surface-1); border: 1px solid var(--ring); border-radius: 14px; padding: 6px; overflow: hidden; }
+  #graphwrap::before { /* the Trellis lattice motif */
+    content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0.5;
+    background-image:
+      linear-gradient(to right, var(--grid) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--grid) 1px, transparent 1px);
+    background-size: 42px 42px;
+    -webkit-mask-image: radial-gradient(120% 85% at 70% 0%, #000 30%, transparent 74%);
+            mask-image: radial-gradient(120% 85% at 70% 0%, #000 30%, transparent 74%);
+  }
+  #graph, #glegend, #popover { position: relative; }
+  #graph { width: 100%; height: auto; display: block; }
+  #graph .edge { fill: none; stroke: var(--baseline); }
+  #graph .edge.transitive { stroke-dasharray: 6 5; }
+  #graph .edge.command { stroke: var(--human-ch); }
+  #graph .edge.ack { stroke: var(--human-ch); stroke-dasharray: 2 4; }
+  #graph .node { cursor: pointer; }
+  #graph .node .ringbg { fill: var(--surface-1); }
+  #graph .node .ring { fill: none; stroke-width: 2.5; }
+  #graph .node.stale .ring { stroke-dasharray: 4 4; }
+  #graph .node .icon { font-size: 15px; text-anchor: middle; }
+  #graph .node .name { font-size: 11.5px; font-weight: 650; text-anchor: middle; fill: var(--ink); }
+  #graph .node .statelbl { font-size: 10px; text-anchor: middle; fill: var(--ink-2); }
+  #graph .pulse { fill: none; stroke-width: 2; opacity: 0; }
+  .node.live .pulse { animation: pulse 1.6s ease-out infinite; }
+  @keyframes pulse { 0% { opacity: .8; transform: scale(1); } 100% { opacity: 0; transform: scale(1.45); } }
+  #graph .msg { pointer-events: none; }
+  #graph .msg.flow { fill: var(--flow-dot); }
+  #graph .msg.command, #graph .msg.ack { fill: var(--human-ch); }
+  #graph .msg.question { fill: var(--serious); }
+  #glegend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 11px; color: var(--ink-2); padding: 6px 8px 4px; }
+  #glegend .k { display: inline-flex; align-items: center; gap: 6px; }
+  #glegend svg { overflow: visible; }
+  #popover {
+    position: absolute; display: none; z-index: 5; min-width: 170px;
+    background: var(--surface-1); border: 1px solid var(--baseline); border-radius: 12px;
+    padding: 8px 10px; box-shadow: 0 4px 16px rgba(0,0,0,.18);
+  }
+  #popover h3 { margin: 0 0 2px; font-size: 12.5px; }
+  #popover .st { font-size: 11px; color: var(--ink-2); margin-bottom: 6px; }
+  #popover .cmds { margin-top: 4px; }
+  /* Feed */
+  #feed {
+    font-family: var(--mono); font-size: 12px; line-height: 1.55;
+    background: var(--code-bg); color: var(--code-text);
+    border: 1px solid #ffffff10; border-radius: 12px; padding: 12px 16px;
+    box-shadow: 0 18px 40px -24px #00000070;
+  }
+  #feed .ev {
+    display: grid; grid-template-columns: 64px 150px 90px 1fr; gap: 10px;
+    padding: 4px 0; border-bottom: 1px solid #ffffff0d;
+  }
+  #feed .ev:last-child { border-bottom: 0; }
+  #feed .t { color: var(--code-accent); font-variant-numeric: tabular-nums; }
+  #feed .a { color: var(--code-text); font-weight: 600; }
+  #feed .k { color: #ffffff44; }
+</style>
+</head>
+<body>
+<header>
+  <h1><svg class="mark" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M2 9h20M2 15h20" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" opacity=".55"/><path d="M7.5 10.8 10 13.2M16.5 10.8 14 13.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="5.5" cy="9" r="2.1" stroke="currentColor" stroke-width="1.7"/><circle cx="18.5" cy="9" r="2.1" stroke="currentColor" stroke-width="1.7"/><circle cx="12" cy="15" r="2.1" fill="currentColor"/></svg>Espalier · runtime</h1>
+  <span class="tag" title="Events are agent self-reports. Artifact state remains the source of truth (ADR-0030).">self-reported telemetry</span>
+  <span class="sub" id="freshness">connecting…</span>
+  <nav id="runs"></nav>
+  <button class="toggle" id="themeToggle" aria-label="Toggle color theme">theme</button>
+</header>
+<main>
+  <div id="banners"></div>
+  <section>
+    <h2>Swarm graph</h2>
+    <div id="graphwrap">
+      <svg id="graph" viewBox="0 0 900 470" preserveAspectRatio="xMidYMid meet" aria-label="Agent interaction graph"></svg>
+      <div id="glegend"></div>
+      <div id="popover"></div>
+    </div>
+  </section>
+  <section><h2>Gardeners</h2><div id="agents"></div></section>
+  <section id="qsec" hidden><h2>Questions</h2><div id="questions"></div></section>
+  <section><h2>Timeline</h2><div id="timeline"></div></section>
+  <section><h2>Event feed</h2><div id="feed"></div></section>
+</main>
+<script>
+/* Status states → fixed status palette. Every state ships icon + label —
+   color never carries meaning alone. */
+const STATES = {
+  spawned:       { icon: "○", label: "spawned",       css: "var(--muted)" },
+  working:       { icon: "●", label: "working",       css: "var(--good)" },
+  awaiting_gate: { icon: "◆", label: "awaiting gate", css: "var(--warning)" },
+  blocked:       { icon: "■", label: "blocked",       css: "var(--serious)" },
+  failed:        { icon: "✕", label: "failed",        css: "var(--critical)" },
+  done:          { icon: "✓", label: "done",          css: "var(--baseline)" },
+};
+let selectedRun = null;
+let lastOk = null;
+
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const age = (ts, now) => {
+  const s = Math.max(0, Math.round((now - Date.parse(ts)) / 1000));
+  if (s < 60) return s + "s";
+  if (s < 3600) return Math.floor(s / 60) + "m" + String(s % 60).padStart(2, "0") + "s";
+  return Math.floor(s / 3600) + "h" + String(Math.floor((s % 3600) / 60)).padStart(2, "0") + "m";
+};
+const hhmmss = (ts) => new Date(ts).toISOString().slice(11, 19);
+
+async function command(run, type, target, payload) {
+  await fetch("/api/command", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ run, type, target, payload }),
+  });
+  refresh();
+}
+window.cmd = (run, type, target) => {
+  let payload;
+  if (type === "steer") {
+    const text = prompt("Steer " + target + " — context/priority to inject:");
+    if (!text) return;
+    payload = { text };
+  }
+  if (type === "abort" && !confirm("Abort " + target + "? This is a loud stop.")) return;
+  command(run, type, target, payload);
+};
+window.answer = (ev, run, target, qid) => {
+  ev.preventDefault();
+  const input = ev.target.querySelector("input");
+  if (input.value.trim()) command(run, "answer", target, { questionId: qid, text: input.value.trim() });
+};
+
+function render(state, events) {
+  const now = Date.parse(state.generatedAt);
+  const banners = [];
+  if (!state.telemetry) {
+    banners.push('<div class="banner critical"><b>No telemetry on the bus.</b> This means “no data”, not “all quiet” — check that gardeners are emitting (skill: espalier-status).</div>');
+  }
+  if (state.parseErrors?.length) {
+    banners.push('<div class="banner critical"><b>' + state.parseErrors.length + ' malformed line(s) on the bus</b> — first at line ' + state.parseErrors[0].line + ': ' + esc(state.parseErrors[0].reason) + "</div>");
+  }
+
+  const runs = state.runs.map((r) => r.run);
+  if (!selectedRun || !runs.includes(selectedRun)) selectedRun = runs[runs.length - 1] ?? null;
+  document.getElementById("runs").innerHTML = runs.map((r) =>
+    '<button class="' + (r === selectedRun ? "active" : "") + '" onclick="selectedRun=' + JSON.stringify(r).replace(/"/g, "&quot;") + ';refresh()">' + esc(r) + "</button>").join("");
+
+  const run = state.runs.find((r) => r.run === selectedRun);
+  const pendingByTarget = {};
+  for (const c of run?.commands ?? []) {
+    if (c.status === "pending") (pendingByTarget[c.target] ??= []).push(c);
+  }
+  if (Object.values(pendingByTarget).flat().length) {
+    banners.push('<div class="banner">⚠ <b>' + Object.values(pendingByTarget).flat().length + " command(s) awaiting acknowledgement</b> — an unacked command means the agent has not seen it (commands are polled at step seams, they do not interrupt).</div>");
+  }
+  document.getElementById("banners").innerHTML = banners.join("");
+
+  document.getElementById("agents").innerHTML = (run?.agents ?? []).map((a) => {
+    const st = STATES[a.state] ?? STATES.spawned;
+    const pend = (pendingByTarget[a.agent] ?? []).map((c) =>
+      '<div class="pending"><span class="dot">●</span> awaiting ack: <b>' + esc(c.type) + "</b> (" + esc(c.id) + ")</div>").join("");
+    const terminal = a.state === "done" || a.state === "failed";
+    return '<div class="card">' +
+      '<div class="row"><span class="name">' + esc(a.agent) + "</span>" +
+      '<span class="chip" style="border-color:' + st.css + '"><span class="dot" style="color:' + st.css + '">' + st.icon + "</span>" + st.label + "</span>" +
+      (a.stale ? '<span class="stalebadge" title="No event within the staleness window — liveness unknown">⚠ stale</span>' : "") +
+      "</div>" +
+      '<div class="activity">' + esc(a.activity ?? "") + "</div>" +
+      (a.lastVerdict ? '<div class="verdict">verdict: <b>' + esc(a.lastVerdict) + "</b></div>" : "") +
+      (a.refs?.length ? '<div class="refs">' + a.refs.map((r) => "<span>" + esc(r) + "</span>").join("") + "</div>" : "") +
+      '<div class="meta"><span class="age">seen ' + age(a.lastSeen, now) + " ago</span><span>· " + a.events + " events</span></div>" +
+      pend +
+      (terminal ? "" :
+        '<div class="cmds">' +
+        ["pause", "resume", "steer", "abort"].map((t) =>
+          "<button onclick=\"cmd('" + esc(run.run) + "','" + t + "','" + esc(a.agent) + "')\">" + t + "</button>").join("") +
+        "</div>") +
+      "</div>";
+  }).join("") || '<span class="sub" style="color:var(--muted)">no agents reported in this run</span>';
+
+  const questions = run?.questions ?? [];
+  document.getElementById("qsec").hidden = questions.length === 0;
+  document.getElementById("questions").innerHTML = questions.map((q) =>
+    '<div class="question">' +
+    "<div><b>" + esc(q.agent) + "</b> asks <span style=\"color:var(--muted)\">(" + esc(q.id) + ")</span>: " + esc(q.text) + "</div>" +
+    (q.open
+      ? '<form onsubmit="answer(event,\'' + esc(run.run) + "','" + esc(q.agent) + "','" + esc(q.id) + '\')"><input placeholder="Answer — lands as an answer command">' + "<button>Answer</button></form>"
+      : '<div class="answered">✓ answered: ' + esc(q.answer ?? "") + "</div>") +
+    "</div>").join("");
+
+  renderTimeline(run, events.filter((e) => e.run === selectedRun), now);
+
+  document.getElementById("feed").innerHTML = events
+    .filter((e) => e.run === selectedRun).slice(-60).reverse().map((e) => {
+      const what = e.kind === "status" ? (STATES[e.state]?.icon ?? "") + " " + esc(e.state) + (e.activity ? " — " + esc(e.activity) : "")
+        : e.kind === "verdict" ? "verdict <b>" + esc(e.verdict) + "</b>" + (e.activity ? " — " + esc(e.activity) : "")
+        : e.kind === "question" ? "❓ " + esc(e.question?.text)
+        : e.kind === "command" ? "⌘ " + esc(e.command?.type) + " → " + esc(e.command?.target)
+        : e.kind === "command_ack" ? "ack " + esc(e.ack?.commandId) + " (" + esc(e.ack?.result) + ")"
+        : e.kind;
+      return '<div class="ev"><span class="t">' + hhmmss(e.ts) + '</span><span class="a">' + esc(e.agent) + '</span><span class="k">' + esc(e.kind) + "</span><span>" + what + "</span></div>";
+    }).join("");
+}
+
+function renderTimeline(run, events, now) {
+  const el = document.getElementById("timeline");
+  if (!run || !events.length) { el.innerHTML = '<span style="color:var(--muted);font-size:12px">no events yet</span>'; return; }
+  const t0 = Date.parse(run.firstTs);
+  const t1 = Math.max(now, Date.parse(run.lastTs));
+  const span = Math.max(1, t1 - t0);
+  const lanes = run.agents.map((a) => {
+    const statuses = events.filter((e) => e.agent === a.agent && e.kind === "status")
+      .sort((x, y) => Date.parse(x.ts) - Date.parse(y.ts));
+    const segs = statuses.map((e, i) => {
+      const from = Date.parse(e.ts);
+      const terminal = e.state === "done" || e.state === "failed";
+      const to = i + 1 < statuses.length ? Date.parse(statuses[i + 1].ts) : (terminal ? from + span * 0.005 : t1);
+      const st = STATES[e.state] ?? STATES.spawned;
+      return '<div class="seg" style="width:' + (100 * (to - from) / span) + "%;background:" + st.css + '" title="' + esc(a.agent) + ": " + st.label + " @ " + hhmmss(e.ts) + (e.activity ? " — " + esc(e.activity) : "") + '"></div>';
+    }).join("");
+    const lead = statuses.length ? '<div class="seg" style="width:' + (100 * (Date.parse(statuses[0].ts) - t0) / span) + '%;background:transparent"></div>' : "";
+    return '<div class="lane"><span class="lbl">' + esc(a.agent) + '</span><div class="bar">' + lead + segs + "</div></div>";
+  }).join("");
+  const legend = '<div id="legend">' + Object.values(STATES).map((s) =>
+    '<span class="k"><span class="sw" style="background:' + s.css + '"></span>' + s.icon + " " + s.label + "</span>").join("") + "</div>";
+  const axis = '<div class="axis"><span></span><div class="t"><span>' + hhmmss(t0) + "</span><span>" + hhmmss(t1) + "</span></div></div>";
+  el.innerHTML = lanes + axis + legend;
+}
+
+/* ---------- swarm graph ---------- */
+const NODE_R = { agent: 24, hub: 30, human: 22 };
+let graphKey = "";
+let edgeEls = {};   // edge key → path element
+let nodeGeo = {};   // node id → {x, y, r}
+const animCounts = {}; // run → events already animated
+
+const edgeKey = (e) => e.kind + "|" + (e.via ?? "") + "|" + e.from + "→" + e.to;
+
+function layoutNodes(nodes) {
+  const geo = {};
+  const humans = nodes.filter((n) => n.kind === "human");
+  const hub = nodes.find((n) => n.kind === "hub");
+  const ring = nodes.filter((n) => n.kind === "agent");
+  humans.forEach((n, i) => {
+    geo[n.id] = { x: 450 + (i - (humans.length - 1) / 2) * 190, y: 56, r: NODE_R.human, kind: "human" };
+  });
+  if (hub) geo[hub.id] = { x: 450, y: 262, r: NODE_R.hub, kind: "hub" };
+  const cx = 450, cy = 262, rx = 330, ry = 148;
+  // Reserve a top wedge for the human row so no ring node lands under it.
+  const wedge = humans.length ? 70 : 0;
+  const span = 360 - wedge, start = -90 + wedge / 2;
+  ring.forEach((n, i) => {
+    const a = ((start + (i + 0.5) * (span / ring.length)) * Math.PI) / 180;
+    geo[n.id] = { x: cx + rx * Math.cos(a), y: cy + ry * Math.sin(a), r: NODE_R.agent, kind: "agent" };
+  });
+  // Separation pass — footprints include label clearance, so neither nodes
+  // nor their captions can overlap. Hub stays pinned; humans keep their row.
+  const ids = Object.keys(geo);
+  for (let it = 0; it < 30; it++) {
+    let moved = false;
+    for (let i = 0; i < ids.length; i++) {
+      for (let j = i + 1; j < ids.length; j++) {
+        const p = geo[ids[i]], q = geo[ids[j]];
+        const dx = q.x - p.x, dy = q.y - p.y, d = Math.hypot(dx, dy) || 1;
+        const need = p.r + q.r + 46;
+        if (d < need) {
+          const push = (need - d) / 2, ux = dx / d, uy = dy / d;
+          if (p.kind !== "hub") { p.x -= ux * push; if (p.kind !== "human") p.y -= uy * push; }
+          if (q.kind !== "hub") { q.x += ux * push; if (q.kind !== "human") q.y += uy * push; }
+          moved = true;
+        }
+      }
+    }
+    if (!moved) break;
+  }
+  for (const id of ids) {
+    geo[id].x = Math.max(70, Math.min(830, geo[id].x));
+    geo[id].y = Math.max(48, Math.min(394, geo[id].y));
+  }
+  return geo;
+}
+
+/** Caption footprint: humans label above the node, everyone else below. */
+function labelRect(g) {
+  return g.kind === "human"
+    ? { x: g.x - 52, y: g.y - g.r - 34, w: 104, h: 32 }
+    : { x: g.x - 52, y: g.y + g.r + 3, w: 104, h: 30 };
+}
+
+function quadAt(sx, sy, cx, cy, ex, ey, t) {
+  const u = 1 - t;
+  return { x: u * u * sx + 2 * u * t * cx + t * t * ex, y: u * u * sy + 2 * u * t * cy + t * t * ey };
+}
+
+function pathClearance(sx, sy, cx, cy, ex, ey, obstacles) {
+  let min = Infinity;
+  for (let t = 0.04; t < 0.97; t += 0.04) {
+    const p = quadAt(sx, sy, cx, cy, ex, ey, t);
+    for (const o of obstacles) {
+      if (o.circle) {
+        min = Math.min(min, Math.hypot(p.x - o.x, p.y - o.y) - o.rr);
+      } else {
+        const inside = p.x > o.x && p.x < o.x + o.w && p.y > o.y && p.y < o.y + o.h;
+        const ddx = Math.max(o.x - p.x, 0, p.x - (o.x + o.w));
+        const ddy = Math.max(o.y - p.y, 0, p.y - (o.y + o.h));
+        min = Math.min(min, inside ? -4 : Math.hypot(ddx, ddy));
+      }
+    }
+  }
+  return min;
+}
+
+function trimToward(g, tx, ty, off) {
+  const dx = tx - g.x, dy = ty - g.y, d = Math.hypot(dx, dy) || 1;
+  return { x: g.x + (dx / d) * off, y: g.y + (dy / d) * off };
+}
+
+/**
+ * Route an edge as a quadratic curve, searching bend candidates until the
+ * path clears every non-endpoint node circle AND every caption box
+ * (including the endpoints' own captions — an edge must not exit through
+ * its node's label). Falls back to the best-clearance candidate.
+ */
+function edgePath(e, geo, twoWay) {
+  const a = geo[e.from], b = geo[e.to];
+  if (!a || !b) return "";
+  const d0 = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+  const ux = (b.x - a.x) / d0, uy = (b.y - a.y) / d0;
+  const obstacles = [];
+  for (const [id, g] of Object.entries(geo)) {
+    obstacles.push(labelRect(g));
+    if (id !== e.from && id !== e.to) obstacles.push({ circle: true, x: g.x, y: g.y, rr: g.r + 12 });
+  }
+  // Two-way pairs stay positive-first so opposite directions bend apart.
+  const bends = twoWay
+    ? [24, 38, 54, 72, 92, 114, -38, -54, -72]
+    : [10, -10, 26, -26, 44, -44, 64, -64, 86, -86, 110, -110];
+  let best = null;
+  for (const bend of bends) {
+    const mx = (a.x + b.x) / 2 - uy * bend, my = (a.y + b.y) / 2 + ux * bend;
+    const s = trimToward(a, mx, my, a.r + 3);
+    const t2 = trimToward(b, mx, my, b.r + 9);
+    const c = pathClearance(s.x, s.y, mx, my, t2.x, t2.y, obstacles);
+    if (best === null || c > best.c) best = { s, mx, my, t2, c };
+    if (c >= 4) break;
+  }
+  return "M" + best.s.x.toFixed(1) + " " + best.s.y.toFixed(1) +
+    " Q" + best.mx.toFixed(1) + " " + best.my.toFixed(1) +
+    " " + best.t2.x.toFixed(1) + " " + best.t2.y.toFixed(1);
+}
+
+function buildGraph(graph) {
+  const svg = document.getElementById("graph");
+  nodeGeo = layoutNodes(graph.nodes);
+  edgeEls = {};
+  const pairs = new Set(graph.edges.map((e) => e.from + "→" + e.to));
+  let html =
+    '<defs>' +
+    '<marker id="ar-g" orient="auto" markerWidth="8" markerHeight="8" refX="7" refY="3" viewBox="0 0 8 6"><path d="M0,0L8,3L0,6z" fill="var(--baseline)"/></marker>' +
+    '<marker id="ar-h" orient="auto" markerWidth="8" markerHeight="8" refX="7" refY="3" viewBox="0 0 8 6"><path d="M0,0L8,3L0,6z" fill="var(--human-ch)"/></marker>' +
+    "</defs><g>";
+  for (const e of graph.edges) {
+    const marker = e.kind === "command" || e.kind === "ack" ? "ar-h" : "ar-g";
+    const cls = "edge " + e.kind + (e.transitive ? " transitive" : "");
+    const w = Math.min(3.2, 1.4 + e.count * 0.35);
+    const tip = e.from + " → " + e.to + " (" + e.kind + (e.via ? ", via " + e.via : "") + ", ×" + e.count + ")" + (e.lastLabel ? ": " + e.lastLabel : "");
+    html += '<path class="' + cls + '" data-ek="' + esc(edgeKey(e)) + '" d="' + edgePath(e, nodeGeo, pairs.has(e.to + "→" + e.from)) + '" stroke-width="' + w + '" marker-end="url(#' + marker + ')"><title>' + esc(tip) + "</title></path>";
+  }
+  html += "</g><g>";
+  for (const n of graph.nodes) {
+    const g = nodeGeo[n.id];
+    const shape = n.kind === "human"
+      ? '<rect class="ringbg" x="' + (-g.r) + '" y="' + (-g.r + 4) + '" width="' + g.r * 2 + '" height="' + (g.r * 2 - 8) + '" rx="9"/><rect class="ring" x="' + (-g.r) + '" y="' + (-g.r + 4) + '" width="' + g.r * 2 + '" height="' + (g.r * 2 - 8) + '" rx="9"/>'
+      : '<circle class="pulse" r="' + g.r + '"/><circle class="ringbg" r="' + g.r + '"/><circle class="ring" r="' + g.r + '"/>';
+    const nameY = n.kind === "human" ? -(g.r + 18) : g.r + 15;
+    const stateY = n.kind === "human" ? -(g.r + 6) : g.r + 28;
+    html += '<g class="node" data-id="' + esc(n.id) + '" data-kind="' + n.kind + '" transform="translate(' + g.x.toFixed(1) + "," + g.y.toFixed(1) + ')">' + shape +
+      '<text class="icon" dy="5"></text>' +
+      '<text class="name" y="' + nameY + '">' + esc(n.id) + "</text>" +
+      '<text class="statelbl" y="' + stateY + '"></text></g>';
+  }
+  html += '</g><g id="msgs"></g>';
+  svg.innerHTML = html;
+  for (const p of svg.querySelectorAll("[data-ek]")) edgeEls[p.getAttribute("data-ek")] = p;
+  for (const nd of svg.querySelectorAll(".node")) {
+    nd.addEventListener("click", (ev) => { ev.stopPropagation(); showPopover(nd.getAttribute("data-id")); });
+  }
+  document.getElementById("glegend").innerHTML =
+    '<span class="k"><svg width="26" height="8"><line x1="0" y1="4" x2="26" y2="4" stroke="var(--baseline)" stroke-width="2"/></svg>hand-off (directed)</span>' +
+    '<span class="k"><svg width="26" height="8"><line x1="0" y1="4" x2="26" y2="4" stroke="var(--baseline)" stroke-width="2" stroke-dasharray="5 4"/></svg>routed via head-gardener</span>' +
+    '<span class="k"><svg width="26" height="8"><line x1="0" y1="4" x2="26" y2="4" stroke="var(--human-ch)" stroke-width="2"/></svg>command / ack (human channel)</span>' +
+    '<span class="k">click a node to act on it</span>';
+}
+
+function updateGraphNodes(run) {
+  const byId = {};
+  for (const a of run?.agents ?? []) byId[a.agent] = a;
+  for (const nd of document.querySelectorAll("#graph .node")) {
+    const id = nd.getAttribute("data-id");
+    const a = byId[id];
+    const st = a ? (STATES[a.state] ?? STATES.spawned) : null;
+    const ring = nd.querySelector(".ring");
+    const pulse = nd.querySelector(".pulse");
+    ring.style.stroke = a ? st.css : "var(--muted)";
+    if (pulse) pulse.style.stroke = a ? st.css : "var(--muted)";
+    nd.querySelector(".icon").textContent = a ? st.icon : (nd.getAttribute("data-kind") === "human" ? "☺" : "○");
+    nd.querySelector(".statelbl").textContent = a ? st.label + (a.stale ? " · ⚠ stale" : "") : (nd.getAttribute("data-kind") === "human" ? "human" : "");
+    nd.classList.toggle("live", !!a && a.state === "working");
+    nd.classList.toggle("stale", !!a && a.stale);
+  }
+}
+
+function eventEdgeKey(e, graph) {
+  if (e.kind === "command" && e.command) return "command||" + e.agent + "→" + e.command.target;
+  if (e.kind === "command_ack") {
+    const cand = graph.edges.find((x) => x.kind === "ack" && x.from === e.agent);
+    return cand ? edgeKey(cand) : null;
+  }
+  if (e.kind === "question" && e.question) return "question||" + e.agent + "→" + (e.to ?? "maintainer");
+  if (e.to !== undefined) return "flow|" + (e.meta?.via ?? "") + "|" + e.agent + "→" + e.to;
+  return null;
+}
+
+function animateDot(pathEl, cls) {
+  const svg = document.getElementById("graph");
+  const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+  dot.setAttribute("r", "5");
+  dot.setAttribute("class", "msg " + cls);
+  svg.querySelector("#msgs").appendChild(dot);
+  const len = pathEl.getTotalLength();
+  const t0 = performance.now(), dur = 950;
+  (function step(t) {
+    const k = Math.min(1, (t - t0) / dur);
+    const p = pathEl.getPointAtLength(len * k);
+    dot.setAttribute("cx", p.x);
+    dot.setAttribute("cy", p.y);
+    if (k < 1) requestAnimationFrame(step);
+    else setTimeout(() => dot.remove(), 120);
+  })(t0);
+}
+
+function renderGraph(graph, run, events) {
+  const key = graph.nodes.map((n) => n.id + n.kind).join(",") + "|" + graph.edges.map(edgeKey).join(",");
+  if (key !== graphKey) { graphKey = key; buildGraph(graph); }
+  updateGraphNodes(run);
+  const mine = events.filter((e) => e.run === selectedRun);
+  const from = animCounts[selectedRun] ?? Math.max(0, mine.length - 3); // first render: replay last few
+  for (const e of mine.slice(from)) {
+    const k = eventEdgeKey(e, graph);
+    if (k && edgeEls[k]) animateDot(edgeEls[k], e.kind === "status" || e.kind === "verdict" ? "flow" : e.kind === "command_ack" ? "ack" : e.kind);
+  }
+  animCounts[selectedRun] = mine.length;
+}
+
+function showPopover(id) {
+  const pop = document.getElementById("popover");
+  const geo = nodeGeo[id];
+  const svg = document.getElementById("graph");
+  if (!geo) return;
+  const scale = svg.getBoundingClientRect().width / 900;
+  const state = lastState?.runs.find((r) => r.run === selectedRun);
+  const a = state?.agents.find((x) => x.agent === id);
+  const isHuman = !a;
+  const openQ = (state?.questions ?? []).some((q) => q.agent === id && q.open);
+  let html = "<h3>" + esc(id) + "</h3><div class='st'>" +
+    (a ? (STATES[a.state]?.icon ?? "") + " " + (STATES[a.state]?.label ?? a.state) + (a.activity ? " — " + esc(a.activity) : "") : "human — commands originate here") + "</div>";
+  if (a && a.state !== "done" && a.state !== "failed") {
+    html += '<div class="cmds">' +
+      ["pause", "resume", "steer", "abort"].map((t) => "<button onclick=\"cmd('" + esc(selectedRun) + "','" + t + "','" + esc(id) + "');hidePopover()\">" + t + "</button>").join("") + "</div>";
+    if (a.state === "awaiting_gate") {
+      html += '<div class="cmds"><button onclick="cmdGate(\'approved\',\'' + esc(id) + '\')">gate ✓ approve</button><button onclick="cmdGate(\'rejected\',\'' + esc(id) + '\')">gate ✕ reject</button></div>';
+    }
+    if (openQ) html += '<div class="cmds"><button onclick="document.getElementById(\'qsec\').scrollIntoView({behavior:\'smooth\'});hidePopover()">answer question ↓</button></div>';
+  }
+  pop.innerHTML = html;
+  pop.style.display = "block";
+  pop.style.left = Math.min(geo.x * scale + 20, svg.getBoundingClientRect().width - 190) + "px";
+  pop.style.top = (geo.y * scale + 14) + "px";
+}
+window.hidePopover = () => { document.getElementById("popover").style.display = "none"; };
+window.cmdGate = (verdict, target) => { command(selectedRun, "gate", target, { verdict }); hidePopover(); };
+document.addEventListener("click", (e) => { if (!e.target.closest("#popover")) hidePopover(); });
+
+let lastState = null;
+
+async function refresh() {
+  try {
+    const [state, events] = await Promise.all([
+      fetch("/api/state").then((r) => r.json()),
+      fetch("/api/events").then((r) => r.json()),
+    ]);
+    lastOk = Date.now();
+    lastState = state;
+    document.getElementById("freshness").textContent = "updated " + new Date().toTimeString().slice(0, 8);
+    render(state, events);
+    if (selectedRun) {
+      const graph = await fetch("/api/graph?run=" + encodeURIComponent(selectedRun)).then((r) => r.json());
+      renderGraph(graph, state.runs.find((r) => r.run === selectedRun), events);
+    }
+  } catch (e) {
+    document.getElementById("freshness").textContent =
+      "⚠ server unreachable" + (lastOk ? " (last ok " + Math.round((Date.now() - lastOk) / 1000) + "s ago)" : "");
+  }
+}
+document.getElementById("themeToggle").addEventListener("click", () => {
+  const cur = document.documentElement.dataset.theme;
+  const next = cur === "dark" ? "light" : cur === "light" ? "" : (matchMedia("(prefers-color-scheme: dark)").matches ? "light" : "dark");
+  if (next) document.documentElement.dataset.theme = next;
+  else delete document.documentElement.dataset.theme;
+  try { localStorage.setItem("espalier-theme", next); } catch {}
+});
+try {
+  const saved = localStorage.getItem("espalier-theme");
+  if (saved) document.documentElement.dataset.theme = saved;
+} catch {}
+
+refresh();
+setInterval(refresh, 2000);
+</script>
+</body>
+</html>
