@@ -3,7 +3,7 @@
 wisp is **grove-managed**: from lane B4 of the kodhama suite-lift plan
 onward, wisp's own work items run as [grove](https://github.com/kodhama/grove)
 furrows, not ad hoc prompting. The vendored gardener roles live in
-`.claude/agents/` (ten roles, wisp's placeholders already resolved —
+`.claude/agents/` (eleven roles, wisp's placeholders already resolved —
 test `npm test`, typecheck `npx tsc --noEmit`, GitHub PRs + issues on
 `kodhama/wisp`, PR-first, agents never merge); the `grove-status`
 telemetry skill lives in `.claude/skills/grove-status/`. Minimal
