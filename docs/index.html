@@ -1,10 +1,10 @@
 <!doctype html>
 <html lang="en">
 <head>
-<!-- kodhama-ds: v0.1.0 -->
+<!-- kodhama-ds: v0.2.0 -->
 <!--
   Generated per kodhama/design-system's lp-generator.md contract, read at
-  tag v0.1.0. Inputs: this repo's docs/lp-content.md (content) + the DS's
+  the pinned tag above. Inputs: this repo's docs/lp-content.md (content) + the DS's
   tokens.css + patterns.md (read at the pinned tag, not vendored as files —
   their CSS is inlined below). Fully self-contained: no <link> to the DS, no
   runtime fetch of anything, no CDN. See docs/lp-content.md "Hero treatment"
@@ -46,8 +46,8 @@
 <title>wisp — runtime observability for agent teams</title>
 <style>
 /* ============================================================
-   kodhama-ds tokens.css — read at v0.1.0, inlined verbatim below,
-   extended (clearly marked) with a few page-local custom properties
+   kodhama-ds tokens.css — read at the pinned tag above, inlined verbatim
+   below, extended (clearly marked) with a few page-local custom properties
    for the furrow-replay graph. See deviation note 2 above.
    ============================================================ */
 :root {
@@ -65,10 +65,44 @@
 
   /* layout — DS token, verbatim */
   --maxw: 1080px;
+  --gutter: 24px;
+  --space-section: 56px;
+  --card-pad: 24px;
+  --grid-gap: 20px;
 
-  /* type — DS token, verbatim */
+  /* radius — DS token, verbatim */
+  --radius-chip: 7px;
+  --radius-button: 10px;
+  --radius-panel: 12px;
+  --radius-card: 14px;
+  --radius-pill: 999px;
+
+  /* elevation — DS token, verbatim */
+  --shadow-lift: 0 18px 40px -24px rgba(0, 0, 0, .44);
+
+  /* accent, softened — DS token, verbatim */
+  --accent-soft: color-mix(in srgb, var(--accent) 58%, var(--surface));
+
+  /* type — stacks — DS token, verbatim */
   --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+
+  /* type — scale — DS token, verbatim */
+  --text-display: clamp(2.1rem, 4vw, 3.1rem);
+  --text-section: 1.6rem;
+  --text-card: 1.15rem;
+  --text-lede: 1.08rem;
+  --text-body: 17px;
+  --text-eyebrow: 12.5px;
+  --text-mono: 14px;
+
+  /* type — treatment — DS token, verbatim */
+  --weight-heading: 650;
+  --weight-strong: 600;
+  --tracking-heading: -0.02em;
+  --tracking-eyebrow: 0.18em;
+  --leading-heading: 1.12;
+  --leading-body: 1.6;
 
   /* page-local — sourced verbatim from this repo's dashboard.html
      (its STATES table + --human-ch / --flow-dot / --critical), not a
@@ -137,6 +171,41 @@
   --human-ch: #a99df0;
   --flow-dot: #3987e5;
 }
+
+/* ─── Seasonal accents — DS token, verbatim ─────────────────────────
+ * The accent triad turns at solstices & equinoxes; every neutral stays
+ * fixed — the forest changes color, not shape. Set data-season on <html>.
+ * The default green tokens above are "evergreen": the year-round default
+ * when no season is set. Each season overrides --accent (and --accent-ink
+ * in light). In dark, --accent takes the season's dark value and
+ * --accent-ink holds the base dark ink (#9fe9c4) — seasons ship no dark ink.
+ * Season is picked by date at generation time, or by one line of runtime
+ * JS. Staleness is a finding, not a break — same as the DS versioning rule.
+ * Carried here for future use: no data-season is set on this page and no
+ * JS wires it up yet, so these tokens are inert until that lands.
+ * ─────────────────────────────────────────────────────────────────────── */
+
+:root[data-season="spring"] { --accent: #35b077; --accent-ink: #156b45; }
+:root[data-season="summer"] { --accent: #ba8b26; --accent-ink: #7d5a14; }
+:root[data-season="autumn"] { --accent: #bf4f30; --accent-ink: #86301c; }
+:root[data-season="winter"] { --accent: #4f93a8; --accent-ink: #245b6e; }
+
+@media (prefers-color-scheme: dark) {
+  :root[data-season="spring"] { --accent: #62dfa3; --accent-ink: #9fe9c4; }
+  :root[data-season="summer"] { --accent: #e6c260; --accent-ink: #9fe9c4; }
+  :root[data-season="autumn"] { --accent: #e89673; --accent-ink: #9fe9c4; }
+  :root[data-season="winter"] { --accent: #85cfe0; --accent-ink: #9fe9c4; }
+}
+
+/* explicit theme pins beat OS preference */
+:root[data-theme="light"][data-season="spring"] { --accent: #35b077; --accent-ink: #156b45; }
+:root[data-theme="light"][data-season="summer"] { --accent: #ba8b26; --accent-ink: #7d5a14; }
+:root[data-theme="light"][data-season="autumn"] { --accent: #bf4f30; --accent-ink: #86301c; }
+:root[data-theme="light"][data-season="winter"] { --accent: #4f93a8; --accent-ink: #245b6e; }
+:root[data-theme="dark"][data-season="spring"] { --accent: #62dfa3; --accent-ink: #9fe9c4; }
+:root[data-theme="dark"][data-season="summer"] { --accent: #e6c260; --accent-ink: #9fe9c4; }
+:root[data-theme="dark"][data-season="autumn"] { --accent: #e89673; --accent-ink: #9fe9c4; }
+:root[data-theme="dark"][data-season="winter"] { --accent: #85cfe0; --accent-ink: #9fe9c4; }
 
 /* ============================================================
    patterns.md — Shared base, verbatim
@@ -249,7 +318,7 @@ h1, h2, h3 { line-height: 1.12; letter-spacing: -0.02em; text-wrap: balance; mar
    ============================================================ */
 header.site { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 24px; max-width: var(--maxw); margin: 0 auto; }
 header.site .brand { display: flex; align-items: center; gap: 9px; font-family: var(--mono); font-weight: 700; letter-spacing: -0.01em; }
-header.site .brand .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+header.site .brand .mark { width: 22px; height: 22px; flex: none; }
 header.site nav { display: flex; align-items: center; gap: 14px; }
 header.site nav a.gh { font-size: 14px; color: var(--muted); text-decoration: none; }
 header.site nav a.gh:hover { color: var(--text); }
@@ -323,7 +392,7 @@ section.section h2 { font-size: 1.6rem; }
 <body>
 
 <header class="site">
-  <div class="brand"><i class="dot" aria-hidden="true"></i> wisp</div>
+  <div class="brand"><svg class="mark" viewBox="0 0 24 24" fill="none" aria-hidden="true" style="color:var(--accent)"><circle cx="12" cy="17" r="2.3" fill="currentColor"/><circle cx="9.5" cy="12" r="1.75" fill="currentColor" opacity=".75"/><circle cx="7.2" cy="7.2" r="1.35" fill="currentColor" opacity=".58"/><circle cx="14.5" cy="12" r="1.75" fill="currentColor" opacity=".75"/><circle cx="16.8" cy="7.2" r="1.35" fill="currentColor" opacity=".58"/></svg> wisp</div>
   <nav>
     <a class="gh" href="https://github.com/kodhama/wisp">GitHub ↗</a>
     <button class="toggle" id="themeToggle" aria-label="Toggle color theme">theme</button>
