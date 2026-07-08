@@ -35,10 +35,43 @@ Pieces:
 | `server.ts` | zero-dep HTTP shell — dashboard + `/api/state` + `/api/events` + `POST /api/command` |
 | `dashboard.html` | self-contained UI, light/dark |
 | `demo.ts` | synthetic furrow replay modeled on the Espalier prototype's furrow 1 |
+| `github.ts` | adapter — GitHub issue comments as a runner-hosted telemetry channel (`test/github.test.ts`) |
 
 Runtime state under `.grove/` is gitignored: telemetry is a
 self-reported claim, never artifact-derived truth — the invariant this
 protocol was designed to preserve.
+
+## Adapters
+
+`bus.ts`'s local file transport assumes the emitting agent and the
+consumer share a filesystem. `github.ts` is for when they don't — a
+runner-hosted agent (e.g. a CI job) mirrors its local bus outward as a
+GitHub issue comment, and a reader elsewhere lists that issue's comments
+and parses them back into events.
+
+- **Emitter** (`emitToGithub`, CLI: `node github.ts emit`): reads the
+  local bus (`bus.ts`'s `readBus`/`busPath`) and posts its events as one
+  new issue comment — a `<!-- wisp-telemetry v1 -->` marker line followed
+  by a fenced ` ```ndjson ` block, one event per line, verbatim. One
+  batch = one comment.
+- **Reader** (`readFromGithub`, CLI: `node github.ts read`, the
+  `check`-equivalent): lists the issue's comments, keeps only
+  marker-bearing ones, and parses their fenced blocks through
+  `protocol.ts`'s `parseEvents`. Returns `{ events, errors }` — the same
+  shape `bus.ts`'s `readBus` returns — so a reader can feed it straight
+  into `reduceTeamState` and get the same vacuity handling for free.
+
+Config is via env: `GITHUB_TOKEN` (auth), `WISP_GH_REPO` (`owner/repo`),
+`WISP_GH_ISSUE` (issue number). Uses the built-in global `fetch` only —
+no new dependency. Non-2xx responses fail loudly (status + a body
+excerpt), never silently.
+
+**Genericity budget:** "grove is the reference consumer; generalize
+only what falls out naturally, never speculatively." `github.ts` shares
+exactly the `{ events, errors }` shape with `bus.ts`'s `readBus` and
+nothing more — there is no adapter registry and no transport interface
+here, only as much shared surface as fell out of the two adapters
+actually needing it.
 
 ## Provenance
 
