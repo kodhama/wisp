@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Grove — runtime</title>
-<!-- kodhama-ds: v0.1.0 -->
+<title>Wisp — runtime</title>
+<!-- kodhama-ds: v0.2.0 -->
 <style>
   /* Lifted into kodhama/espial from the math-quest prototype
      (tools/espalier/viz/dashboard.html) — see this repo's README for
      provenance.
 
-     kodhama-ds tokens.css — read at v0.1.0, inlined verbatim below. This
+     kodhama-ds tokens.css — read at v0.2.0, inlined verbatim below. This
      replaces the former hand-copied block ("design tokens lifted from the
      Trellis landing page directly") that was never re-synced against the
      design-system after that first copy — same shared origin, but drifted
@@ -34,10 +34,44 @@
 
     /* layout — DS token, verbatim */
     --maxw: 1080px;
+    --gutter: 24px;
+    --space-section: 56px;
+    --card-pad: 24px;
+    --grid-gap: 20px;
+
+    /* radius — DS token, verbatim */
+    --radius-chip: 7px;
+    --radius-button: 10px;
+    --radius-panel: 12px;
+    --radius-card: 14px;
+    --radius-pill: 999px;
+
+    /* elevation — DS token, verbatim */
+    --shadow-lift: 0 18px 40px -24px rgba(0, 0, 0, .44);
+
+    /* accent, softened — DS token, verbatim */
+    --accent-soft: color-mix(in srgb, var(--accent) 58%, var(--surface));
 
     /* type — DS token, verbatim */
     --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+
+    /* type — scale — DS token, verbatim */
+    --text-display: clamp(2.1rem, 4vw, 3.1rem);
+    --text-section: 1.6rem;
+    --text-card: 1.15rem;
+    --text-lede: 1.08rem;
+    --text-body: 17px;
+    --text-eyebrow: 12.5px;
+    --text-mono: 14px;
+
+    /* type — treatment — DS token, verbatim */
+    --weight-heading: 650;
+    --weight-strong: 600;
+    --tracking-heading: -0.02em;
+    --tracking-eyebrow: 0.18em;
+    --leading-heading: 1.12;
+    --leading-body: 1.6;
 
     /* ---- page-local addendum — NOT DS tokens. This dashboard's own
        status colors + swarm-graph edge styling; kept separate from the DS
@@ -116,6 +150,40 @@
     --human-ch: #a99df0;
     --flow-dot: #3987e5;
   }
+
+  /* ─── Seasonal accents ─────────────────────────────────────────────
+   * The accent triad turns at solstices & equinoxes; every neutral stays
+   * fixed — the forest changes color, not shape. Set data-season on <html>.
+   * The default green tokens above are "evergreen": the year-round default
+   * when no season is set. Each season overrides --accent (and --accent-ink
+   * in light). In dark, --accent takes the season's dark value and
+   * --accent-ink holds the base dark ink (#9fe9c4) — seasons ship no dark ink.
+   * Season is picked by date at generation time, or by one line of runtime
+   * JS. Staleness is a finding, not a break — same as the DS versioning rule.
+   * DS token, verbatim — no JS wiring in this file, CSS only. */
+
+  :root[data-season="spring"] { --accent: #35b077; --accent-ink: #156b45; }
+  :root[data-season="summer"] { --accent: #ba8b26; --accent-ink: #7d5a14; }
+  :root[data-season="autumn"] { --accent: #bf4f30; --accent-ink: #86301c; }
+  :root[data-season="winter"] { --accent: #4f93a8; --accent-ink: #245b6e; }
+
+  @media (prefers-color-scheme: dark) {
+    :root[data-season="spring"] { --accent: #62dfa3; --accent-ink: #9fe9c4; }
+    :root[data-season="summer"] { --accent: #e6c260; --accent-ink: #9fe9c4; }
+    :root[data-season="autumn"] { --accent: #e89673; --accent-ink: #9fe9c4; }
+    :root[data-season="winter"] { --accent: #85cfe0; --accent-ink: #9fe9c4; }
+  }
+
+  /* explicit theme pins beat OS preference */
+  :root[data-theme="light"][data-season="spring"] { --accent: #35b077; --accent-ink: #156b45; }
+  :root[data-theme="light"][data-season="summer"] { --accent: #ba8b26; --accent-ink: #7d5a14; }
+  :root[data-theme="light"][data-season="autumn"] { --accent: #bf4f30; --accent-ink: #86301c; }
+  :root[data-theme="light"][data-season="winter"] { --accent: #4f93a8; --accent-ink: #245b6e; }
+  :root[data-theme="dark"][data-season="spring"] { --accent: #62dfa3; --accent-ink: #9fe9c4; }
+  :root[data-theme="dark"][data-season="summer"] { --accent: #e6c260; --accent-ink: #9fe9c4; }
+  :root[data-theme="dark"][data-season="autumn"] { --accent: #e89673; --accent-ink: #9fe9c4; }
+  :root[data-theme="dark"][data-season="winter"] { --accent: #85cfe0; --accent-ink: #9fe9c4; }
+
   * { box-sizing: border-box; }
   body {
     margin: 0; background: var(--bg); color: var(--text);
@@ -282,7 +350,7 @@
 </head>
 <body>
 <header>
-  <h1><svg class="mark" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M2 9h20M2 15h20" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" opacity=".55"/><path d="M7.5 10.8 10 13.2M16.5 10.8 14 13.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="5.5" cy="9" r="2.1" stroke="currentColor" stroke-width="1.7"/><circle cx="18.5" cy="9" r="2.1" stroke="currentColor" stroke-width="1.7"/><circle cx="12" cy="15" r="2.1" fill="currentColor"/></svg>Grove · runtime</h1>
+  <h1><svg class="mark" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="17" r="2.3" fill="currentColor"/><circle cx="9.5" cy="12" r="1.75" fill="currentColor" opacity=".75"/><circle cx="7.2" cy="7.2" r="1.35" fill="currentColor" opacity=".58"/><circle cx="14.5" cy="12" r="1.75" fill="currentColor" opacity=".75"/><circle cx="16.8" cy="7.2" r="1.35" fill="currentColor" opacity=".58"/></svg>Wisp · runtime</h1>
   <span class="tag" title="Events are agent self-reports. Artifact state remains the source of truth (ADR-0030).">self-reported telemetry</span>
   <span class="sub" id="freshness">connecting…</span>
   <nav id="runs"></nav>
