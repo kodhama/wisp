@@ -1,11 +1,11 @@
 ---
 name: grove-status
-description: Emit runtime status onto the Grove bus while working as a gardener (or head-gardener) in a Grove run — so the maintainer's dashboard shows who is working, on what, and who is blocked. Use at role start, at every state transition (working/blocked/awaiting-gate/done/failed), when issuing a verdict, when parking a question, and poll for commands at step seams.
+description: Emit runtime status onto the Grove bus while working as an agent (or dispatcher) in a Grove run — so the maintainer's dashboard shows who is working, on what, and who is blocked. Use at role start, at every state transition (working/blocked/awaiting-gate/done/failed), when issuing a verdict, when parking a question, and poll for commands at step seams.
 ---
 
 # grove-status — report yourself on the runtime bus
 
-You are a gardener in a Grove run. Alongside your artifact work,
+You are an agent in a Grove run. Alongside your artifact work,
 report your state onto the runtime bus so the human can see the swarm
 live. The bus is telemetry, NOT truth: artifact state remains the source
 of truth (ADR-0030 — "state derived from artifact existence, never
@@ -15,12 +15,12 @@ false "working" claim is worse than silence.
 **This skill talks to a vendored [wisp](https://github.com/kodhama/wisp)
 install.** Wisp is a separate repo; grove never requires it to
 function (telemetry is optional by construction) but this skill is the
-gardener-flavored wrapper around it once a consuming project vendors it.
+agent-flavored wrapper around it once a consuming project vendors it.
 
 **Recursion note (this repo specifically):** this copy of the skill
 lives *inside* wisp itself — wisp is the telemetry tool, not a
 consumer of it. So the vendor path below resolves to `.` (the repo
-root): a gardener working in wisp reports through wisp's own
+root): an agent working in wisp reports through wisp's own
 `emit.ts`, on wisp's own bus, at `.grove/runtime/events.ndjson`. In any
 other consuming project, this same skill would point at wherever that
 project vendored or installed wisp instead (its own README names the
@@ -48,8 +48,8 @@ this call):
 node ./emit.ts <subcommand> --run <run-id> --agent <your-role> [...]
 ```
 
-`<run-id>` is the furrow/run identifier the head-gardener gave you (e.g.
-`furrow-42`). `<your-role>` is your role name (`executor`,
+`<run-id>` is the run identifier the dispatcher gave you (e.g.
+`run-42`). `<your-role>` is your role name (`executor`,
 `spec-adversary`, …). Use your verdict grammar's exact tokens
 (`PASS`/`DRIFT`, `APPROVE-READY`/`NEEDS-REVISION`/`UNSOUND`) in
 `--verdict`.
@@ -57,8 +57,8 @@ node ./emit.ts <subcommand> --run <run-id> --agent <your-role> [...]
 **Addressing (the swarm graph).** When an event is *for* someone — a
 hand-off, a verdict about their artifact — add `--to <role>` so it draws
 a directed edge on the graph. If the flow logically targets another
-gardener but actually routes through the head-gardener (the v0 norm),
-also add `--via head-gardener`: the edge renders dashed (transitive)
+agent but actually routes through the dispatcher (the v0 norm),
+also add `--via dispatcher`: the edge renders dashed (transitive)
 instead of claiming a direct channel that doesn't exist. Report the
 channel you actually used — addressing is a claim like any other.
 

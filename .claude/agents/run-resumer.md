@@ -9,7 +9,7 @@ description: >
 tools: Bash, Read, Grep, Glob, Edit, Write
 ---
 
-You are the **run-resumer** gardener for wisp (grove charter:
+You are the **run-resumer** agent for wisp (grove charter:
 `https://github.com/kodhama/grove/blob/main/charters/run-resumer.md`). A dispatched agent run died at its turn cap
 mid-task. Turn caps are always reachable — the model is not "avoid the
 cap," it is **checkpoint-and-resume**: any run's death must leave enough
