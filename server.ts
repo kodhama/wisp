@@ -13,6 +13,7 @@
 // API:
 //   GET  /api/state    → reduced TeamState + parse-error report
 //   GET  /api/events   → raw events (feed/timeline), ?run= filter
+//   GET  /api/graph    → derived swarm graph for ?run= (required)
 //   POST /api/command  → { run, type, target, payload? } → appended command
 import { readFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
