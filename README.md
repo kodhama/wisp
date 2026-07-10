@@ -89,7 +89,8 @@ layout or docs — flagged here rather than silently left stale.
 (furrows, gardeners, ADR-0030 framing) — adapting or replacing it for a
 generic agent-team story, and wiring up real emitter adapters, is
 out of scope for this bootstrap step and is tracked as follow-up work
-(wave 2: landing page + adapters).
+(wave 2: adapters). A landing page is not tracked here — `kodhama-0006`
+makes LP generation a design-system feature, triggered externally.
 
 ## License
 
