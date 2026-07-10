@@ -11,11 +11,22 @@ updated: 2026-07-10
 
 > **Draft, not gated.** This is wisp's first real decisions/ artifact — no
 > self-check precedent to compare against, no rubric filed yet for wisp
-> decisions (per `decisions/README.md`, only the base contract exists), and
-> — the larger reason — its own `depends_on` entry rests on a trellis
-> decision (0044) that is itself still `draft` and unmerged. See
-> **Dependency on trellis decision-0044** below before treating this as
-> settled. Filed to close
+> decisions (per `decisions/README.md`, only the base contract exists).
+>
+> **Update (2026-07-10, post-drafting):** the blocker this decision was
+> originally provisional on is now cleared. Trellis's decision-0044 is
+> `status: approved` on trellis's `main` (merged via PR #133, then bumped
+> `gated → approved` via PR #136), and `specs/0001-spine-artifact-contract.md`
+> §1 has been amended accordingly (PR #137, merged) to recognize the
+> qualified `<repo>/<id>` external-ref form, with a registry that
+> explicitly includes math-quest. This decision's `depends_on` entry
+> (`math-quest/adr-0030-espalier`) matches that ratified form exactly
+> (same delimiter, math-quest genuinely in the registry) and is now a
+> **genuinely valid** external reference — no longer a dangling one. See
+> **Dependency on trellis decision-0044** below, updated to reflect this.
+> The remaining reasons to stay in `draft` (no local self-check precedent
+> or rubric yet) are unaffected by this update — see **Why `status: draft`,
+> not `gated`**. Filed to close
 > [wisp#13](https://github.com/kodhama/wisp/issues/13).
 
 ## Context
@@ -91,54 +102,56 @@ claims"), and `decisions/README.md:7`. Listed here so a future reader
 can find every citation site in one place; this decision does not
 separately certify them — see **Open questions**.
 
-## Dependency on trellis decision-0044 (provisional)
+## Dependency on trellis decision-0044 (now resolved)
 
 This decision's `depends_on` entry uses the qualified `repo/id`
 cross-repo reference form (`math-quest/adr-0030-espalier`) proposed by
-trellis's **decision-0044** (PR #133, drafted 2026-07-10,
-`status: draft` — not yet approved or merged). That decision:
+trellis's **decision-0044**. As of 2026-07-10, that decision is
+`status: approved` (merged via PR #133, bumped `gated → approved` via
+PR #136), and its mechanism has landed exactly as this decision
+anticipated:
 
-- Proposes exactly this problem class as its motivating case — wisp's
-  ADR-0030 citation is instance 3 in its own Context section, and its
-  Consequences section explicitly names filing "wisp's own separate
-  decision (sweep parked item #6)" as one live option it leaves
-  unresolved. This decision is that filing.
-- Still has its delimiter open (`:` vs `/`) — decision-0044's own text
-  leans toward `/` ("mirrors the `org/repo`-style qualification the
-  maintainer already reads daily") but has not settled it, and does not
-  itself amend trellis's `spec-0001` allowlist (a follow-on
-  contract-author pass, only after 0044 is approved, is expected to do
-  that).
-- Has not fixed which repos count as a "recognized" registry member —
-  math-quest is the leading candidate but is explicitly flagged as not
-  currently a declared kodhama family member.
+- Its motivating case: wisp's ADR-0030 citation was instance 3 in
+  decision-0044's own Context section, and its Consequences section
+  named filing "wisp's own separate decision (sweep parked item #6)" as
+  a live option. This decision is that filing.
+- **Delimiter — resolved: `/`.** Decision-0044's Open Questions record
+  the maintainer's 2026-07-10 choice of `/` over `:`, and
+  `spec-0001` §1 (amended via PR #137, merged) now recognizes exactly
+  the `<repo>/<id>` form — matching this decision's own
+  `math-quest/adr-0030-espalier` citation verbatim.
+- **Registry membership — resolved: math-quest is in.** Decision-0044's
+  Open Questions record the maintainer's choice of "kodhama's declared
+  family list PLUS math-quest," and `spec-0001` §1 now lists the
+  registry inline as "kodhama, trellis, grove, wisp, design-system,
+  homebrew-tap, math-quest" — math-quest genuinely included, read
+  directly from the ratified spec text, not assumed.
 
-Until decision-0044 is approved (and `spec-0001`'s external-reference
-allowlist is amended to recognize the qualified form), this decision's
-own `depends_on` entry is **not yet a valid reference** under trellis's
-currently-ratified artifact contract — by the letter of that contract
-today, it is itself a dangling reference, the same self-acknowledged
-shape decision-0044 admits about its own citation of
-`kodhama-0004-uniform-lifecycle`. That is accepted here on purpose,
-matching the direction the maintainer already gave for this filing, not
-silently glossed over.
-
-**This decision's own `depends_on` entry is provisional pending trellis
-decision-0044's approval; if 0044's mechanism changes materially before
-it lands (delimiter flips, registry excludes math-quest, or the
-qualified form is dropped for a different mechanism entirely), this
-entry may need updating.**
+Because both the delimiter and registry membership now match this
+decision's citation exactly, this decision's own `depends_on` entry
+**is a valid reference** under trellis's currently-ratified artifact
+contract — no longer a dangling one. (Resolution depth is still
+shape + registry-membership only per `spec-0001` §1, matching
+`brief-§…`'s existing non-verified treatment — no fetch-and-confirm-the-
+referent-exists mechanism; that was never in question for this entry.)
 
 ## Why `status: draft`, not `gated`
 
-- Rests on an unmerged, unapproved trellis decision whose exact
-  mechanism (delimiter, registry membership) is still open.
+- ~~Rests on an unmerged, unapproved trellis decision whose exact
+  mechanism (delimiter, registry membership) is still open.~~ **No
+  longer applies (2026-07-10):** decision-0044 is now `approved` and its
+  mechanism (delimiter `/`, registry including math-quest) matches this
+  decision's citation exactly — see **Dependency on trellis
+  decision-0044** above.
 - First artifact filed in wisp's `decisions/` corpus — no local
   self-check precedent, and no dedicated rubric yet (per
   `decisions/README.md`, only the base artifact contract exists to
-  self-check against).
+  self-check against). **Still applies.**
 - Wants a maintainer read given both of the above before any
-  self-certification to `gated`.
+  self-certification to `gated`. **Still applies** — this update
+  clears the trellis-side blocker but does not itself constitute the
+  maintainer read or a self-certification; status is left at `draft`
+  pending that.
 
 ## Acceptance criteria
 
@@ -151,14 +164,17 @@ entry may need updating.**
 - [ ] Every enforcing (tested) invariant site is named with a
       file:line anchor (`protocol.ts:103-105`, `protocol.ts:224-229`,
       `protocol.ts:347`, `dashboard.html:353`).
-- [ ] The dependency on trellis decision-0044 and its provisional,
-      not-yet-merged status are stated plainly, not assumed resolved.
+- [x] The dependency on trellis decision-0044 is stated plainly,
+      including its status — originally provisional/not-yet-merged at
+      drafting time, now `approved` with a matching mechanism as of
+      2026-07-10 (see **Dependency on trellis decision-0044**), not
+      silently assumed either way.
 
 ## Open questions
 
-- **Delimiter (`/` vs `:`)** is not this decision's call — it inherits
-  whatever trellis decision-0044 settles. No action needed here beyond
-  updating the citation if the delimiter flips before 0044 lands.
+- **Delimiter (`/` vs `:`)** was not this decision's call — it inherited
+  whatever trellis decision-0044 settled. **Resolved 2026-07-10:** `/`,
+  matching this decision's existing citation; no update needed.
 - **Should wisp's other, narrative-only ADR-0030 citations** (`demo.ts`,
   `README.md`, the agent/skill docs listed above) be pulled under this
   same decision's formal governance, or left as unlinked prose? Left
@@ -167,7 +183,12 @@ entry may need updating.**
   audit wants full-corpus coverage.
 - **Promotion path once decision-0044 lands**: if 0044's final form
   matches what's cited here, this decision's status can bump
-  `draft → gated` (self-check) without a content edit. If 0044's
-  mechanism changes materially, per this repo's append-only rule the
-  right move is a new, superseding decision — not an in-place edit of
-  this one.
+  `draft → gated` (self-check) without a content edit. **Decision-0044
+  has now landed (2026-07-10, approved) and its final form does match
+  what's cited here** (delimiter `/`, math-quest in the registry) — so
+  the trellis-side precondition for a `draft → gated` bump is satisfied.
+  That bump is deliberately **not** done as part of this update: it is a
+  separate self-certification act (per **Why `status: draft`, not
+  `gated`** above, the other reasons — no local self-check precedent,
+  no dedicated rubric, wanting a maintainer read — still hold) and is
+  left for that self-check step or the maintainer, not asserted here.
