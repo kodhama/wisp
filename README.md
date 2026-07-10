@@ -32,7 +32,7 @@ Pieces:
 | `protocol.ts` | functional core — event schema, parse, team-state reducer (tested in `test/protocol.test.ts`) |
 | `bus.ts` | file transport (append-only NDJSON at `.grove/runtime/events.ndjson`, override with `$GROVE_EVENTS`) |
 | `emit.ts` | agent CLI — status/heartbeat/verdict/question + command check/ack |
-| `server.ts` | zero-dep HTTP shell — dashboard + `/api/state` + `/api/events` + `POST /api/command` |
+| `server.ts` | zero-dep HTTP shell — dashboard + `/api/state` + `/api/events` + `/api/graph` + `POST /api/command` |
 | `dashboard.html` | self-contained UI, light/dark |
 | `demo.ts` | synthetic furrow replay modeled on the Espalier prototype's furrow 1 |
 | `github.ts` | adapter — GitHub issue comments as a runner-hosted telemetry channel (`test/github.test.ts`) |
