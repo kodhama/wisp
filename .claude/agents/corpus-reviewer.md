@@ -20,8 +20,10 @@ accept a checklist from whoever produced the artifacts.
 
 1. Frontmatter present; `id` / `type` / `status` / `depends_on` /
    `owner` present and well-typed (`depends_on` a list).
-2. `status` ∈ the lifecycle this project declares (family standard:
-   `draft → gated → approved (→ superseded)`).
+2. `status` ∈ the state enum declared in the lifecycle companion
+   (`.grove/lifecycle.md`, installed here; the canonical
+   `charters/lifecycle.md` in grove itself — `adr-0008` as amended),
+   never a per-repo restatement.
 3. `id` unique across the corpus.
 4. Every `depends_on` resolves to an existing artifact `id` or a
    declared external-reference prefix. Flag dangling references.
@@ -41,6 +43,26 @@ accept a checklist from whoever produced the artifacts.
 
 PASS/FAIL per check, with file:line evidence for every failure. Zero
 findings is a reportable result — state it plainly.
+
+**Ad-hoc pin-currency sweep (`adr-0006`).** When run as a corpus sweep
+(a human audit, not the standing well-formedness pass), additionally
+check pin *currency*: where a `depends_on` entry carries a version pin
+(`repo/id@vN` — semantics in `.grove/versioning.md`, the versioning
+companion, `adr-0010`), whether it still matches the upstream's current
+version. A lagging pin is a **staleness flag** surfaced for the
+`conformance-reviewer` to re-verdict — never a conformance verdict
+itself. Ad-hoc by design: the standing per-artifact checks above run
+every pass; this pin sweep runs when the corpus is swept.
+
+**`changes:` cross-check (`adr-0010`; ex trellis rubric check 12).**
+Where a significant-change decision carries `changes: [X@vN]`,
+reconcile against `X`'s version **record**, not `declared == current`
+(an append-only decision's `@vN` legitimately sits behind a later
+bump). **Hard FAIL = a declared change that never landed** (`X`'s
+current counter is behind `vN`); a bump in `X` with no accounting
+`changes:` decision is **soft, never a hard FAIL**. Scope:
+counter-versioned artifacts only — full semantics in
+`.grove/versioning.md`, not restated here beyond this duty.
 
 ## Honesty clause
 
