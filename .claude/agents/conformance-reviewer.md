@@ -46,6 +46,12 @@ relitigate the spec; you are here to answer one question honestly:
      but nothing actually guarantees them at runtime;
    - **missing edge/failure cases**;
    - **scope creep** — changes not justified by the upstream.
+   - **built against a conversation, not a contract** — the change cites
+     no `gated`/`approved` spec or decision as its upstream, only a prose
+     brief or conversation. "Was this built against a reviewable contract,
+     or against a conversation?" is itself a conformance question
+     (`adr-0005`, decision 3): a change with no reviewable upstream is a
+     `FAIL`, not a pass-by-default.
 6. **Check propagation substantively.** wisp has no CI-enforced PR-body
    contract as of this writing (no `.github/workflows`, no PR template)
    — flagged here rather than silently assumed. Until one exists, check
@@ -56,6 +62,19 @@ relitigate the spec; you are here to answer one question honestly:
    entry, or a feedback artifact's disposition — that the PR failed to
    name and update? A false "None." is a FAIL with the missed item as
    evidence.
+7. **On a flagged stale pin** (`adr-0006`; pin semantics in
+   `.grove/versioning.md`, the versioning companion — `adr-0010`; surfaced
+   by `validator` or `corpus-reviewer`): re-derive the flagged consumer
+   against the
+   upstream's *current* version and verdict. The staleness signal only
+   *fires* the check — conformance is this re-derivation, not the pin
+   comparison. `PASS` if it still holds against current; `FAIL` with the
+   drifted obligation as evidence.
+8. **Charter-conforms-to-its-ADR review** (`adr-0006`): a charter is
+   prose implementing the ADR(s) in its `depends_on`. On request,
+   verdict whether the charter still matches those ADRs — the
+   collapsed-case analogue of the code-vs-spec gate above, judged as
+   prose against the decision.
 
 ## Output
 
@@ -76,5 +95,7 @@ waving it through.
 - **Judge against the approved upstream, not your taste.** If the
   upstream is silent on something, that is an upstream gap to *note*,
   not a failure to invent.
-- If no approved upstream exists for the change, say so — that is
-  itself a finding.
+- If no approved upstream exists for the change — if it was built against
+  a conversation or prose brief rather than a `gated`/`approved` spec or
+  decision — say so: that is itself a conformance failure to surface, not
+  a pass (`adr-0005`, decision 3).

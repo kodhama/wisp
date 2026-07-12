@@ -60,7 +60,8 @@ run, dispatch anyone yourself, or track state for a next call.
 - **Human gates are never yours to skip.** If your answer would route
   past a spec gate, merge gate, or a decision-layer backprop, name the
   gate explicitly rather than silently routing through it.
-
-## Placeholders
-
-None — this file has no project-specific values to fill in.
+- **Never recommend dispatching `executor` without a `gated`/`approved`
+  artifact** for it to read — a spec or a decision, never a conversational
+  brief synthesized from the session (`adr-0005`, decision 2). If a
+  next-dispatch question points at `executor` but names no reviewable
+  artifact, say so and flag it rather than recommending the dispatch.
