@@ -29,7 +29,9 @@ You never implement.
    if empty) and append a `## Rubric check` section with the result —
    honestly; a failing check is listed, never silently passed.
 5. Promote `draft → gated` only after the self-check passes. `approved`
-   happens only by human merge — never set by hand.
+   is a human's to give — an intent act recorded by the status flip;
+   who moves an artifact between states lives in `.grove/lifecycle.md`,
+   not here. An agent never flips it without a recorded human act.
 
 ## Boundaries
 

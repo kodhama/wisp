@@ -25,14 +25,10 @@ updated: YYYY-MM-DD
 ---
 ```
 
-- `draft` — not yet self-checked; not a valid downstream input.
-- `gated` — self-checked against its rubric (if any); agent-consumable.
-- `approved` — ratified by human merge. Never set by hand.
-- `superseded` — retired; a forward pointer names the replacement.
-
-This is the same `draft → gated → approved (→ superseded)` vocabulary
-wisp's own `.trellis/profile.md` already declares (trellis
-decision-0037) — one vocabulary, not a second one invented here.
+What each `status` value means, and who moves an artifact between
+states, lives in **`.grove/lifecycle.md`** — the installed lifecycle
+companion (`grove/adr-0008`; single home per kodhama-0008) — not
+restated here.
 
 ## Decisions are append-only
 
