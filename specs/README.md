@@ -29,14 +29,13 @@ updated: YYYY-MM-DD
 ---
 ```
 
-- `draft` — not yet self-checked; not a valid downstream input. An
-  `executor` gardener never implements against a `draft` spec.
-- `gated` — self-checked against its rubric (if any); agent-consumable.
-  The `spec-adversary` gardener runs against `gated` specs, before a
-  human ever sees them.
-- `approved` — ratified by human merge. Never set by hand.
-- `superseded` — retired; a forward pointer names the replacement (see
-  `decisions/README.md` for the append-only discipline this inherits).
+What each `status` value means, and who moves an artifact between
+states, lives in **`.grove/lifecycle.md`** — the installed lifecycle
+companion (`grove/adr-0008`; single home per kodhama-0008) — not
+restated here. Two spec-flow notes on top of it: an `executor` gardener
+never implements against a `draft` spec, and the `spec-adversary`
+gardener runs against `gated` specs before a human ever sees them.
+(For `superseded`, the append-only discipline is `decisions/README.md`'s.)
 
 Every spec must carry `## Acceptance criteria` (checkable) and
 `## Open questions` (may be empty, but must exist) — a spec that
