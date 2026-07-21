@@ -4,7 +4,7 @@
 wisp is **grove-managed**: from lane B4 of the kodhama suite-lift plan
 onward, wisp's own work items run as [grove](https://github.com/kodhama/grove)
 runs, not ad hoc prompting. The vendored agent roles live in
-`.claude/agents/` (twelve roles, wisp's placeholders already resolved —
+`.claude/agents/` (fourteen roles, wisp's placeholders already resolved —
 test `npm test`, typecheck `npx tsc --noEmit`, GitHub PRs + issues on
 `kodhama/wisp`, PR-first, agents never merge); the `grove-status`
 telemetry skill lives in `.claude/skills/grove-status/`. Minimal
@@ -15,6 +15,7 @@ adapted — see each dir's `README.md`).
 reports through wisp's own `emit.ts` at the repo root, not a vendored
 copy elsewhere — the `grove-status` skill's vendor path resolves to
 `.`, and events land on wisp's own bus (`.grove/runtime/events.ndjson`).
+grove plugin@4449db2
 <!-- grove:end -->
 
 <!-- trellis:begin (managed by trellis — edit .trellis/, not this block) -->

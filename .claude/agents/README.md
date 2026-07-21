@@ -22,8 +22,8 @@ again, not a blind copy-over.
 **The lifecycle companion is not an agent role and does not live
 here.** The artifact-lifecycle state enum — stated once, sourced by
 every role and the `corpus-reviewer`'s lifecycle check — is installed
-by setup to **`.grove/lifecycle.md`** (grove's own namespace, not this
-loader directory; `adr-0008` as amended) on every install.
+by setup to **`.grove/internal/lifecycle.md`** (grove's own namespace,
+not this loader directory; `adr-0008` as amended) on every install.
 
 **`dispatcher.md` is scoped, not a full peer of the rest.** ADR-0030
 charters head-gardener as "cold-started: the interactive session (v0)"
@@ -40,13 +40,15 @@ for the full role it does not replace.
 |---|---|---|
 | `divergent-researcher.md` | 1 | research discipline; loud abort |
 | `shaper.md` | 2 | decision canvases; never decides (interactive) |
+| `decision-adversary.md` | 2½ | breaks `gated` decisions on soundness before ratification — never on intent |
 | `contract-author.md` | 3 | specs from approved intent; never implements |
-| `spec-adversary.md` | 3½ | breaks `gated` specs before human approval |
+| `spec-adversary.md` | 3½ | breaks `gated` specs on intrinsic quality before ratification (the spec alone) |
 | `executor.md` | 4 | test-first implementation from artifacts only |
-| `conformance-reviewer.md` | 4½ | build gate vs. approved upstream |
+| `conformance-reviewer.md` | 3½ / 4½ | fidelity gate at every layer vs. the approved `implements:` upstream |
 | `code-reviewer.md` | 4½ | code-quality gate vs. the project's declared standards; blocking ≥ high (objective harm only), rest advisory |
 | `validator.md` | 5 | per-PR critique + triggered drift audits |
 | `run-resumer.md` | remediation | resumes a run that died at its turn cap |
 | `propagation-remediator.md` | remediation | writes an honest missing propagation section |
 | `dispatcher.md` | dispatch | one-shot classify/next-dispatch advisor only — not a sequencer |
 | `corpus-reviewer.md` | standing | artifact-corpus conformance vs the repo's own contract; report-only |
+| `auditor.md` | standing (shadow) | owed-set completeness judge at pass close (`spec-0003`); report-only during shadow — never audits a pass it produced |

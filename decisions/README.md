@@ -26,7 +26,7 @@ updated: YYYY-MM-DD
 ```
 
 What each `status` value means, and who moves an artifact between
-states, lives in **`.grove/lifecycle.md`** — the installed lifecycle
+states, lives in **`.grove/internal/lifecycle.md`** — the installed lifecycle
 companion (`grove/adr-0008`; single home per kodhama-0008) — not
 restated here.
 
