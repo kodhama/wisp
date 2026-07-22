@@ -1,21 +1,16 @@
 # wisp — grove-managed
 
-<!-- grove:begin (managed by grove — edit .claude/agents/, not this block) -->
-wisp is **grove-managed**: from lane B4 of the kodhama suite-lift plan
-onward, wisp's own work items run as [grove](https://github.com/kodhama/grove)
-runs, not ad hoc prompting. The vendored agent roles live in
-`.claude/agents/` (fourteen roles, wisp's placeholders already resolved —
-test `npm test`, typecheck `npx tsc --noEmit`, GitHub PRs + issues on
-`kodhama/wisp`, PR-first, agents never merge); the `grove-status`
-telemetry skill lives in `.claude/skills/grove-status/`. Minimal
-`decisions/` and `specs/` stores are seeded (mirroring grove's own,
-adapted — see each dir's `README.md`).
-
-**Recursion:** wisp IS the telemetry tool, so an agent working here
-reports through wisp's own `emit.ts` at the repo root, not a vendored
-copy elsewhere — the `grove-status` skill's vendor path resolves to
-`.`, and events land on wisp's own bus (`.grove/runtime/events.ndjson`).
-grove plugin@4449db2
+<!-- grove:begin (managed by grove — dials live in .grove/, not this block) -->
+Work items matching a grove workflow (W1–W6 — e.g. a bug report → the bug
+pipeline, a research ask → divergent research) run as grove runs, sequenced
+through grove's chartered agent roles, loaded from the grove plugin as
+`grove:<role>` subagents (all thirteen). Anything else — conversation, trivial
+asks, out-of-scope questions — proceeds normally. This repo's dials live in
+`.grove/` (see its README). Version skew (adr-0026 D4): at role start, if the
+installed grove plugin's version differs from the stamp below, disclose the
+divergence loudly in your report and continue — the stamp is the in-repo
+ratified record, never a lock; grove never enforces it.
+grove plugin@0.1.0
 <!-- grove:end -->
 
 <!-- trellis:begin (managed by trellis — edit .trellis/, not this block) -->
