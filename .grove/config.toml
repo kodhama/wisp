@@ -1,0 +1,29 @@
+# .grove/config.toml — wisp's shared role config (adr-0026 D3).
+#
+# One file, shared across grove's plugin-carried roles: the config-shaped
+# tokens the grove charters declare, key = the token name.
+# Consumer-authoritative — wisp owns this file; grove seeds it once and never
+# clobbers it. Every value is a VERIFIED PRIOR, not ground truth: a grove agent
+# verifies it on use, discloses a mismatch loudly and routes the fix back to
+# this file, and never silently substitutes or works around a stale value. An
+# explicit "none — …" / "none exists yet" is an honest value, not a gap. This
+# file is agent-read config (judgment on read); it is never a deterministic
+# machinery read (adr-0026 D3 boundary).
+#
+# Seeded from wisp's previously-vendored charter copies during the thin-vendor
+# migration (grove#116); values reflect wisp as of that migration.
+
+TEST_CMD = "npm test"  # vitest run
+TYPECHECK_CMD = "npx tsc --noEmit"
+LINT_CMD = "none — no lint/format script in package.json and no eslint/prettier/biome config committed as of this writing; the nearest committed mechanical gate is the typecheck (TYPECHECK_CMD), not a license for taste"
+TEST_DEPS_LEDGER = "none exists yet — test files (test/protocol.test.ts, test/github.test.ts) are undifferentiated by package; a nearest-ancestor test-deps ledger (adr-0006) becomes warranted once the suite outgrows a single flat directory"
+PR_CONTRACT_SECTIONS = "none CI-enforced — no .github/workflows and no PR template exist as of this writing; the propagation channel (propagation-remediator) expects a '## Propagation' and/or '## Recommended next task' section — check by hand until CI exists"
+PARKED_ITEM_STORE = "no dedicated TODO/ROADMAP file — parked items live in README.md's '## Provenance' section (e.g. demo.ts's Grove-vocabulary coupling, the adapter follow-up) and in each specs/*.md file's '## Open questions' section"
+CONVENTIONS_PATH = "CLAUDE.md"  # root; imports the Trellis working rules from .trellis/
+QUALITY_RUBRIC_PATH = "none exists yet"
+SPEC_RUBRIC_PATH = "none exists yet — self-check against specs/README.md's artifact contract (frontmatter present, ## Acceptance criteria testable, ## Open questions present even if empty) until one is warranted"
+RESEARCH_RUBRIC_PATH = "none exists yet — self-check narratively (every load-bearing claim tagged; no claim resting on recall alone) until one is warranted"
+ARTIFACT_DIRS = ["decisions/", "specs/"]  # discovery artifacts (type: discovery) also file under specs/ — wisp has no separate research directory
+ARTIFACT_CONTRACT_PATHS = ["decisions/README.md", "specs/README.md"]
+REPO_TYPED_CHECKS = "none — no additional typed-artifact checks beyond the family core"
+SEVERITY_TAXONOMY = "none declared"
