@@ -14,12 +14,12 @@
       "result": "pending"
     },
     "24": {
-      "version": "pending",
+      "version": "24.4.1",
       "result": "pending"
     }
   },
   "claude": {
-    "version": "pending",
+    "version": "2.1.199",
     "result": "pending",
     "tools_listed": false,
     "check_passed": false,
@@ -27,7 +27,7 @@
     "bus_path_verified": false
   },
   "codex": {
-    "version": "pending",
+    "version": "0.145.0",
     "result": "pending",
     "tools_listed": false,
     "check_passed": false,

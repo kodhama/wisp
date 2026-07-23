@@ -66,12 +66,12 @@ describe("SPEC-0001 S20/S23/S28 — exact dual-host MCP-only payload", () => {
     expect(qualification).toMatchObject({
       plugin_version: "0.1.0",
       node_versions: {
-        "20": { version: "pending", result: "pending" },
-        "22": { version: "pending", result: "pending" },
-        "24": { version: "pending", result: "pending" },
+        "20": { version: expect.stringMatching(/^(?:pending|\d+\.\d+\.\d+)$/u), result: "pending" },
+        "22": { version: expect.stringMatching(/^(?:pending|\d+\.\d+\.\d+)$/u), result: "pending" },
+        "24": { version: expect.stringMatching(/^(?:pending|\d+\.\d+\.\d+)$/u), result: "pending" },
       },
-      claude: { version: "pending", result: "pending" },
-      codex: { version: "pending", result: "pending" },
+      claude: { version: expect.stringMatching(/^(?:pending|\d+\.\d+\.\d+)$/u), result: "pending" },
+      codex: { version: expect.stringMatching(/^(?:pending|\d+\.\d+\.\d+)$/u), result: "pending" },
       result: "pending",
     });
   });
