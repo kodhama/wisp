@@ -1,0 +1,8 @@
+{
+  "name": "wisp",
+  "version": "0.1.0",
+  "description": "Project-scoped runtime observability for agent teams.",
+  "author": {
+    "name": "Kodhama"
+  }
+}

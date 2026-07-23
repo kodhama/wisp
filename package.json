@@ -3,16 +3,23 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Zero-dependency runtime observability for agent teams — protocol, bus, emitter, and dashboard.",
+  "description": "Project-scoped runtime observability for agent teams.",
   "license": "MIT",
   "scripts": {
+    "build": "node scripts/build-plugin.mjs",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "validate:plugin": "vitest run test/wisp-plugin-v4.test.ts",
+    "verify": "npm run typecheck && npm test && npm run build && npm run validate:plugin",
     "serve": "node server.ts",
     "demo": "node demo.ts"
   },
   "devDependencies": {
+    "@modelcontextprotocol/sdk": "1.29.0",
     "@types/node": "^22.20.0",
+    "esbuild": "0.28.1",
     "typescript": "^5.9.3",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "zod": "4.4.3"
   }
 }

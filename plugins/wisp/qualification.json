@@ -1,0 +1,38 @@
+{
+  "plugin_version": "0.1.0",
+  "artifact_sha256": "dc319c5f3d8d9193d6594f8f58c26f905f4b4e162c848c9301d9061cbde97dc7",
+  "date": "2026-07-23",
+  "platform": "darwin",
+  "architecture": "arm64",
+  "node_versions": {
+    "20": {
+      "version": "pending",
+      "result": "pending"
+    },
+    "22": {
+      "version": "pending",
+      "result": "pending"
+    },
+    "24": {
+      "version": "pending",
+      "result": "pending"
+    }
+  },
+  "claude": {
+    "version": "pending",
+    "result": "pending",
+    "tools_listed": false,
+    "check_passed": false,
+    "write_passed": false,
+    "bus_path_verified": false
+  },
+  "codex": {
+    "version": "pending",
+    "result": "pending",
+    "tools_listed": false,
+    "check_passed": false,
+    "write_passed": false,
+    "bus_path_verified": false
+  },
+  "result": "pending"
+}
