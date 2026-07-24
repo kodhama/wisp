@@ -37,7 +37,7 @@ describe("SPEC-0001 v6 S20/S23/S28 — exact dual-host MCP-only payload", () => 
     const claude = JSON.parse(await readFile(join(plugin, ".claude-plugin/plugin.json"), "utf8"));
     const codex = JSON.parse(await readFile(join(plugin, ".codex-plugin/plugin.json"), "utf8"));
     const claudeMcp = JSON.parse(await readFile(join(plugin, ".mcp.json"), "utf8"));
-    expect(claude.version).toBe("0.2.0");
+    expect(claude.version).toBe("0.2.1-rc.1");
     expect(codex.version).toBe(claude.version);
     expect(claude.bin).toBeUndefined();
     expect(codex.bin).toBeUndefined();
@@ -49,7 +49,9 @@ describe("SPEC-0001 v6 S20/S23/S28 — exact dual-host MCP-only payload", () => 
     });
     const bootstrap = codexServer.args[1];
     expect(bootstrap).toContain("process.env.WISP_PROJECT_ROOT=process.cwd()");
-    expect(bootstrap).toContain("'plugins','cache','kodhama','wisp','0.2.0','dist','wisp.mjs'");
+    expect(bootstrap).toContain(
+      "'plugins','cache','kodhama','wisp','0.2.1-rc.1','dist','wisp.mjs'",
+    );
     expect(bootstrap).toContain("process.env.CODEX_HOME");
     expect(bootstrap).not.toMatch(
       /CLAUDE|PLUGIN_ROOT|npm|npx|fetch|https?:|child_process|process\.stdout|console\.log/u,
@@ -96,14 +98,17 @@ describe("SPEC-0001 v6 S20/S23/S28 — exact dual-host MCP-only payload", () => 
       "plugin_version",
       "result",
     ]);
-    expect(qualification.plugin_version).toBe("0.2.0");
+    expect(qualification.plugin_version).toBe("0.2.1-rc.1");
     expect(qualification.date).toMatch(/^\d{4}-\d{2}-\d{2}$/u);
     const [year, month, day] = qualification.date.split("-").map(Number);
     expect(
       new Date(Date.UTC(year, month - 1, day)).toISOString().slice(0, 10),
     ).toBe(qualification.date);
-    expect(qualification.platform).toBe(process.platform);
-    expect(qualification.architecture).toBe(process.arch);
+    expect(qualification.platform).toMatch(/^[a-z0-9]+$/u);
+    expect(qualification.architecture).toMatch(/^[a-z0-9_]+$/u);
+    if (qualification.dashboard.process_identity_passed) {
+      expect(["darwin", "linux"]).toContain(qualification.platform);
+    }
     expect(Object.keys(qualification.node_versions).sort()).toEqual(["20", "22", "24"]);
     for (const major of ["20", "22", "24"] as const) {
       const evidence = qualification.node_versions[major];

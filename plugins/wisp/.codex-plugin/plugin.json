@@ -1,6 +1,6 @@
 {
   "name": "wisp",
-  "version": "0.2.0",
+  "version": "0.2.1-rc.1",
   "description": "Project-scoped runtime observability for agent teams.",
   "author": {
     "name": "Kodhama"
@@ -20,7 +20,7 @@
       "command": "node",
       "args": [
         "-e",
-        "const p=require('node:path'),o=require('node:os'),u=require('node:url');process.env.WISP_PROJECT_ROOT=process.cwd();const h=process.env.CODEX_HOME||p.join(o.homedir(),'.codex');import(u.pathToFileURL(p.join(h,'plugins','cache','kodhama','wisp','0.2.0','dist','wisp.mjs')).href).catch(e=>{process.stderr.write(`wisp failed to load: ${e instanceof Error?e.stack??e.message:String(e)}\\n`);process.exitCode=1})"
+        "const p=require('node:path'),o=require('node:os'),u=require('node:url');process.env.WISP_PROJECT_ROOT=process.cwd();const h=process.env.CODEX_HOME||p.join(o.homedir(),'.codex');import(u.pathToFileURL(p.join(h,'plugins','cache','kodhama','wisp','0.2.1-rc.1','dist','wisp.mjs')).href).catch(e=>{process.stderr.write(`wisp failed to load: ${e instanceof Error?e.stack??e.message:String(e)}\\n`);process.exitCode=1})"
       ],
       "env_vars": [
         "CODEX_HOME"

@@ -16,9 +16,9 @@
 TEST_CMD = "npm test"  # vitest run
 TYPECHECK_CMD = "npx tsc --noEmit"
 LINT_CMD = "none — no lint/format script in package.json and no eslint/prettier/biome config committed as of this writing; the nearest committed mechanical gate is the typecheck (TYPECHECK_CMD), not a license for taste"
-TEST_DEPS_LEDGER = "none exists yet — test files (test/protocol.test.ts, test/github.test.ts) are undifferentiated by package; a nearest-ancestor test-deps ledger (adr-0006) becomes warranted once the suite outgrows a single flat directory"
-PR_CONTRACT_SECTIONS = "none CI-enforced — no .github/workflows and no PR template exist as of this writing; the propagation channel (propagation-remediator) expects a '## Propagation' and/or '## Recommended next task' section — check by hand until CI exists"
-PARKED_ITEM_STORE = "no dedicated TODO/ROADMAP file — parked items live in README.md's '## Provenance' section (e.g. demo.ts's Grove-vocabulary coupling, the adapter follow-up) and in each specs/*.md file's '## Open questions' section"
+TEST_DEPS_LEDGER = "test/test-deps.toml"
+PR_CONTRACT_SECTIONS = "none CI-enforced — CI workflows exist, but no PR template or contract-section check is committed; the propagation channel (propagation-remediator) expects a '## Propagation' and/or '## Recommended next task' section — check by hand"
+PARKED_ITEM_STORE = "no dedicated TODO/ROADMAP file — parked items live in README.md provenance, GitHub follow-up issues, decisions/*.md '### Parked' sections, and specs/*.md '## Open questions' sections"
 CONVENTIONS_PATH = "AGENTS.md"  # canonical shared project instructions; CLAUDE.md imports it
 QUALITY_RUBRIC_PATH = "none exists yet"
 SPEC_RUBRIC_PATH = "none exists yet — self-check against specs/README.md's artifact contract (frontmatter present, ## Acceptance criteria testable, ## Open questions present even if empty) until one is warranted"

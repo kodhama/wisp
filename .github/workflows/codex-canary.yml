@@ -1,0 +1,99 @@
+name: Codex marketplace canary
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+    inputs:
+      candidate_version:
+        description: Exact candidate plugin SemVer
+        required: true
+        type: string
+      candidate_bundle_sha256:
+        description: Exact candidate dist/wisp.mjs SHA-256
+        required: true
+        type: string
+      candidate_marketplace_source:
+        description: Candidate marketplace Git source
+        required: true
+        type: string
+      candidate_marketplace_ref:
+        description: Candidate marketplace Git ref
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CODEX_HOME: ${{ runner.temp }}/wisp-codex-home
+      EVIDENCE_DIR: ${{ runner.temp }}/wisp-codex-evidence
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install current stable Codex CLI
+        id: install_codex
+        continue-on-error: true
+        run: npm install --global @openai/codex@latest
+      - name: Run weekly canary
+        id: weekly
+        if: github.event_name == 'schedule'
+        continue-on-error: true
+        env:
+          CANARY_CODEX_API_KEY: ${{ secrets.CODEX_API_KEY }}
+          CODEX_INSTALL_OUTCOME: ${{ steps.install_codex.outcome }}
+        run: >-
+          node scripts/codex-canary.mjs
+          --mode weekly
+          --marketplace-source kodhama/stewards
+          --marketplace-ref main
+          --output "$EVIDENCE_DIR"
+      - name: Run candidate canary
+        id: candidate
+        if: github.event_name == 'workflow_dispatch'
+        continue-on-error: true
+        env:
+          CANARY_CODEX_API_KEY: ${{ secrets.CODEX_API_KEY }}
+          CODEX_INSTALL_OUTCOME: ${{ steps.install_codex.outcome }}
+          CANARY_MARKETPLACE_SOURCE: ${{ inputs.candidate_marketplace_source }}
+          CANARY_MARKETPLACE_REF: ${{ inputs.candidate_marketplace_ref }}
+          CANARY_VERSION: ${{ inputs.candidate_version }}
+          CANARY_SHA256: ${{ inputs.candidate_bundle_sha256 }}
+        run: >-
+          node scripts/codex-canary.mjs
+          --mode candidate
+          --marketplace-source "$CANARY_MARKETPLACE_SOURCE"
+          --marketplace-ref "$CANARY_MARKETPLACE_REF"
+          --version "$CANARY_VERSION"
+          --sha256 "$CANARY_SHA256"
+          --output "$EVIDENCE_DIR"
+      - name: Verify exact candidate evidence
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          CANARY_VERSION: ${{ inputs.candidate_version }}
+          CANARY_SHA256: ${{ inputs.candidate_bundle_sha256 }}
+        run: >-
+          node scripts/verify-codex-canary.mjs
+          --evidence "$EVIDENCE_DIR/evidence.json"
+          --bundle "$CODEX_HOME/plugins/cache/kodhama/wisp/$CANARY_VERSION/dist/wisp.mjs"
+          --version "$CANARY_VERSION"
+          --sha256 "$CANARY_SHA256"
+      - name: Enforce weekly behavioral failures
+        if: github.event_name == 'schedule' && steps.weekly.outcome == 'failure'
+        run: exit 1
+      - name: Upload private canary evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: codex-canary-${{ github.run_id }}
+          path: |
+            ${{ env.EVIDENCE_DIR }}/codex.jsonl
+            ${{ env.EVIDENCE_DIR }}/evidence.json
+          if-no-files-found: error
+          retention-days: 30
