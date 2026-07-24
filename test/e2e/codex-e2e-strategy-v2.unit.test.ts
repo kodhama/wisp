@@ -1,4 +1,4 @@
-// SPEC-0002 v2: S1-S6 / R1-R6.
+// SPEC-0002 v3: S1-S9 / R1-R11.
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
@@ -6,7 +6,7 @@ async function text(path: string): Promise<string> {
   return readFile(new URL(`../../${path}`, import.meta.url), "utf8");
 }
 
-describe("SPEC-0002 v2 reproducible Codex E2E surfaces", () => {
+describe("SPEC-0002 v3 reproducible Codex E2E surfaces", () => {
   it("pins Playwright and exposes one direct and one container entrypoint", async () => {
     const packageJson = JSON.parse(await text("package.json"));
     expect(packageJson.devDependencies["@playwright/test"]).toBe("1.61.0");
@@ -84,12 +84,12 @@ describe("SPEC-0002 v2 reproducible Codex E2E surfaces", () => {
         "",
         "[packages.unit]",
         'paths = ["test/*.test.ts"]',
-        'specs = ["spec-0001-plugin-mcp-distribution@v6"]',
+        'specs = ["spec-0001-plugin-mcp-distribution@v7"]',
         "decisions = []",
         "",
         "[packages.e2e]",
         'paths = ["test/e2e/**"]',
-        'specs = ["spec-0001-plugin-mcp-distribution@v6", "spec-0002-codex-e2e-testing@v2"]',
+        'specs = ["spec-0001-plugin-mcp-distribution@v7", "spec-0002-codex-e2e-testing@v3"]',
         'decisions = ["adr-0006-codex-e2e-testing", "adr-0007-codex-canary-evidence"]',
         "",
       ].join("\n"),

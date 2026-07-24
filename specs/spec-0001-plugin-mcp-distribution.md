@@ -1,17 +1,38 @@
 ---
 id: spec-0001-plugin-mcp-distribution
 type: spec
-status: gated
+status: approved  # maintainer authorized the family rollout and merge after independent review; spec-adversary APPROVE-READY and conformance PASS preceded this recording
 depends_on:
   - adr-0004-codex-session-bootstrap
   - adr-0005-plugin-dashboard-lifecycle
-implements: adr-0005-plugin-dashboard-lifecycle
+  - adr-0006-family-plugin-release-and-surface-contract
+  - stewards/kodhama-spec-0001-family-plugin-release-and-distribution-metadata@v1
+implements: adr-0006-family-plugin-release-and-surface-contract
 owner: agent
 updated: 2026-07-24
-version: 6
+version: 7
 ---
 
 # SPEC-0001 — Dual-host Wisp plugin, bundled stdio MCP, and project dashboard
+
+> **AMENDED 2026-07-24**
+> **WHAT:** Added the family release metadata, complete inventory, append-only
+> history, exact surface contract, one-version carrier projection, candidate
+> reset, generated support documentation, product release validator, and
+> immutable `wisp-v<version>` tag gate.
+> **WHY:** ADR-0006 adopts Stewards' approved family release and distribution
+> metadata contract while retaining Wisp's stricter dual-host, Node, and
+> dashboard qualification gate.
+> **SCOPE:** Release and support authorities, exact nine-path installed
+> payload, version and artifact carriers, candidate lifecycle, validation,
+> approval, tagging, and history; version advanced from 6 to 7. Existing MCP,
+> bus, dashboard, security, and host behavior remain unchanged.
+> **POINTER:** ADR-0006 and
+> `stewards/kodhama-spec-0001-family-plugin-release-and-distribution-metadata@v1`.
+> **VALUE:** Wisp supplies one version-bound product contract to every
+> distributor without treating marketplace availability as behavioral
+> support.
+> **CONFIDENCE:** verified.
 
 > **AMENDED 2026-07-24**
 > **WHAT:** Added the explicit `wisp_dashboard` tool, authenticated local
@@ -1018,9 +1039,11 @@ resolve project/global packages. Host configs MAY resolve the host-provided
 `node` executable from `PATH`. The payload declares no binary and the bundle
 has no CLI command dispatcher.
 
-## Plugin, skill, marketplace, and qualification contract
+## Plugin, skill, release, marketplace, and qualification contract
 
-`plugins/wisp/` SHALL contain exactly these eight release paths:
+### Exact installed payload
+
+`plugins/wisp/` SHALL contain exactly these nine release paths:
 
 - `.claude-plugin/plugin.json`;
 - `.codex-plugin/plugin.json`;
@@ -1029,9 +1052,710 @@ has no CLI command dispatcher.
 - `skills/wisp/SKILL.md`;
 - `skills/dashboard/SKILL.md`;
 - `README.md`; and
-- `qualification.json`.
+- `qualification.json`; and
+- `surfaces.json`.
 
-Both manifests declare the same semantic version.
+Release metadata, release inventory, approvals, history, validators, workflow
+files, source, and tests remain product-owned repository files but are not
+installed payload paths. An extra or missing installed path is a release
+failure.
+
+### Release authorities and repository paths
+
+All paths below are relative to the Wisp repository root. Product validation
+uses that root as the family validator's `--package-root`; the distributable
+package remains `plugins/wisp/`.
+
+| Path | Contract |
+|---|---|
+| `package.json` | Sole package SemVer authority at JSON Pointer `/version` |
+| `package-lock.json` | Root and root-package version carriers at `/version` and `/packages//version` |
+| `plugins/wisp/.claude-plugin/plugin.json` | Claude host manifest and `/version` carrier |
+| `plugins/wisp/.codex-plugin/plugin.json` | Codex host manifest, `/version` carrier, and versioned cache bootstrap |
+| `src/mcp.ts` | Source of the MCP initialization `implementation.version` carrier |
+| `plugins/wisp/qualification.json` | `/plugin_version`, candidate bundle digest, and full release-qualification source |
+| `plugins/wisp/surfaces.json` | Family `surface-contract.v1` source and `/version` carrier |
+| `release/wisp/release.json` | Family `release-metadata.v1` source |
+| `release/wisp/release-inventory.json` | Family `release-inventory.v1` generated derivative |
+| `release/wisp/public-contract.json` | Wisp-owned machine source for public contracts not wholly represented by a host manifest or surface row |
+| `release/wisp/contract-snapshots.json` | Closed canonical preimages for every digest carried by `public-contract.json` |
+| `release/wisp/history.json` | Family `release-history.v1` append-only ledger |
+| `release/wisp/approvals/<version>.json` | Immutable product-human release approval after it is referenced |
+| `release/wisp/candidate-state.json` | Last committed preparation transaction and complete changed-leaf digest set |
+| `release/wisp/candidate-validation.v1.schema.json` | Exact candidate receipt schema consumed by CI and the canary verifier |
+| `scripts/wisp-release-contract.mjs` | Inventory provider, Wisp extension validator, derivative generator, candidate preparer, and history appender |
+| `.github/workflows/wisp-plugin-release.yml` | Product-owned validation and immutable-tag workflow |
+| `README.md`, `plugins/wisp/README.md` | Hand-authored documents containing one marker-bounded generated support projection each |
+
+`release/wisp/release.json` has `schema_version: 1`,
+`family_contract_version: 1`, `plugin_id: "wisp"`, and these exact paths:
+
+| Field | Value |
+|---|---|
+| `version_authority` | JSON extractor `package.json`, selector `/version` |
+| `surface_contract` | `plugins/wisp/surfaces.json` |
+| `release_inventory` | `release/wisp/release-inventory.json` |
+| `release_history` | `release/wisp/history.json` |
+| `inventory_provider` | `scripts/wisp-release-contract.mjs` |
+| `extensions.wisp.validator` | `scripts/wisp-release-contract.mjs` |
+
+Its common `version_carriers` contains the two package-lock occurrences, both
+host-manifest versions, `qualification.json#/plugin_version`, and
+`surfaces.json#/version`, each with the exact family JSON extractor. Wisp's
+release-metadata extension rejects unknown fields, declares the sorted exact
+nine-path installed inventory under `installed_payload_paths`, and declares
+the two embedded version carriers that
+cannot satisfy the common extractor's “selected value is exactly SemVer”
+shape:
+
+1. the one version path segment in the Codex manifest's
+   `/mcpServers/wisp/args/1` cache bootstrap; and
+2. the MCP server initialization version observable from an initialize
+   handshake with the exact built `dist/wisp.mjs`.
+
+The validator rejects a second matching cache segment, a different cache
+plugin/marketplace coordinate, a missing MCP implementation version, or any
+authority/carrier mismatch. It also proves the source `src/mcp.ts` value and
+the built MCP handshake agree, so a stale bundle cannot satisfy carrier
+parity. Release numbers in tests are derived from `package.json`; a literal
+candidate version in a test is not another authority.
+
+### Complete release inventory and public support derivatives
+
+The inventory-provider interface is exactly:
+
+```text
+scripts/wisp-release-contract.mjs \
+  --package-root <repository-root> \
+  --emit-release-inventory
+```
+
+It writes only canonical `release-inventory.v1` JSON to stdout, writes no
+file, performs no network access, and emits byte-identical output on two runs
+in a clean checkout. Those bytes equal checked-in
+`release/wisp/release-inventory.json`.
+
+The inventory discovers both host manifests exactly once. Before emitting it,
+the provider verifies that the recursive installed-file inventory equals
+`extensions.wisp.installed_payload_paths`; a mismatch fails with no output.
+The common inventory binds the bundle as a consumer-acted
+`content-hash` payload identity extracted from
+`plugins/wisp/dist/wisp.mjs`. Its value is
+`sha256:<qualification.json.artifact_sha256>` and the validator independently
+hashes the file before accepting it. Because the installed host and canary act
+on those bytes, the same bundle identity appears as the family-required
+`consumed-output-protocol` public-contract item and in each release-history
+row.
+
+The release inventory has exactly fifteen `public_contract_items`, sorted by
+`contract_id`. Every row has the family-defined fingerprint and an
+`initial` compatibility annotation for the first family release; later
+inventories use the family-derived annotation. The ids, categories, and
+extractors are:
+
+| `contract_id` | Family category | Exact extractor |
+|---|---|---|
+| `wisp.configuration.project-root` | `configuration` | `json-pointer`, `release/wisp/public-contract.json`, `/configuration/project_root` |
+| `wisp.entry.claude-mcp` | `host-visible-entrypoint` | `json-pointer`, `plugins/wisp/.mcp.json`, `/mcpServers/wisp` |
+| `wisp.entry.codex-mcp` | `host-visible-entrypoint` | `json-pointer`, `plugins/wisp/.codex-plugin/plugin.json`, `/mcpServers/wisp` |
+| `wisp.entry.dashboard-skill` | `host-visible-entrypoint` | `file-bytes`, `plugins/wisp/skills/dashboard/SKILL.md` |
+| `wisp.entry.lifecycle-skill` | `host-visible-entrypoint` | `file-bytes`, `plugins/wisp/skills/wisp/SKILL.md` |
+| `wisp.install.claude-manifest` | `installation-coordinate` | `json-pointer`, `plugins/wisp/.claude-plugin/plugin.json`, empty RFC 6901 pointer |
+| `wisp.install.codex-manifest` | `installation-coordinate` | `json-pointer`, `plugins/wisp/.codex-plugin/plugin.json`, empty RFC 6901 pointer |
+| `wisp.install.claude-project-binding` | `installation-input` | `json-pointer`, `plugins/wisp/.mcp.json`, `/mcpServers/wisp/env/WISP_PROJECT_ROOT` |
+| `wisp.managed-state.project-bus` | `managed-state` | `json-pointer`, `release/wisp/public-contract.json`, `/managed_state/project_bus` |
+| `wisp.protocol.bundle` | `consumed-output-protocol` | `file-bytes`, `plugins/wisp/dist/wisp.mjs` |
+| `wisp.protocol.dashboard` | `consumed-output-protocol` | `json-pointer`, `release/wisp/public-contract.json`, `/protocols/dashboard` |
+| `wisp.protocol.events` | `consumed-output-protocol` | `json-pointer`, `release/wisp/public-contract.json`, `/protocols/events` |
+| `wisp.protocol.mcp-tools` | `consumed-output-protocol` | `json-pointer`, `release/wisp/public-contract.json`, `/protocols/mcp_tools` |
+| `wisp.runtime.node` | `runtime-requirement` | `json-pointer`, `release/wisp/public-contract.json`, `/runtime/node` |
+| `wisp.surface.matrix` | `surface-support` | `json-pointer`, `plugins/wisp/surfaces.json`, empty RFC 6901 pointer |
+
+The lifecycle and dashboard skill rows fingerprint the raw shipped bytes
+under the family `file-bytes` grammar. They are host-consumed instruction
+interfaces, not internal prose and not additional payload identities. The
+provider independently hashes both files and recomputes their family
+fingerprint preimages. On later releases, byte equality is `unchanged`;
+removal or any byte change is conservatively `breaking-change`. The family
+inventory comparison, human approval projection, final classified change
+set, and release-history inventory digest therefore cannot omit or silently
+alter either skill contract.
+
+`release/wisp/public-contract.json` rejects unknown properties at every level
+and contains exactly:
+
+```json
+{
+  "schema_version": 1,
+  "configuration": {
+    "project_root": {
+      "claude_binding": "WISP_PROJECT_ROOT=${CLAUDE_PROJECT_DIR}",
+      "codex_binding": "session-cwd-before-import",
+      "generic_fallback": "one-local-file-root"
+    }
+  },
+  "managed_state": {
+    "project_bus": {
+      "relative_path": ".wisp/events.ndjson",
+      "write_lock": ".wisp/write.lock",
+      "contract_sha256": "<64 lowercase hexadecimal characters>"
+    }
+  },
+  "protocols": {
+    "mcp_tools": {
+      "ordered_names": ["wisp_status", "wisp_heartbeat", "wisp_verdict", "wisp_question", "wisp_check", "wisp_ack", "wisp_dashboard"],
+      "input_schemas_sha256": "<64 lowercase hexadecimal characters>",
+      "output_schemas_sha256": "<64 lowercase hexadecimal characters>"
+    },
+    "events": {
+      "protocol_version": 1,
+      "schema_sha256": "<64 lowercase hexadecimal characters>"
+    },
+    "dashboard": {
+      "protocol_version": 1,
+      "routes": ["GET /", "GET /api/health", "GET /api/events", "POST /api/commands"],
+      "lazy_start_only": true,
+      "security_contract_sha256": "<64 lowercase hexadecimal characters>",
+      "lifecycle_contract_sha256": "<64 lowercase hexadecimal characters>"
+    }
+  },
+  "runtime": {
+    "node": {
+      "release_lines": ["20.x", "22.x", "24.x"],
+      "executable_source": "host-PATH"
+    }
+  }
+}
+```
+
+Every digest is SHA-256 of one complete value selected from
+`release/wisp/contract-snapshots.json`, canonicalized with the family JSON
+rules. That file rejects unknown properties at every closed level and is
+exactly:
+
+```json
+{
+  "schema_version": 1,
+  "project_bus": {
+    "selection": {
+      "relative_path": ".wisp/events.ndjson",
+      "canonical_project_required": true,
+      "symlinks_forbidden": [".wisp", ".wisp/events.ndjson"]
+    },
+    "encoding": {
+      "charset": "UTF-8",
+      "fatal_decode": true,
+      "framing": "NDJSON",
+      "terminator": "LF",
+      "remove_one_trailing_cr": true,
+      "final_unterminated_segment": true
+    },
+    "limits": {
+      "bus_bytes": 16777216,
+      "line_bytes": 65536,
+      "event_bytes_excluding_lf": 32768,
+      "pending_commands": 1000,
+      "parse_errors": 1000
+    },
+    "missing_read": "empty-without-create",
+    "write_lock": {
+      "relative_path": ".wisp/write.lock",
+      "acquire": "atomic-mkdir",
+      "owner_required": ["token", "pid", "process_identity", "created", "phase"],
+      "phases": ["held", "committed"],
+      "wait_ms": 5000,
+      "poll_ms": 10,
+      "ownerless_stale_ms": 120000,
+      "recovery": ["proved-absent", "qualified-token-mismatch", "matching-live-committed"],
+      "release": "atomic-rename-to-retired-token"
+    },
+    "append": {
+      "write": "one-complete-O_APPEND-write",
+      "commit_point": "event-bytes-plus-LF-written",
+      "pre_commit_failure": "restore-original-size-and-fail",
+      "post_commit_failure": "return-success-and-redacted-diagnostic"
+    }
+  },
+  "mcp_inputs": {
+    "ordered_tools": [
+      {"name": "wisp_status", "schema": "<complete generated input JSON Schema>"},
+      {"name": "wisp_heartbeat", "schema": "<complete generated input JSON Schema>"},
+      {"name": "wisp_verdict", "schema": "<complete generated input JSON Schema>"},
+      {"name": "wisp_question", "schema": "<complete generated input JSON Schema>"},
+      {"name": "wisp_check", "schema": "<complete generated input JSON Schema>"},
+      {"name": "wisp_ack", "schema": "<complete generated input JSON Schema>"},
+      {"name": "wisp_dashboard", "schema": "<complete generated input JSON Schema>"}
+    ]
+  },
+  "mcp_outputs": {
+    "ordered_tools": [
+      {"name": "wisp_status", "schema": "<complete generated output JSON Schema>"},
+      {"name": "wisp_heartbeat", "schema": "<complete generated output JSON Schema>"},
+      {"name": "wisp_verdict", "schema": "<complete generated output JSON Schema>"},
+      {"name": "wisp_question", "schema": "<complete generated output JSON Schema>"},
+      {"name": "wisp_check", "schema": "<complete generated output JSON Schema>"},
+      {"name": "wisp_ack", "schema": "<complete generated output JSON Schema>"},
+      {"name": "wisp_dashboard", "schema": "<complete generated output JSON Schema>"}
+    ]
+  },
+  "events": {
+    "protocol_version": 1,
+    "schema": "<complete generated stored-event union JSON Schema>"
+  },
+  "dashboard_security": {
+    "bind": {"address": "127.0.0.1", "port": "os-assigned"},
+    "capability": {"entropy_bytes": 32, "encoding": "base64url-unpadded", "characters": 43, "transport": "fragment-to-bearer", "storage": "closure-only"},
+    "routes": [
+      {"method": "GET", "path": "/", "authorization": "none", "origin": "not-required", "body": "forbidden", "success_status": 200},
+      {"method": "GET", "path": "/api/health", "authorization": "bearer", "origin": "absent-or-exact", "body": "forbidden", "success_status": 200},
+      {"method": "GET", "path": "/api/events", "authorization": "bearer", "origin": "absent-or-exact", "body": "forbidden", "success_status": 200},
+      {"method": "POST", "path": "/api/commands", "authorization": "bearer", "origin": "exact-required", "body": "application/json-utf8", "success_status": 201}
+    ],
+    "required_response_headers": {
+      "Cache-Control": "no-store",
+      "Referrer-Policy": "no-referrer",
+      "X-Content-Type-Options": "nosniff"
+    },
+    "html_csp_template": "default-src 'none'; connect-src 'self'; img-src 'self' data:; script-src 'nonce-<response-nonce>'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+    "validation_precedence": ["request-syntax", "host", "query", "route", "method", "authorization", "origin", "shutdown", "get-body", "content-type", "body-limit-and-json", "command-schema-and-conflict"],
+    "limits": {"header_deadline_ms": 5000, "header_bytes": 16384, "body_deadline_ms": 5000, "body_bytes": 32768, "total_deadline_ms": 10000, "idle_socket_ms": 5000}
+  },
+  "dashboard_lifecycle": {
+    "runtime_relative_root": ".wisp/runtime/dashboard",
+    "project_key": "sha256-canonical-project-utf8",
+    "owner_states": ["starting", "ready"],
+    "owner_schema": "<complete generated starting-or-ready owner JSON Schema>",
+    "acquire": "private-candidate-directory-atomic-rename",
+    "post_acquire_recheck": true,
+    "ready_publication": "private-file-atomic-rename",
+    "reuse_proof": ["protocol", "project_key", "instance", "authenticated-health"],
+    "live_owner_policy": ["never-steal-starting", "never-steal-unhealthy", "never-steal-shutting-down", "never-steal-identity-inconclusive"],
+    "recoverable_owner_policy": ["proved-absent", "qualified-token-mismatch"],
+    "startup_convergence_ms": 2000,
+    "startup_poll_ms": 50,
+    "health_timeout_ms": 500,
+    "cleanup_triggers": ["stdio-close", "SIGINT", "SIGTERM", "startup-failure"],
+    "shutdown_grace_ms": 1000,
+    "cleanup": ["reject-new-api-work", "drain", "destroy-tracked-sockets", "close-listener", "remove-only-matching-owner"],
+    "detached_process": false
+  },
+  "runtime_node": {
+    "release_lines": ["20.x", "22.x", "24.x"],
+    "executable_source": "host-PATH"
+  }
+}
+```
+
+Angle-bracketed schema values above are JSON objects, not strings in the real
+file. They are the complete `additionalProperties: false` schemas emitted by
+the same runtime schema source used by MCP listing, stored-event validation,
+and owner-record validation; `$ref` and external schema references are
+forbidden, so every preimage is self-contained. Array order is exactly shown,
+object keys use family canonical ordering for hashing, and no field outside
+the shown closed member lists participates implicitly.
+
+Snapshot extraction is closed and executable:
+
+| Snapshot member | Sole implementation extractor |
+|---|---|
+| `/mcp_inputs/ordered_tools[*]` | Project `name` and complete `inputSchema` from the pure tool-definition array used directly by MCP `tools/list`; reject any listed tool absent from the seven-name order or vice versa |
+| `/mcp_outputs/ordered_tools[*]` | Project `name` and complete `outputSchema` from that same array; an absent output schema is invalid |
+| `/events/schema` | Serialize the one schema object used directly before any stored event participates in reduction |
+| `/project_bus` | Serialize the bus path/decoder/limit/lock/append constants and enum tables imported directly by project selection, bus reading, lock recovery, and append code |
+| `/dashboard_security` | Serialize the address, route, header, CSP, precedence, and limit tables consumed directly by the HTTP request handler |
+| `/dashboard_lifecycle` | Serialize the runtime-root, owner schemas, state/reuse/recovery/cleanup tables, and timeouts consumed directly by `DashboardCoordinator` |
+| `/runtime_node` | Project the ordered supported release-line constant used by build/qualification validation and the fixed executable-source enum used by both host launch validators |
+
+`--emit-contract-snapshots` imports these runtime-owned values through a
+side-effect-free module and performs only the shown projections. It may not
+parse this Markdown, hash source text, accept caller-supplied members, or keep
+a second hand-authored behavior table. A behavior branch whose discriminator
+is absent from its consumed runtime table fails snapshot tests; a table member
+with no exercised branch fails the same tests. This makes each canonical hash
+preimage complete and unique without turning prose into a second authority.
+
+The six carried digests have exactly these preimages:
+
+| Carried field | Exact canonical preimage |
+|---|---|
+| `managed_state.project_bus.contract_sha256` | `/project_bus` |
+| `protocols.mcp_tools.input_schemas_sha256` | `/mcp_inputs` |
+| `protocols.mcp_tools.output_schemas_sha256` | `/mcp_outputs` |
+| `protocols.events.schema_sha256` | `/events` |
+| `protocols.dashboard.security_contract_sha256` | `/dashboard_security` |
+| `protocols.dashboard.lifecycle_contract_sha256` | `/dashboard_lifecycle` |
+
+`runtime.node` equals `/runtime_node` byte-for-byte after canonicalization
+rather than carrying a seventh digest. The inventory provider invokes
+`scripts/wisp-release-contract.mjs --package-root <repository-root>
+--emit-contract-snapshots` twice in a network-disabled clean checkout; both
+stdout streams must be byte-identical canonical JSON and equal the checked-in
+file. The Wisp extension validator derives every member from normative
+runtime constants and schemas and rejects a stale snapshot or digest. It never
+accepts either machine file as substitute evidence for behavior.
+
+The inventory has exactly two `support_derivatives`:
+
+| Derivative id | Kind | Exact extractor |
+|---|---|---|
+| `wisp.support.package-readme` | `public-support-table` | `text-line`, `plugins/wisp/README.md`, the checked inventory's zero-based line selector for the sole line between the exact support markers |
+| `wisp.support.root-readme` | `public-support-table` | `text-line`, `README.md`, the checked inventory's zero-based line selector for the sole line between the exact support markers |
+
+Each README contains these exact marker lines exactly once, in this order:
+
+```text
+<!-- wisp-surface-support:begin -->
+<one generated UTF-8 line>
+<!-- wisp-surface-support:end -->
+```
+
+There is exactly one LF-delimited content line and no blank line between the
+markers. That line is the complete generated support projection: it projects
+package version, canonical surface id, state, missing capability, and
+disclosure from `surfaces.json` in registry order. The provider records that
+content line's actual zero-based line number in each family `text-line`
+extractor. It verifies that the selector resolves to the sole line between
+the markers and that the extracted bytes equal its generated projection.
+Missing, duplicate, nested, reversed, or non-line-exact markers fail;
+generation never inserts or relocates them.
+
+All bytes outside the two marker pairs are hand-authored and outside the
+generator's authority. No independent README text may state broader support.
+The inventory has exactly two `host_manifests`, one consumer-acted bundle
+`payload_identity`, fifteen public-contract rows, and two support
+derivatives. Any extra, missing, duplicate, differently categorized, or
+differently extracted row fails before canonical output. Internal refactors
+and unpublished fixtures are excluded. The provider supplies:
+
+```text
+scripts/wisp-release-contract.mjs --package-root <repository-root> --generate
+scripts/wisp-release-contract.mjs --package-root <repository-root> --check
+```
+
+`--generate` writes only `release/wisp/release-inventory.json` and the bytes
+strictly between the two existing marker pairs, preserving every byte outside
+them. `--check` writes nothing and names every stale, missing, extra, or
+malformed derivative or marker region.
+
+### Exact surface contract and pending boundary
+
+`plugins/wisp/surfaces.json` conforms to family contract version `1`, carries
+the exact package version, and contains each registry-v1 surface exactly once:
+
+- `claude-code.local.interactive`;
+- `claude-code.ci.headless`;
+- `claude-code.cloud-container.headless`;
+- `codex.local.interactive`;
+- `codex.ci.headless`; and
+- `codex.cloud-container.headless`.
+
+Every initial row is `candidate`, has
+`post_install_setup: {required: false, contract: null}`, and carries the
+family-required nonblank `missing_capability` and user-visible `disclosure`.
+The two local rows may carry their typed host load path, but that does not make
+them supported. The headless and cloud-container rows disclose the missing
+exact-surface delivery and behavioral evidence.
+
+No row is `supported` while `qualification.json.result` is `pending` or
+`fail`. A local row may become supported only from evidence for this exact
+package version, bundle digest, canonical surface, current host, and Wisp
+load/use path, with the family evidence and support-record shapes. Claude
+evidence never promotes a Codex row; local evidence never promotes CI or
+cloud-container; the Codex canary never promotes Claude, desktop, IDE, SDK, or
+another Codex lifecycle boundary. A marketplace or provisioner result changes
+no Wisp row.
+
+Wisp's extension rejects unknown product fields and binds any supported local
+row to the matching `qualification.json` host result plus the shared dashboard
+and overall result. It cannot weaken the family row schema or the standing
+full-release qualification below.
+
+### Candidate preparation and exact evidence reset
+
+Candidate preparation is invoked only as:
+
+```text
+scripts/wisp-release-contract.mjs \
+  --package-root <repository-root> \
+  --prepare-candidate
+```
+
+It computes every target byte in a private staging area: first converging the
+source/manifests/lockfile carriers to `package.json.version`, then building
+the exact bundle from that staged source, then setting
+`qualification.json.artifact_sha256` to the SHA-256 of the exact resulting
+`plugins/wisp/dist/wisp.mjs`, and always performs ADR-0006's complete evidence
+reset. `--prepare-candidate` accepts no evidence path, evidence object,
+preserve-results flag, host result, or support override. Fresh evidence is
+recorded only by the separate qualification operations after preparation,
+against the committed candidate-state identity. The reset:
+
+- sets every Node-line result to `pending`;
+- sets Claude and Codex results to `pending` and every host proof boolean to
+  `false`;
+- sets dashboard and overall results to `pending` and every dashboard proof
+  boolean to `false`;
+- keeps Node and host version values only as target descriptors or uses the
+  existing `pending` sentinel;
+- preserves `dashboard.explicit_start_only` only as its declarative contract
+  value; and
+- retains schema-valid `date`, `platform`, and `architecture` only as
+  non-evidentiary descriptors until the first fresh qualification run
+  atomically replaces them with that run's real values.
+
+Preparation has one cooperating-reader transaction boundary:
+
+```text
+release/wisp/candidate-state.json
+
+<real-user-home>/.wisp/runtime/release-contract/
+  <project-key>/
+    prepare.lock/
+      owner.json
+      transaction/
+        journal.json
+        stage/
+        backup/
+```
+
+`<real-user-home>` and `<project-key>` are exactly the dashboard definitions:
+the real OS-user home and lowercase SHA-256 of the canonical repository-root
+UTF-8 bytes. The `release-contract` root and every descendant use the same
+user-private ownership, mode, real-directory/regular-file, and no-symlink
+rules as the dashboard runtime root. The canonical repository may neither
+equal nor contain this runtime root. Unsafe or inconclusive confinement fails
+before any candidate read or write.
+
+`prepare.lock` is acquired by atomic `mkdir`; its exact owner record uses the
+qualified process identity and token rules already defined by this spec.
+Every release-contract command, inventory provider, qualification writer,
+E2E staging operation, and tag/history workflow acquires this same
+out-of-checkout lock before reading any candidate leaf. A live or
+identity-inconclusive owner is never stolen. A proved-dead owner permits
+recovery by atomic quarantine of `prepare.lock`, including its transaction
+subtree, after complete owner reread. No lock, journal, stage, backup,
+quarantine, or cleanup path is created inside the repository.
+
+Under the lock, preparation creates one private transaction with a lowercase
+UUID id, stages every changed leaf, records every old/new SHA-256 and mode in
+`journal.json`, and copies every old leaf to `backup/`. It validates staged
+carrier, digest, qualification-reset, surface, inventory, README, and payload
+bytes before changing a live leaf. The journal phases are exactly `staged`,
+`applying`, and `committed`.
+
+After publishing `applying`, it replaces the declared leaves from the staged
+copies. It then writes `candidate-state.json` last by atomic rename. That
+tracked record rejects unknown properties and contains schema `1`,
+transaction id, package version, bundle SHA-256, and the sorted complete set
+of changed paths with old/new digest and mode (`old` digest/mode are `null`
+only for a newly created leaf). That set excludes `candidate-state.json`
+itself, avoiding self-reference; candidate receipts bind its file digest.
+Publication of this record is the commit point visible to cooperating
+readers. The journal is then marked
+`committed`; cleanup of backup/stage files and lock is retryable and does not
+change candidate identity.
+
+Recovery before the candidate-state commit point restores every declared old
+leaf from `backup/`, verifies their old digests/modes, removes newly created
+leaves, and only then retires the transaction. Recovery at or after the commit
+point verifies every new leaf against `candidate-state.json`, completes any
+missing staged replacement, and never rolls the candidate back. A mismatch,
+missing backup/stage byte, unsafe path, or ambiguous commit point fails loudly
+without letting a reader cross the lock.
+
+Thus no cooperating reader observes a partial candidate, and every returned
+success or recovered failure has one complete state identity. Raw filesystem
+tools are outside that transaction boundary and make no release claim. After
+success, `surfaces.json` and both generated support documents remain candidate
+until later exact qualification evidence and a product-human support act
+promote a row in a separate reviewed operation.
+
+### Release validation, approval, tag, and history
+
+Candidate validation is invoked as:
+
+```text
+scripts/wisp-release-contract.mjs \
+  --package-root <repository-root> \
+  --validate-candidate \
+  --receipt <absolute-new-file>
+```
+
+It runs the Stewards family validator in `pre-tag` phase against
+`release/wisp/release.json`, the Wisp extension/carrier checks, two clean
+inventory-provider runs, exact fifteen-row public-contract and skill
+fingerprint checks, README derivative check, exact nine-path check, and
+qualification schema/version/digest consistency. It explicitly permits
+pending qualification and requires no tag or release approval, so CI and
+host qualification can test an untagged candidate. It leaves the tree
+byte-identical except for the requested receipt outside the repository.
+
+The receipt is deterministic canonical JSON plus one LF. It rejects unknown
+properties and contains exactly:
+
+```json
+{
+  "schema_version": 1,
+  "plugin_id": "wisp",
+  "package_version": "<authority SemVer>",
+  "expected_release_tag": "wisp-v<authority SemVer>",
+  "source_commit": "<40 lowercase hexadecimal clean-checkout commit>",
+  "candidate_state_sha256": "<sha256 of release/wisp/candidate-state.json>",
+  "bundle_sha256": "<sha256 of plugins/wisp/dist/wisp.mjs>",
+  "release_metadata_sha256": "<sha256 of release/wisp/release.json>",
+  "release_inventory_sha256": "<sha256 of release/wisp/release-inventory.json>",
+  "public_contract_sha256": "<sha256 of release/wisp/public-contract.json>",
+  "contract_snapshots_sha256": "<sha256 of release/wisp/contract-snapshots.json>",
+  "surface_contract_sha256": "<sha256 of plugins/wisp/surfaces.json>",
+  "qualification_sha256": "<sha256 of plugins/wisp/qualification.json>",
+  "lifecycle_skill_sha256": "<sha256 of plugins/wisp/skills/wisp/SKILL.md>",
+  "dashboard_skill_sha256": "<sha256 of plugins/wisp/skills/dashboard/SKILL.md>",
+  "root_readme_support_sha256": "<sha256 of the extracted README.md support line bytes>",
+  "package_readme_support_sha256": "<sha256 of the extracted plugins/wisp/README.md support line bytes>",
+  "qualification_result": "<pending|pass|fail>"
+}
+```
+
+`qualification_result` uses the exact qualification enum rather than always
+being pending. Candidate validation requires a clean checkout at
+`source_commit`, the committed candidate-state digest, and equality between
+all receipt subjects and validated sources. The two skill digests additionally
+equal the raw-byte extracts used by their fifteen-row inventory fingerprints.
+The receipt itself is not release approval or evidence. `--receipt` shall be
+an absolute normalized path outside the repository whose leaf does not exist;
+duplicate/unknown arguments, stdout output, an in-repository path, or
+overwriting are failures.
+
+Product pre-tag release validation repeats candidate validation and adds all
+existing Node, Claude, Codex, dashboard, overall, proof-boolean, and
+human-approval release conditions. Its exact invocation is:
+
+```text
+scripts/wisp-release-contract.mjs \
+  --package-root <repository-root> \
+  --validate-release \
+  --phase pre-tag
+```
+
+Product release-phase validation uses the same invocation with
+`--phase release`, repeats that complete pre-tag gate, and resolves only
+`refs/tags/wisp-v<version>` to its peeled full source commit. It accepts no
+caller-supplied version, tag, commit, bundle digest, support state, or
+qualification result as substitute truth.
+
+Clean-tree rules are phase-specific:
+
+| Phase | Permitted checkout state | Validation subject |
+|---|---|---|
+| `--validate-candidate` | Clean at `source_commit`; receipt is outside repository | Untagged candidate sources |
+| `--validate-release --phase pre-tag` | Clean at dispatched release commit | Complete release gate; expected tag absent or same-commit |
+| `--validate-release --phase release` | Clean at the commit peeled from the computed tag | Complete release gate plus immutable tag identity; history contains prior releases only or an already-identical current row |
+| `--validate-release --phase history-worktree` | Exactly one unstaged modification, `release/wisp/history.json`; index clean; every other tracked/untracked path absent or unchanged | Prospective current history row and prior-ledger preservation |
+| `--validate-release --phase history` | Clean at a committed history reference | Current history row plus a separate clean validation worktree at its recorded release tag |
+
+`history-worktree` and `history` do not reinterpret product bytes from the
+history checkout as released bytes. They derive the current row, tag, and
+release commit from the ledger, create a separate clean detached worktree at
+that tag, and run the complete `release` phase there. `history` additionally
+requires the current checkout's diff from its first parent to contain only
+`release/wisp/history.json`, the release tag commit to be an ancestor, and the
+current commit to be reachable from `origin/main`. It emits the full current
+history commit and file SHA-256 as the durable stable reference.
+
+A candidate is releasable only after:
+
+1. `qualification.json` is exact-schema and bound to the authority version
+   and built bundle digest;
+2. all three Node results, both host results, dashboard result, overall
+   result, all eight host proof booleans, and all nine dashboard proof
+   booleans satisfy the standing `pass` contract;
+3. surfaces, inventory, support derivatives, carrier parity, and family
+   pre-tag validation pass with no tree mutation; and
+4. `release/wisp/approvals/<version>.json` records the human release-gate act
+   over the family approval projection and is bound by
+   `release.json.release_approval`.
+
+An individual Codex canary pass, catalog publication, provisioner receipt,
+manifest validation, package-version bump, or supported surface row does not
+satisfy this gate.
+
+.github/workflows/wisp-plugin-release.yml` has a manual release entry and a
+history-merge continuation. Manual dispatch supplies one full merged commit
+and no version/tag input. It fetches all tags, requires the commit to be
+reachable from `origin/main`, acquires the shared candidate lock, and runs
+this exact state machine:
+
+1. invoke `scripts/wisp-release-contract.mjs --package-root
+   <repository-root> --validate-release --phase pre-tag`;
+2. compute the tag only from the validated authority;
+3. if the tag is absent, create and push it at the dispatched commit; if it
+   already peels to that commit, continue; if it peels elsewhere, fail without
+   mutation;
+4. explicitly invoke `scripts/wisp-release-contract.mjs --package-root
+   <repository-root> --validate-release --phase release`;
+5. invoke `--append-release-history`; and
+6. invoke `--validate-release --phase history-worktree`, commit exactly the
+   history file on branch `release-history/wisp-v<version>`, push that branch,
+   and create or reuse its PR to `main`.
+
+The manual job owns one lock token for steps 1–6. Each child command must
+present that token and may re-enter only the exact live owner record; another
+or absent token cannot bypass the lock. The token is neither printed nor
+persisted in release evidence. The post-merge continuation acquires a new
+ordinary reader lock before history validation.
+
+The history branch is write-once for this release: an absent branch is
+created; an existing branch whose parent, tree, and history row match exactly
+is reused; any other existing branch fails without force-push. The workflow
+never moves, deletes, or force-pushes a tag or history branch.
+
+A process death or workflow cancellation after step 3 leaves an immutable
+same-commit tag but no false history claim. Re-dispatch enters step 3's
+same-commit branch, performs release-phase validation, and deterministically
+creates or reuses the exact history PR.
+
+After that PR merges, the continuation checks out the resulting `main`
+commit, invokes `--validate-release --phase history`, and exposes only that
+command's durable full commit/file-digest reference to Stewards. Catalog
+publication and the next Wisp package release remain blocked until this
+continuation passes. A tagged release with an open history PR is explicitly
+`history-pending`, not publication-ready.
+
+`release/wisp/history.json` follows family `release-history.v1`. Before tag
+creation it contains all and only prior `wisp-v<SemVer>` releases. After a
+valid tag,
+
+```text
+scripts/wisp-release-contract.mjs \
+  --package-root <repository-root> \
+  --append-release-history
+```
+
+derives its prospective row only from release-phase validator output and the
+family-classified current inventories, including the two skill-contract
+fingerprints and any resulting `breaking-change` objects. It has exactly
+these outcomes:
+
+- when no row exists for the version and the exact tag peels to the validated
+  commit, append exactly one row;
+- when one byte-identical canonical row already exists, return success without
+  writing;
+- when a row for the version/tag exists with a different commit, approval,
+  inventory, payload, surface, change set, or prior-ledger reference, fail
+  without writing; and
+- when the tag is missing or peels elsewhere, fail without writing.
+
+The append uses a same-directory temporary file, fsync, and atomic rename
+while holding the shared lock. It preserves every prior canonical row
+byte-for-byte and changes no installed payload byte. Failure before rename
+leaves the prior ledger; interruption after rename is recovered by the
+byte-identical-row no-op. A conflicting row is never overwritten or
+“repaired” automatically.
+
+The appended ledger state and human approval become stable references before
+Stewards publication. With no prior Wisp package tag, the first family release
+seeds the complete public-contract and surface inventory; no untagged
+candidate is historical release evidence.
 
 Claude `.mcp.json` is exactly one `wisp` stdio-server definition with command
 `node`, args `["${CLAUDE_PLUGIN_ROOT}/dist/wisp.mjs"]`, and environment
@@ -1324,7 +2048,8 @@ adds them.
 
 - **Given** the built `plugins/wisp/` directory,
 - **When** its release payload and executable surfaces are inspected,
-- **Then** it contains exactly the eight specified paths, declares no binary
+- **Then** it contains exactly the nine specified paths, including
+  `surfaces.json`, declares no binary
   or CLI dispatcher, Claude launches through root `.mcp.json`, and Codex
   launches through the manifest's inline server definition.
 
@@ -1632,6 +2357,87 @@ adds them.
   receives the specified error or socket destruction, and shutdown forcibly
   closes all remaining tracked sockets.
 
+**S54 — One version authority and every carrier**
+
+- **Given** a candidate repository with root package, lockfile, both
+  manifests, Codex cache bootstrap, MCP implementation, qualification, and
+  surface version occurrences,
+- **When** product candidate validation runs,
+- **Then** it extracts the one `package.json` authority, proves every declared
+  common and Wisp-specific carrier equals it, and rejects any missing,
+  duplicated, stale, or differently bound occurrence.
+
+**S55 — Exact pending surface boundary**
+
+- **Given** the six canonical surface rows and pending overall qualification,
+- **When** surface and support-derivative validation run,
+- **Then** every row remains candidate with its exact missing capability and
+  disclosure, and no host, local, CI, cloud, desktop, IDE, SDK, catalog, or
+  provisioner fact promotes another row.
+
+**S56 — Candidate preparation transaction**
+
+- **Given** a previously qualified or partially qualified tree and a new
+  `package.json.version`,
+- **When** candidate preparation succeeds, faults in each apply phase, or
+  recovers after simulated process death before/after the candidate-state
+  commit point,
+- **Then** the shared lock prevents every cooperating reader from observing a
+  partial state, pre-commit recovery restores the complete old state,
+  post-commit recovery completes the exact new state, and all new
+  version-bound proof begins pending/false with no evidence-preservation input.
+
+**S57 — Complete deterministic inventory**
+
+- **Given** the product tree and family release metadata,
+- **When** the inventory provider runs twice in a clean network-disabled
+  checkout,
+- **Then** both canonical byte streams match the checked-in inventory, the
+  validator proves the metadata's exact nine-path installed inventory, and
+  the output contains exactly two manifests, one consumer-acted bundle
+  identity, the fifteen named/id/category/extractor public-contract rows, and
+  the two marker-bounded README support derivatives without omission or
+  invention.
+
+**S58 — Generated support is exact**
+
+- **Given** a version-bound `surfaces.json`,
+- **When** generation and check mode run,
+- **Then** only the declared inventory and bytes strictly between the two
+  exact README marker pairs are generated, every byte outside those pairs is
+  preserved, their support rows exactly project the surface source, and check
+  mode reports drift without writing.
+
+**S59 — Full qualification blocks release**
+
+- **Given** an otherwise valid candidate with one pending or failed Node,
+  Claude, Codex, dashboard, overall, host-proof, dashboard-proof, artifact,
+  surface, inventory, approval, or derivative condition,
+- **When** pre-tag or release validation runs,
+- **Then** release remains blocked even if a Codex canary, catalog,
+  provisioner, manifest, or individual surface check passed.
+
+**S60 — Human-approved immutable tag**
+
+- **Given** a fully qualified clean merged commit and its exact
+  product-human approval,
+- **When** the release workflow runs, is interrupted immediately after tag
+  push, and is re-dispatched,
+- **Then** it computes and creates only `wisp-v<package.json.version>` at that
+  commit, explicitly validates release phase, resumes through the same-commit
+  tag, creates or reuses the exact history PR, and fails without moving the
+  tag if the existing ref peels elsewhere.
+
+**S61 — Append-only release history**
+
+- **Given** a valid new Wisp package tag and the prior family history ledger,
+- **When** history materialization runs twice and is also presented with a
+  same-version conflicting row, then its exact PR merges,
+- **Then** the first run appends exactly one family-valid row, the identical
+  second run is a no-op, the conflict fails without overwrite, every prior row
+  remains byte-identical, no installed payload byte changes, and only clean
+  post-merge history-phase validation emits the durable Stewards reference.
+
 ### EARS requirements
 
 - **R1 (ubiquitous):** Wisp shall own the complete payload and Stewards shall
@@ -1688,9 +2494,10 @@ adds them.
   memoized dashboard coordinator.
 - **R24 (ubiquitous):** The plugin bundle shall expose no CLI entrypoint,
   binary declaration, or CLI command dispatch.
-- **R25 (ubiquitous):** The plugin payload shall contain exactly the eight
+- **R25 (ubiquitous):** The plugin payload shall contain exactly the nine
   specified release paths, with Claude's server in root `.mcp.json` and
-  Codex's server inline in its manifest.
+  Codex's server inline in its manifest and `surfaces.json` as the product
+  support authority.
 - **R26 (ubiquitous):** The lifecycle and dashboard skills shall contain
   portable policy only and shall delegate mechanics to MCP.
 - **R27 (ubiquitous):** Multiple project processes shall not share a default
@@ -1840,6 +2647,45 @@ adds them.
   first-seen run then agent, use append-order last event for `last_seen`, last
   status for state and activity-with-absence-clearing, last verdict for
   verdict, and render reduced command states and parse errors as safe text.
+- **R73 (ubiquitous):** Root `package.json#/version` shall be Wisp's sole
+  package SemVer authority, and every lockfile, manifest, cache-bootstrap,
+  MCP-initialize, qualification, and surface carrier shall equal it.
+- **R74 (event-driven):** When release inventory is requested, Wisp shall
+  verify the exact nine-path product extension and emit deterministic
+  family-schema bytes containing exactly two host manifests, one exact bundle
+  content identity, the fifteen declared public-contract rows, and the two
+  marker-bounded README support derivatives.
+- **R75 (state-driven):** While overall qualification is not `pass`, every
+  initial Wisp surface shall remain candidate and shall carry its exact
+  missing-capability disclosure.
+- **R76 (event-driven):** When candidate version or bundle bytes change,
+  preparation shall use the qualified shared lock, staged journal,
+  candidate-state commit point, and deterministic recovery to bind the new
+  version/digest and unconditionally reset all old version-bound evidence to
+  pending/false.
+- **R77 (ubiquitous):** A surface proof shall satisfy only its exact plugin
+  version, bundle, host, canonical surface, environment, mode, and load path;
+  distribution availability shall never substitute for Wisp behavior.
+- **R78 (event-driven):** When surface documentation is generated or checked,
+  only the single exact marker-bounded support line in each README shall be
+  generator-owned and exactly project `surfaces.json`; bytes outside those
+  regions shall be preserved, and check mode shall make no write.
+- **R79 (unwanted behavior):** If any standing Node, host, dashboard, overall,
+  carrier, bundle, inventory, surface, derivative, or human-approval release
+  condition is incomplete, Wisp shall create no package tag.
+- **R80 (event-driven):** When a fully qualified human-approved merged commit
+  is released, automation shall derive only `wisp-v<version>`, create it
+  immutably at that commit, explicitly run release-phase validation, resume
+  after tag-before-history interruption through the exact history PR, and
+  reject a conflicting existing ref.
+- **R81 (event-driven):** When a valid new package tag is recorded, Wisp shall
+  append exactly one family history row, treat an identical row as an
+  idempotent no-op, reject a conflicting row, change neither prior rows nor
+  installed package bytes, and emit a durable reference only from clean
+  post-merge history-phase validation.
+- **R82 (unwanted behavior):** If a catalog, provisioner, canary, or
+  single-surface result exists without the complete Wisp release gate, Wisp
+  shall neither tag the candidate nor claim effective support.
 
 ## Verification matrix
 
@@ -1862,7 +2708,11 @@ adds them.
 | Claude | Validate exact `.mcp.json`; installed current-stable smoke lists seven tools, checks, writes, explicitly opens the dashboard, and verifies fixture `.wisp/events.ndjson` |
 | Codex | Separately validate the manifest's one inline bootstrap, absent `cwd`, forwarded `CODEX_HOME`, exact marketplace/plugin/version cache path, and absence of a custom config path; install through marketplace `kodhama`, then smoke lists seven tools, checks, writes, explicitly opens the dashboard, and verifies fixture `.wisp/events.ndjson` |
 | Cross-host dashboard | Concurrent installed Claude and Codex sessions on one fixture return one URL; a second fixture remains isolated; command, security, lifecycle/recovery, live provider stability/child/absence evidence, and deterministic same-PID/new-token recovery populate the dashboard qualification object |
-| Plugin contents | Exact eight-path inventory, equal manifest versions, no CLI/binary/daemon/legacy dashboard path, two portable-skill static checks, bundle SHA-256, and exact qualification schema/state rules including all Node, host, and dashboard result objects |
+| Plugin contents | Exact nine-path inventory including `surfaces.json`, equal manifest versions, no CLI/binary/daemon/legacy dashboard path, two portable-skill static checks and raw-byte fingerprints, bundle SHA-256, and exact qualification schema/state rules including all Node, host, and dashboard result objects |
+| Family release metadata | Positive and negative candidate fixtures validate the root authority; both lockfile values; both manifests; cache, MCP, qualification, and surface carriers; exact two/one/fifteen/two inventory cardinalities and every id/category/extractor including both skill contracts; public-contract snapshot derivation; bundle identity; common schema; and Wisp extension while permitting an exact pending candidate |
+| Candidate reset | Fault-injected and killed-process preparation proves qualified-lock exclusion, staged journal phases, complete pending/false reset, pre-commit rollback, post-commit completion, candidate-state digest parity, preserved non-evidentiary descriptors, and no evidence-preservation input or inherited support |
+| Surface and support derivatives | Six registry-v1 rows exercise exact identity/state/setup/proof rules, cross-surface evidence rejection, candidate disclosures, and byte-checked generated regions in both READMEs |
+| Tag and history | Clean tagged repositories prove human approval binding, full qualification precedence, phase-specific clean-tree rules, explicit pre-tag/release/history invocations, computed/ref-peeled `wisp-v<version>`, main reachability, skill-contract fingerprint changes in the classified set and inventory digest, tag-before-history interruption recovery, write-once history branch/PR reuse, identical-row no-op, conflicting tag/row/branch refusal, and post-merge durable history reference with unchanged payload bytes |
 | Marketplace | Stewards fixture resolves exactly to `kodhama/wisp:plugins/wisp` and contains no implementation/version copy |
 
 ## Rubric check
@@ -1870,27 +2720,41 @@ adds them.
 The configured `SPEC_RUBRIC_PATH` says no dedicated rubric exists, so this
 check uses `specs/README.md`.
 
-- **Frontmatter:** PASS — all required fields are present; `version: 6`
-  records the significant dashboard contract.
-- **Approved dependencies:** PASS — ADR-0004 and ADR-0005 are approved and
-  record the Codex adapter and dashboard intent respectively.
-- **Testable acceptance criteria:** PASS — S1–S53 and S3a are GWT scenarios,
-  R1–R72 are EARS requirements, and the matrix names executable evidence.
+- **Frontmatter:** PASS — all required fields are present; `version: 7`
+  records the family release/surface amendment.
+- **Approved dependencies:** PASS — ADR-0004, ADR-0005, ADR-0006, and the
+  Stewards family metadata spec are approved and record the Codex adapter,
+  dashboard, and shared release/surface intent.
+- **Testable acceptance criteria:** PASS — S1–S61 and S3a are GWT scenarios,
+  R1–R82 are EARS requirements, and the matrix names executable evidence.
 - **Exactness:** PASS — all seven schemas, outputs, error mapping, project
   selection, stored-event validity, confinement/decoding, duplicate/unique
   command reduction, irreversible append/release behavior, qualified
   process-birth identity, finite limits, dashboard write-lock,
   discovery/ownership/HTTP deadline/error/UI-projection/lifecycle behavior,
-  eight payload paths, root-Claude/inline-Codex launch definitions, and
+  nine payload paths, exact version/digest carriers, surface rows, inventory,
+  skill-contract fingerprints, reset, README projections, immutable
+  tag/history, root-Claude/inline-Codex launch definitions, and
   Node/host/dashboard qualification policy are fixed rather than deferred.
 - **Open questions:** PASS — the required section is present below.
 - **Scope fidelity:** PASS — the plugin-only distribution, dual-host evidence,
   project bus and dashboard isolation, explicit skill boundary, session-owned
-  listener, and Stewards pointer derive from ADR-0004 and ADR-0005; parked
-  CLI, daemon, remote transport, and legacy dashboard behavior are absent.
+  listener, Stewards pointer, family metadata, and support boundary derive
+  from ADR-0004, ADR-0005, and ADR-0006; parked CLI, daemon, remote transport,
+  and legacy dashboard behavior are absent.
 
-Result: **PASS**. The spec remains `gated` for independent convergence review.
+Result: **PASS**.
 
 ## Open questions
 
 None.
+
+## Approval record
+
+On 2026-07-24 the maintainer authorized the family-wide rollout, including
+Wisp's product-specific implementation, and authorized merge after independent
+review. The spec-adversary returned `APPROVE-READY` after the inventory,
+candidate transaction, tag/history, evidence, and generated-support findings
+were resolved; the conformance reviewer returned `PASS` against ADR-0006 and
+the approved family spec. This `approved` status records that prior human
+intent act.
