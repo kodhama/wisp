@@ -1,7 +1,7 @@
 ---
 id: spec-0002-codex-e2e-testing
 type: spec
-status: gated
+status: approved
 depends_on:
   - adr-0007-codex-canary-evidence
   - adr-0008-retire-family-release-certification
@@ -543,3 +543,12 @@ evidence, and cadence contracts are implementable; GWT scenarios cover the
 end-to-end outcomes; EARS requirements state the invariants; and no unresolved
 question is hidden. Per the Grove lifecycle companion, this self-check
 promotes the agent-authored spec from `draft` to `gated`.
+
+## Gate record
+
+Version 5 records the maintainer's explicit reset intent. The independent
+decision adversary returned `SOUND` after the product-local transcript and
+browser-failure persistence boundary was restored, and the independent
+conformance reviewer returned `PASS`. Recording `approved` here records those
+completed gates; it does not claim the retained implementation debt has
+landed.

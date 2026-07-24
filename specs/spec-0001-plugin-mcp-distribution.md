@@ -1,7 +1,7 @@
 ---
 id: spec-0001-plugin-mcp-distribution
 type: spec
-status: gated
+status: approved
 depends_on:
   - adr-0004-codex-session-bootstrap
   - adr-0005-plugin-dashboard-lifecycle
@@ -1946,8 +1946,17 @@ check uses `specs/README.md`.
   listener, and Stewards pointer derive from ADR-0004 and ADR-0005; parked
   CLI, daemon, remote transport, and legacy dashboard behavior are absent.
 
-Result: **PASS**. The spec remains `gated` for independent convergence review.
+Result: **PASS**.
 
 ## Open questions
 
 None.
+
+## Gate record
+
+Version 9 records the maintainer's explicit reset intent. The independent
+decision adversary returned `SOUND` after the product-local capability-safe
+evidence boundary was restored, and the independent conformance reviewer
+returned `PASS`. Recording `approved` here records those completed gates; it
+does not claim that the retained capability-safety implementation debt has
+landed.

@@ -1,7 +1,7 @@
 ---
 id: adr-0008-retire-family-release-certification
 type: adr
-status: gated
+status: approved
 depends_on:
   - adr-0002-plugin-mcp-distribution
   - adr-0004-codex-session-bootstrap
@@ -107,5 +107,12 @@ This decision does not supersede:
 - Capability-safe transcript and browser-failure persistence remains explicit
   product-local implementation debt; this reset neither implements it nor
   weakens it.
+
+## Lifecycle record
+
+The maintainer explicitly directed this reset on 2026-07-24. The independent
+decision adversary returned `SOUND` after the product-local capability-safety
+boundary was restored, and the independent conformance reviewer returned
+`PASS`. Those acts promote this ADR from `gated` to `approved`.
 - The later narrow Stewards work must prove only marketplace-test metadata and
   CI authoring, not universal release correctness.
