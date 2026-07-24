@@ -37,7 +37,8 @@ updated: 2026-07-24
 
 The maintainer confirmed this exact rollout on 2026-07-24 after reviewing the
 version choice, artifact/spec propagation, implementation carriers, tests,
-and exclusions. This record still waits for the independent soundness gate.
+and exclusions. That confirmation is the human intent act recorded in the
+lifecycle record below.
 
 ### Open
 
