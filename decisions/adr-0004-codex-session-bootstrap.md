@@ -13,6 +13,10 @@ updated: 2026-07-24
 > `adr-0006-family-plugin-release-and-surface-contract` keeps the bootstrap
 > cache segment equal to the manifest version, but both become derived carriers
 > of root `package.json` rather than independently maintained release values.
+>
+> **Forward pointer.** `adr-0008-retire-family-release-certification`
+> supersedes that family release-certification addition. The session-directory
+> bootstrap and its manifest/cache equality remain current.
 
 ## Decision state
 

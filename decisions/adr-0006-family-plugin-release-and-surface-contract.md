@@ -1,7 +1,7 @@
 ---
 id: adr-0006-family-plugin-release-and-surface-contract
 type: adr
-status: approved  # maintainer authorized the family rollout; decision-adversary SOUND preceded this recording
+status: superseded
 depends_on:
   - adr-0002-plugin-mcp-distribution
   - adr-0004-codex-session-bootstrap
@@ -13,6 +13,8 @@ updated: 2026-07-24
 ---
 
 # ADR-0006 — Adopt the family plugin release and surface contract
+
+> **Superseded by `adr-0008-retire-family-release-certification`.**
 
 ## Decision state
 

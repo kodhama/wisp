@@ -1,4 +1,4 @@
-// SPEC-0002 v2: S1-S5 / R1-R4.
+// SPEC-0002 v5 (restored v2 behavior): S1-S5 / R1-R4.
 import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
