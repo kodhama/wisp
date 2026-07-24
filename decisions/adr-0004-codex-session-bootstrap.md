@@ -9,6 +9,11 @@ updated: 2026-07-24
 
 # ADR-0004 — Bind Codex Wisp to the host-selected session directory
 
+> **Forward pointer.**
+> `adr-0006-family-plugin-release-and-surface-contract` keeps the bootstrap
+> cache segment equal to the manifest version, but both become derived carriers
+> of root `package.json` rather than independently maintained release values.
+
 ## Decision state
 
 ### Decided
