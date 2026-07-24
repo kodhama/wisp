@@ -406,11 +406,11 @@ schema. Candidate evidence carrying `inconclusive` is schema-valid but exits
 fixture path.
 
 The workflow's candidate job SHALL fail on either nonzero result and expose
-the successful workflow URL as its release evidence. Wisp SHALL make no
-qualified-release claim without that URL and an exit-`0` verifier result.
-This repository does not claim automatic enforcement in the external
-Stewards publication repository; a Stewards release operator or workflow
-must invoke this verifier with the candidate evidence before publication.
+the successful workflow URL as its Codex qualification evidence. An exit-`0`
+verifier result is necessary to accept the candidate canary as Wisp-owned
+Codex evidence, but is not sufficient for a Wisp release claim:
+SPEC-0001's Node, Claude, dashboard, overall, and qualification-record gates
+remain independently required.
 Canary credentials SHALL be unavailable to ordinary pull-request jobs.
 The canary wrapper SHALL remove `CODEX_API_KEY`, `OPENAI_API_KEY`, and its
 workflow-only secret alias from every version, marketplace, and plugin-install
@@ -470,7 +470,8 @@ support it but cannot silently set or substitute it.
 - **When** the real Codex canary completes,
 - **Then** it stores exact-schema structured-call/bus/dashboard evidence under
   automatic approval review, and only a verifier exit `0` after hashing the
-  exact installed candidate bundle qualifies Wisp's release claim.
+  exact installed candidate bundle qualifies that Codex evidence as one
+  necessary, not sufficient, Wisp release input.
 
 **S11 — Retained canary transcript is capability-safe**
 
@@ -510,9 +511,9 @@ support it but cannot silently set or substitute it.
   dependency absence before any structured Wisp tool-call item, it shall record
   `inconclusive` without affecting pull requests.
 - **R6 (state-driven):** While a candidate lacks verifier exit `0` for its
-  exact version and SHA-256, Wisp shall not claim it qualified for marketplace
-  release; external Stewards enforcement requires that repository to invoke
-  the verifier.
+  exact version and SHA-256, Wisp shall not accept its Codex canary as
+  qualified product evidence; even exit `0` shall not replace SPEC-0001's
+  remaining Wisp-owned release gates.
 - **R13 (event-driven):** When a Codex canary transcript or evidence is
   retained, the workflow shall keep raw capability-bearing bytes volatile,
   apply the exact fragment and bearer replacements before the first
@@ -551,4 +552,6 @@ decision adversary returned `SOUND` after the product-local transcript and
 browser-failure persistence boundary was restored, and the independent
 conformance reviewer returned `PASS`. Recording `approved` here records those
 completed gates; it does not claim the retained implementation debt has
-landed.
+landed. Hosted Codex review then found and this version corrected one
+overbroad sentence: an exit-`0` Codex verifier is necessary evidence, never a
+substitute for Wisp's remaining product-owned release gates.
