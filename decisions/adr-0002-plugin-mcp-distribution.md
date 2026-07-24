@@ -19,6 +19,10 @@ updated: 2026-07-24
 > `package.json` the one SemVer authority; the existing equal-manifest and
 > qualification requirements remain release gates, now version-bound to the
 > product surface contract and immutable `wisp-v<version>` tag.
+>
+> **Forward pointer.** `adr-0008-retire-family-release-certification`
+> supersedes that family release-certification addition. This ADR's original
+> dual-host plugin distribution and equal-manifest requirements remain current.
 
 ## Decision state
 

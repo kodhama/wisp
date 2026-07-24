@@ -1,4 +1,4 @@
-// SPEC-0002 v2: S6 / R5-R6 — codex-cli 0.145.0 JSONL normalization and result precedence.
+// SPEC-0002 v5 (restored v2 behavior): S6 / R5-R6 — codex-cli 0.145.0 JSONL normalization and result precedence.
 import { describe, expect, it } from "vitest";
 import {
   buildCodexExecArgs,
@@ -69,7 +69,7 @@ function successLines() {
   ];
 }
 
-describe("SPEC-0002 v2 real Codex canary normalization", () => {
+describe("SPEC-0002 v5 real Codex canary normalization", () => {
   it("normalizes only exact top-level successful Wisp calls and proves each boolean independently", () => {
     const normalized = normalizeTranscript(successLines(), {
       nonce,
