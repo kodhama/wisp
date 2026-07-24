@@ -1,7 +1,7 @@
 ---
 id: adr-0005-plugin-dashboard-lifecycle
 type: adr
-status: gated
+status: approved
 depends_on:
   - adr-0002-plugin-mcp-distribution
   - adr-0004-codex-session-bootstrap
