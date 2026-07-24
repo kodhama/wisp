@@ -1,7 +1,7 @@
 ---
 id: adr-0009-independent-plugin-package-metadata
 type: adr
-status: gated
+status: approved
 depends_on:
   - adr-0002-plugin-mcp-distribution
   - adr-0004-codex-session-bootstrap
@@ -228,4 +228,8 @@ Drafted after the maintainer confirmed the exact Wisp-local rollout on
 qualification, surface/evidence separation, downstream propagation, and
 explicit exclusions internally consistent with ADR-0008 and the standing
 product decisions, with no open intent item; that self-check moved the record
-to `gated`. Independent soundness and corpus review are still owed.
+to `gated`. The independent decision adversary then returned `SOUND`, and the
+changed-scope corpus review returned `PASS`. This `approved` status records
+the maintainer's explicit confirmation of the exact rollout after those
+choices were written back for review; it does not claim marketplace,
+qualification, or release approval.
