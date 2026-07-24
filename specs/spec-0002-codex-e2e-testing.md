@@ -41,8 +41,10 @@ here.
 | `test/e2e/codex-plugin.e2e.ts` | The single deterministic Playwright suite described below |
 | `test/e2e/playwright.config.ts` | Chromium only; one worker; no retries; failure trace and screenshot |
 | `test/e2e/Dockerfile` | Pinned official Playwright image by tag and digest; installs with `npm ci`, copies the candidate, and runs unprivileged |
+| `test/test-deps.toml` | Repo test-dependency ledger with `unit` and `e2e` package entries |
 | `scripts/run-e2e-container.mjs` | Shell-free Docker build/run driver; runs the image with `--network none`, an ephemeral home, and no host credential mounts |
 | `scripts/codex-canary.mjs` | Real-host canary driver and evidence writer |
+| `scripts/verify-codex-canary.mjs` | Deterministic candidate-evidence verifier used by the dispatched canary job and release operator |
 | `.github/workflows/ci.yml` | Existing Node 20/22/24 checks plus one required `codex-e2e` job |
 | `.github/workflows/codex-canary.yml` | Weekly schedule and candidate `workflow_dispatch` |
 | `package.json` | Exact scripts `test:e2e` and `test:e2e:container`, plus an exact Playwright development version |
@@ -54,6 +56,14 @@ container image tag. The image SHALL also carry an immutable digest.
 `node scripts/run-e2e-container.mjs`; CI SHALL use that same command.
 Compose SHALL NOT define a second topology. A future one-service wrapper may
 delegate to this command without changing the test architecture.
+
+`test/test-deps.toml` SHALL have schema `1` and exactly two package tables.
+`packages.unit` covers `test/*.test.ts` and names
+`spec-0001-plugin-mcp-distribution@v6`. `packages.e2e` covers
+`test/e2e/**`, names `spec-0001-plugin-mcp-distribution@v6`,
+`spec-0002-codex-e2e-testing@v1`, and the unversioned test-strategy decision
+`adr-0006-codex-e2e-testing`. The implementation SHALL update
+`.grove/config.toml`'s `TEST_DEPS_LEDGER` token to this path.
 
 ## Deterministic pull-request gate
 
@@ -99,6 +109,29 @@ filesystem, HTTP, and DOM evidence. Fixed sleeps SHALL NOT determine success;
 bounded polling SHALL wait on the relevant observable state. Cleanup SHALL
 close clients, children, browser contexts, and listeners even after failure.
 
+The DOM evidence mapping is exact:
+
+- `[data-wisp-view="lifecycle"] [data-run="<run>"][data-agent="<agent>"]`
+  SHALL show the sentinel status `state` and `activity` and the sentinel
+  verdict in child elements whose `data-field` values are exactly `state`,
+  `activity`, and `verdict`;
+- `[data-wisp-view="timeline"] [data-event-index]` SHALL contain every valid
+  fixture event, with zero-based indices matching physical bus order;
+- `[data-wisp-view="commands"] [data-command-id="<id>"]` SHALL first show the
+  browser-appended command through children with `data-field="type"`,
+  `data-field="target"`, and `data-field="command-status"`, the last initially
+  `pending`; after the MCP client acknowledges that exact id and the page
+  refreshes, that same status field SHALL show the exact acknowledgement
+  state; and
+- `[data-wisp-view="parse-errors"] [data-line="<line>"]` SHALL show the exact
+  parse-error reason and raw malformed line in children whose `data-field`
+  values are exactly `parse-reason` and `parse-raw`.
+
+The Node `20`, `22`, and `24` matrix entries in `.github/workflows/ci.yml`
+SHALL each independently run typecheck, unit tests, build, and plugin
+validation. The separate `codex-e2e` job SHALL depend on a successful matrix
+and run the container command once.
+
 ## Real Codex canary
 
 `.github/workflows/codex-canary.yml` SHALL have exactly these modes:
@@ -110,25 +143,111 @@ close clients, children, browser contexts, and listeners even after failure.
 
 Both modes SHALL use a fresh `CODEX_HOME` and fixture project. The driver
 SHALL record `codex --version`, resolved plugin version, bundle SHA-256, and
-the `codex exec --json` transcript. A nonce-bearing prompt SHALL require
-`wisp_check`, one `wisp_status` write, and `wisp_dashboard`. Pass requires
-structured transcript evidence that those tools actually ran, the nonce event
-at the exact fixture bus, and authenticated dashboard health at the returned
-URL. Model prose alone cannot satisfy an assertion.
+the `codex exec --json` transcript. Before tool calls, structured Codex host
+output SHALL advertise exactly
+`wisp_status`, `wisp_heartbeat`, `wisp_verdict`, `wisp_question`,
+`wisp_check`, `wisp_ack`, and `wisp_dashboard` whenever an advertisement is
+emitted; absence is classified by the result precedence below. A
+nonce-bearing prompt SHALL require `wisp_check`, one `wisp_status` write, and
+`wisp_dashboard`. Pass
+requires structured transcript evidence that those tools actually ran, the
+nonce event at the exact fixture bus, and authenticated dashboard health at
+the returned URL. Model prose alone cannot satisfy any advertisement or call
+assertion.
 
 The workflow SHALL upload, without printing it to the job log, an artifact
-containing `codex.jsonl` and `evidence.json`. Evidence SHALL identify mode,
-workflow run, git SHA, timestamps, exact host/plugin versions and bundle hash,
-and a boolean for tools, check, write, bus path, dashboard call, and dashboard
-health. The overall result is `pass`, `fail`, or `inconclusive`.
+containing `codex.jsonl` and `evidence.json`. `evidence.json` rejects unknown
+properties and has exactly this schema:
 
-A weekly dependency, authentication, marketplace, or service outage SHALL be
-`inconclusive`; a completed run with incorrect behavior SHALL be `fail`.
-Neither result affects pull-request gates. A candidate run has no waiver:
-anything other than `pass`, or any mismatch with its requested version/hash,
-SHALL block that release. Release evidence SHALL link the successful
-candidate workflow run. Canary credentials SHALL be unavailable to ordinary
-pull-request jobs.
+```json
+{
+  "schema": 1,
+  "mode": "weekly",
+  "result": "pass",
+  "started_at": "YYYY-MM-DDTHH:mm:ss.sssZ",
+  "finished_at": "YYYY-MM-DDTHH:mm:ss.sssZ",
+  "workflow_id": 123,
+  "workflow_run_url": "https://github.com/<owner>/<repo>/actions/runs/<id>",
+  "git_sha": "<40 lowercase hexadecimal characters>",
+  "codex_version": "<nonblank exact version>",
+  "plugin_version": "<SemVer>",
+  "bundle_sha256": "<64 lowercase hexadecimal characters>",
+  "advertised_tools": [
+    "wisp_status",
+    "wisp_heartbeat",
+    "wisp_verdict",
+    "wisp_question",
+    "wisp_check",
+    "wisp_ack",
+    "wisp_dashboard"
+  ],
+  "check_passed": true,
+  "write_passed": true,
+  "bus_path_verified": true,
+  "dashboard_call_passed": true,
+  "dashboard_health_passed": true,
+  "transcript_verified": true
+}
+```
+
+Every shown key is required. `mode` is exactly `weekly` or `candidate`;
+`result` is exactly `pass`, `fail`, or `inconclusive`. Timestamps are real UTC instants in the shown
+millisecond-precision ISO form and `finished_at` is not earlier than
+`started_at`. `workflow_id` is a positive safe integer; the run URL is an
+HTTPS GitHub Actions run URL ending in that decimal id; `git_sha` matches
+`^[0-9a-f]{40}$`; versions are nonblank and `plugin_version` is SemVer;
+`bundle_sha256` matches `^[0-9a-f]{64}$`; and all six named evidence fields
+are booleans. On `pass`, `advertised_tools` SHALL equal the seven-name list
+above exactly, without omissions, additions, duplicates, or reordering.
+
+Result precedence is exact. In weekly mode, a dependency, authentication,
+marketplace, or service absence proven before a Codex host emits any
+structured tool advertisement is `inconclusive`. Once the host emits an
+advertisement, a missing, added, reordered, or wrong tool, or any later
+behavioral failure, is `fail`; model prose is not an advertisement. A weekly
+run with no advertisement and no proven pre-tool absence is also `fail`.
+Candidate mode never records `inconclusive`: every pre-tool absence,
+advertisement mismatch, or behavioral failure is `fail`. Neither weekly
+result affects pull-request gates.
+
+The candidate workflow SHALL invoke:
+
+```text
+node scripts/verify-codex-canary.mjs \
+  --evidence <evidence.json> \
+  --bundle <installed-dist/wisp.mjs> \
+  --version <requested-version> \
+  --sha256 <requested-bundle-sha256>
+```
+
+The verifier SHALL accept no unknown or duplicate arguments. It exits `0`
+only when the evidence is schema-valid, mode `candidate`, overall `pass`, all
+seven advertised tool names match exactly, all six behavioral booleans are
+true, and its requested version and hash exactly match the evidence. The
+`--bundle` value SHALL be an absolute path whose canonical value is exactly
+`<real-CODEX_HOME>/plugins/cache/kodhama/wisp/<requested-version>/dist/wisp.mjs`;
+it SHALL be a real regular file, not a symbolic link. The verifier hashes
+those exact file bytes with SHA-256 and requires equality with both
+`--sha256` and `evidence.bundle_sha256`. It exits `1` for valid negative or
+mismatched evidence and `2` for invalid/duplicate arguments, absent
+`CODEX_HOME`, an unsafe or unreadable bundle/input, or invalid evidence
+schema. Candidate evidence carrying `inconclusive` is schema-valid but exits
+`1`. The verifier emits no transcript, credential, capability, or absolute
+fixture path.
+
+The workflow's candidate job SHALL fail on either nonzero result and expose
+the successful workflow URL as its release evidence. Wisp SHALL make no
+qualified-release claim without that URL and an exit-`0` verifier result.
+This repository does not claim automatic enforcement in the external
+Stewards publication repository; a Stewards release operator or workflow
+must invoke this verifier with the candidate evidence before publication.
+Canary credentials SHALL be unavailable to ordinary pull-request jobs.
+
+Linux container and Linux canary evidence exercises the `/proc` identity
+provider only. It SHALL NOT replace the macOS `/bin/ps` qualification required
+by SPEC-0001. A release's checked-in `plugins/wisp/qualification.json` is the
+required record boundary for that macOS result; Codex canary artifacts may
+support it but cannot silently set or substitute it.
 
 ## Acceptance criteria
 
@@ -175,8 +294,9 @@ pull-request jobs.
 
 - **Given** a weekly trigger or candidate dispatch,
 - **When** the real Codex canary completes,
-- **Then** it stores structured host/tool/bus/dashboard evidence, and only a
-  `pass` for the exact candidate version and hash qualifies a release.
+- **Then** it stores exact-schema host/tool/bus/dashboard evidence, and only a
+  verifier exit `0` after hashing the exact installed candidate bundle
+  qualifies Wisp's release claim.
 
 ### Requirements (EARS)
 
@@ -187,13 +307,16 @@ pull-request jobs.
 - **R3 (event-driven):** When the suite launches Wisp, it shall use the
   byte-staged plugin and literal Codex manifest from the fixture project cwd.
 - **R4 (event-driven):** When browser E2E runs, it shall verify explicit
-  startup, singleton reuse, project isolation, rendering, command append,
-  security, cleanup, and recovery through observable boundaries.
-- **R5 (event-driven):** When the scheduled canary cannot reach an external
-  dependency, it shall record `inconclusive` without affecting pull requests.
-- **R6 (state-driven):** While a candidate lacks a successful canary record
-  matching its exact version and SHA-256, marketplace release shall be
-  blocked.
+  startup, singleton reuse, project isolation, exact mapped DOM evidence,
+  command append and acknowledgement, security, cleanup, and recovery through
+  observable boundaries.
+- **R5 (event-driven):** When the scheduled canary proves an external
+  dependency absence before any structured advertisement, it shall record
+  `inconclusive` without affecting pull requests.
+- **R6 (state-driven):** While a candidate lacks verifier exit `0` for its
+  exact version and SHA-256, Wisp shall not claim it qualified for marketplace
+  release; external Stewards enforcement requires that repository to invoke
+  the verifier.
 
 ## Open questions
 
