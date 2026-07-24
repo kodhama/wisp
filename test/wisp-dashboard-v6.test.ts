@@ -1,4 +1,4 @@
-// SPEC-0001 v6: S31-S32, S35, S39-S43, S45, S48-S49, S53 / R38, R42, R46-R53, R57, R59, R61-R62, R71-R72.
+// SPEC-0001 v7: S31-S32, S35, S39-S43, S45, S48-S49, S53 / R38, R42, R46-R53, R57, R59, R61-R62, R71-R72.
 import { createHash } from "node:crypto";
 import { chmod, mkdir, mkdtemp, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import { createConnection } from "node:net";
@@ -7,6 +7,7 @@ import { join, resolve } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { afterEach, describe, expect, it } from "vitest";
+import { dashboardFailureDiagnostic } from "./dashboard-diagnostic.ts";
 
 type DashboardSuccess = {
   ok: true;
@@ -43,7 +44,7 @@ async function connectedClient(
 }
 
 function dashboardResult(result: Awaited<ReturnType<Client["callTool"]>>): DashboardSuccess {
-  expect(result.isError).toBe(false);
+  expect(result.isError, dashboardFailureDiagnostic(result)).toBe(false);
   const structured = result.structuredContent as DashboardSuccess;
   expect(result.content).toEqual([
     { type: "text", text: JSON.stringify(structured) },
@@ -147,7 +148,7 @@ async function waitFor(
   expect(await predicate()).toBe(true);
 }
 
-describe("SPEC-0001 v6 dashboard plugin boundary", () => {
+describe("SPEC-0001 v7 dashboard plugin boundary", () => {
   it("S31/S32 resolves before state, starts only on an exact explicit call, and returns the exact envelope", async () => {
     const project = await mkdtemp(join(tmpdir(), "wisp-dashboard-project-"));
     const home = await mkdtemp(join(tmpdir(), "wisp-dashboard-home-"));
