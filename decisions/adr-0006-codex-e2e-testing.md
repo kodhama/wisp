@@ -1,11 +1,11 @@
 ---
 id: adr-0006-codex-e2e-testing
 type: adr
-status: gated
+status: approved
 depends_on:
   - adr-0004-codex-session-bootstrap
   - adr-0005-plugin-dashboard-lifecycle
-owner: agent
+owner: human
 updated: 2026-07-24
 ---
 
@@ -26,6 +26,9 @@ updated: 2026-07-24
 - The real Codex canary runs weekly against the current marketplace release
   for host drift and is also mandatory against the exact candidate before
   every marketplace release.
+
+The maintainer ratified this direction on 2026-07-24 by delegating the cadence
+choice and instructing the run to continue through implementation in PR #30.
 
 ### Open
 
