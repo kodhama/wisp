@@ -20,12 +20,14 @@ version: 8
 > the explicit POSIX runtime store, immutable extension-runtime digest,
 > exact repeated validator subprocess protocol, common public results, and
 > release-history validation against retained tag bytes; also made retained
-> host-test transcript redaction explicit at the dashboard capability boundary.
+> host-test transcript and browser-failure redaction explicit at the dashboard
+> capability boundary.
 > **WHY:** Stewards v2 closes execution and retained-byte boundaries that v1
 > left underdetermined; Wisp must consume those boundaries without weakening
 > its dual-host, MCP, dashboard, qualification, or exact-surface gates. Review
-> also found that retaining an unredacted Codex transcript would contradict
-> Wisp's standing prohibition on capability persistence.
+> also found that retaining an unredacted Codex transcript or Playwright
+> failure artifact would contradict Wisp's standing prohibition on capability
+> persistence.
 > **SCOPE:** Family release metadata and validator execution, candidate and
 > release invocations, candidate receipts, tag/history ordering, verification,
 > host-test evidence retention, and acceptance criteria; version advanced from
@@ -37,10 +39,11 @@ version: 8
 > `stewards/kodhama-spec-0001-family-plugin-release-and-distribution-metadata@v2`
 > as approved at Stewards merge
 > `fe95bb93e59e4e24faaabe5ddfe1a6c8e8b9215c`; spec-adversary
-> `NEEDS-REVISION` on `f503602`.
+> `NEEDS-REVISION` reviews on `f503602` and `8eb520f`.
 > **VALUE:** A Wisp release operator can reproduce the same bounded product
 > validation and retained release identity without trusting ambient runtime
-> state or weakening Wisp's product evidence.
+> state, while reviewers retain useful host evidence without exposing the
+> dashboard capability.
 > **CONFIDENCE:** verified.
 
 > **AMENDED 2026-07-24**
@@ -663,7 +666,11 @@ every fragment-form or bearer-form capability with a non-secret structural
 redaction sentinel and verify that neither the observed capability bytes nor a
 capability-shaped fragment or bearer remains. Failure to establish that check
 blocks persistence and upload. The exact Codex artifact transformation and
-fixtures are specified by SPEC-0002; a redaction sentinel is not capability
+fixtures are specified by SPEC-0002. During capability-bearing browser steps,
+trace, video, screenshot, console, network, attachment, and reporter persistence
+SHALL either be disabled or intercepted and sanitized in volatile memory before
+the first sink; a later cleanup or deletion is not redaction. Only post-redaction
+typed structural fields may persist. A redaction sentinel is not capability
 material.
 
 Every response includes `Cache-Control: no-store`,
@@ -2593,16 +2600,18 @@ adds them.
   network boundary, and validation passes only for identical canonical
   request-bound `pass` results with empty findings and exit `0`.
 
-**S64 — Retained host evidence contains no dashboard capability**
+**S64 — Retained host and browser evidence contains no dashboard capability**
 
-- **Given** a host qualification or canary harness that has received a live
-  dashboard fragment and used it as a bearer in volatile memory,
+- **Given** a host qualification, canary, or browser harness that has received
+  a live dashboard fragment and used it as a bearer in volatile memory,
 - **When** the harness prepares any transcript or evidence for persistence or
   upload,
 - **Then** every fragment-form and bearer-form capability is replaced by a
   non-secret structural sentinel before the first write, the observed
   capability and every capability-shaped form are absent from retained bytes
-  and logs, and a failed redaction check blocks persistence and upload.
+  and logs, browser failure writers cannot persist raw trace/video/screenshot/
+  console/network/reporter data, and a failed redaction check blocks
+  persistence and upload.
 
 ### EARS requirements
 
@@ -2871,12 +2880,13 @@ adds them.
   retained tag metadata, inventory, surface, approval, payload, and prior
   ledger relations have not passed common release validation, Wisp shall not
   emit a durable history reference or become publication-ready.
-- **R87 (event-driven):** When host qualification or canary evidence is
-  retained, the harness shall use dashboard capability material only in
-  volatile memory, redact fragment and bearer forms before the first
-  persistent write, verify that no observed or capability-shaped value
-  remains, and block persistence and upload on failure while preserving
-  non-secret structural evidence.
+- **R87 (event-driven):** When host qualification, canary, or browser evidence
+  is retained, the harness shall use dashboard capability material only in
+  volatile memory, disable or pre-sink sanitize every browser failure writer,
+  redact fragment, bearer, and raw observed forms before the first persistent
+  write, verify that no observed or capability-shaped value remains, and
+  block persistence and upload on failure while preserving only non-secret
+  typed structural evidence.
 
 ## Verification matrix
 
@@ -2890,7 +2900,7 @@ adds them.
 | Process identity | Linux fixtures prove boot-ID and `/proc/<pid>/stat` field-22 parsing including hostile `comm`; macOS fixtures prove absolute `/bin/ps` C-locale parsing and failures; live current/child/exit observations plus deterministic same-PID/new-birth-token adapters exercise both dashboard and bus recovery; Windows is rejected |
 | Dashboard faults/lifecycle | Fault injection before claim and after claim/bind/publish/completion plus stdio close, `SIGINT`, and `SIGTERM` proves failed-live-owner listener/record cleanup, no bound-unpublished survivor, dead-owner recovery, 1,000 ms bounded drain, forced tracked-socket destruction, matching-instance cleanup, and no daemon |
 | Dashboard HTTP/UI | Loopback and browser-DOM tests snapshot exact precedence, condition/status/code mapping including `command_conflict`→`409`, routes/envelopes/headers, acceptance-to-`CRLFCRLF` header bytes/deadline, header-to-body-complete deadline, acceptance-to-response-complete total deadline, keep-alive idle and cleanup-to-forced-close boundaries, bearer, Host, Origin, query, method, content type, body, CSP, capability-bootstrap/rotation/redaction, refresh/visibility/in-flight behavior, exact run/agent append-order projection, text-only rendering, event/parse-error/command-state views, explicit command controls, and zero-write failures |
-| Capability-safe host evidence | Qualification and canary fixtures place the live capability in fragment and bearer forms at top-level and nested transcript positions, prove raw bytes remain volatile, require exact structural sentinels before the first write, scan retained transcript/evidence/logs for the observed and capability-shaped values, and prove a failed scan produces no persisted or uploaded artifact |
+| Capability-safe host evidence | Qualification, canary, and Playwright-failure fixtures place the live capability in fragment, bearer, console, network, reporter, screenshot, video, trace, and attachment paths; prove raw bytes remain volatile and browser artifact writers are disabled or intercepted before a sink; require exact structural sentinels and typed fields; scan retained evidence/logs for observed and capability-shaped values; and prove a failed scan produces no persisted or uploaded artifact |
 | Runtime boundary | Spies or dependency injection prove all six event/check MCP handlers call shared operations, `wisp_dashboard` calls the memoized coordinator, HTTP reads/writes reuse the canonical runtime, and HTTP/browser contain no second command reducer |
 | Command safety | Append-order tests prove issued fields, whole-check first-duplicate conflict/count/no-partial-data, ack duplicate conflict, unique-id-only reduction, same-run/following-ack filtering, last-ack wins, stable ordering, all-status dashboard projection, no execution, and every acknowledgement result |
 | Errors | Contract snapshots for all MCP and HTTP code/reason/JSON-pointer/detail shapes, retryability, `process_identity_unavailable`, parse reasons, `isError`, `-32601`, `-32602`, dashboard version conflict, HTTP `409` command conflict, post-commit diagnostic redaction, and unexpected-exception containment |
