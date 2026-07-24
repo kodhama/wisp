@@ -1,18 +1,37 @@
 ---
 id: spec-0002-codex-e2e-testing
 type: spec
-status: approved
+status: gated
 depends_on:
   - adr-0007-codex-canary-evidence
   - adr-0008-retire-family-release-certification
-  - spec-0001-plugin-mcp-distribution@v9
+  - adr-0009-independent-plugin-package-metadata
+  - spec-0001-plugin-mcp-distribution@v10
 implements: adr-0007-codex-canary-evidence
 owner: agent
-updated: 2026-07-24
-version: 5
+updated: 2026-07-25
+version: 6
 ---
 
 # SPEC-0002 — Reproducible Codex adapter and dashboard E2E
+
+> **AMENDED 2026-07-24**
+> **WHAT:** Advanced deterministic installed-plugin staging from the prior
+> eight-path payload to SPEC-0001@v10's ten-path payload, including `VERSION`
+> and `surfaces.json`, advanced dependency-ledger identity, recorded the
+> existing Playwright pins and canary deadlines exactly, and clarified the
+> contracted shared pre-sink boundary.
+> **WHY:** ADR-0009 makes those files part of the exact Wisp candidate rather
+> than optional repository metadata.
+> **SCOPE:** Candidate file inventory, staging, dependency pins, and
+> reviewer-requested exactness for existing E2E constants and safety
+> boundaries; version advanced from 5 to 6. These clarifications add no Codex,
+> MCP, dashboard, browser, capability-safety, or canary implementation change
+> and do not claim that the retained pre-sink implementation debt has landed.
+> **POINTER:** ADR-0009, ADR-0007, and SPEC-0001@v10.
+> **VALUE:** A contributor's deterministic Codex fixture exercises the same
+> complete package that a host cache receives.
+> **CONFIDENCE:** verified.
 
 > **AMENDED 2026-07-24**
 > **WHAT:** Retired the family release/runtime machinery while retaining the
@@ -47,9 +66,9 @@ lifecycle. The deterministic gate owns the exact seven-tool inventory because
 `codex exec --json` emits individual MCP calls but no startup inventory event.
 Claude remains outside scope and tracked by issue #25.
 
-All Wisp behavior under test, including the exact eight-path plugin payload,
+All Wisp behavior under test, including the exact ten-path plugin payload,
 seven MCP tools, canonical bus, dashboard security, and ownership lifecycle,
-is inherited from `spec-0001-plugin-mcp-distribution@v9` and is not redefined
+is inherited from `spec-0001-plugin-mcp-distribution@v10` and is not redefined
 here.
 
 ## Required repository surfaces
@@ -67,21 +86,27 @@ here.
 | `.github/workflows/codex-canary.yml` | Weekly schedule and candidate `workflow_dispatch` |
 | `package.json` | Exact scripts `test:e2e` and `test:e2e:container`, plus an exact Playwright development version |
 
-The Playwright package version SHALL equal the semantic version in the
-container image tag. The image SHALL also carry an immutable digest.
+`@playwright/test` SHALL be exactly `1.61.0`. The container base SHALL be
+exactly
+`mcr.microsoft.com/playwright:v1.61.0-noble@sha256:57b65fdc9ceabe0ef613124c7bbe2babcf9362c4d85e382fe3b03604e84b428a`.
+Any dependency update SHALL change the exact package version, matching image
+tag, verified immutable digest, lockfile, and their assertions atomically.
 The copied working directory SHALL be writable by the unprivileged runtime
 user, including Playwright's `test-results` output.
 `npm run test:e2e` SHALL build Wisp and run the suite directly.
 `npm run test:e2e:container` SHALL invoke only
 `node scripts/run-e2e-container.mjs`; CI SHALL use that same command.
+The Playwright configuration and test harness own artifact disabling and
+pre-sink redaction in both invocations; the container driver adds isolation
+but is not the sole capability-safety boundary.
 Compose SHALL NOT define a second topology. A future one-service wrapper may
 delegate to this command without changing the test architecture.
 
 `test/test-deps.toml` SHALL have schema `1` and exactly two package tables.
 `packages.unit` covers `test/*.test.ts` and names
-`spec-0001-plugin-mcp-distribution@v9`. `packages.e2e` covers
-`test/e2e/**`, names `spec-0001-plugin-mcp-distribution@v9`,
-`spec-0002-codex-e2e-testing@v5`, and the unversioned decisions
+`spec-0001-plugin-mcp-distribution@v10`. `packages.e2e` covers
+`test/e2e/**`, names `spec-0001-plugin-mcp-distribution@v10`,
+`spec-0002-codex-e2e-testing@v6`, and the unversioned decisions
 `adr-0006-codex-e2e-testing` and `adr-0007-codex-canary-evidence`. The
 implementation SHALL update
 `.grove/config.toml`'s `TEST_DEPS_LEDGER` token to this path.
@@ -89,8 +114,9 @@ implementation SHALL update
 ## Deterministic pull-request gate
 
 Each run SHALL create fresh fixture projects, `HOME`, and `CODEX_HOME`. It
-SHALL build the candidate once, verify the source plugin has exactly the eight
-release paths, and byte-copy those paths to:
+SHALL build the candidate once, verify the source plugin has exactly the ten
+candidate paths defined by SPEC-0001@v10, and byte-copy all ten paths,
+including `VERSION` and `surfaces.json`, to:
 
 ```text
 <CODEX_HOME>/plugins/cache/kodhama/wisp/<manifest-version>/
@@ -144,7 +170,7 @@ discarded. Throughout that interval:
   held only in process memory and reduced to typed booleans, counts, status,
   and redacted shape fields;
 - Playwright/test stdout and stderr have no direct terminal, workflow-log, or
-  file descriptor sink: the container driver reads both through pipes and,
+  file descriptor sink: the gate harness reads both through pipes and,
   before emitting a byte, replaces `#capability=<observed>` with
   `#capability=<redacted>`, `Bearer <observed>` with `Bearer <redacted>`, and
   every remaining exact `<observed>` value with `<redacted>`; and
@@ -160,7 +186,7 @@ and SHALL receive no file during it. A post-step asserts that condition, but
 deleting a file after creation does not satisfy it. An exception, assertion
 failure, timeout, browser crash, process signal, or cleanup failure follows
 the same pre-sink rules; no framework default failure writer may bypass the
-driver.
+harness in either direct or container execution.
 
 After the interval ends, and only after the same absence scans pass, the suite
 may persist canonical JSON plus one LF at
@@ -242,11 +268,16 @@ the exact fixture bus, and authenticated dashboard health at the returned URL.
 Model prose alone cannot satisfy a call assertion. The exact seven-tool
 inventory remains mandatory in the deterministic installed-plugin gate.
 
-Every spawned command and streamed-line callback SHALL share one finite
-deadline. On POSIX, expiration SHALL terminate the spawned process group so
-Codex-owned MCP and dashboard descendants cannot outlive the canary; the
-health request SHALL also be bounded and abort with that deadline. A timed-out
-execution cannot satisfy transcript verification.
+Each spawned command and all of its streamed-line callbacks SHALL share one
+deadline beginning immediately after `spawn` returns: `codex --version` uses
+30,000 ms; each marketplace/plugin setup command uses 120,000 ms; and
+`codex exec --json` uses 300,000 ms. On POSIX, expiration SHALL send
+`SIGTERM` to the spawned process group and `SIGKILL` after a 2,000 ms grace
+period so Codex-owned MCP and dashboard descendants cannot outlive the
+canary. A dashboard health request starts only while the exec child is live,
+has its own 5,000 ms upper bound, and aborts earlier when the parent exec
+deadline signal fires. A timed-out execution or callback cannot satisfy
+transcript verification.
 
 The transcript normalization predicate is exact. A nonblank stdout line is a
 Wisp tool-call item only when it parses as a JSON object whose top-level
@@ -436,10 +467,11 @@ support it but cannot silently set or substitute it.
 
 **S2 — Installed adapter boundary**
 
-- **Given** the staged eight-path candidate and an empty fixture project,
+- **Given** the staged ten-path candidate and an empty fixture project,
 - **When** the literal manifest bootstrap is launched from that project,
 - **Then** the client lists seven tools and writes only to that project's
-  canonical bus.
+  canonical bus, while the staged `VERSION` and `surfaces.json` remain
+  byte-identical to the source candidate.
 
 **S3 — Explicit singleton dashboard**
 
@@ -524,6 +556,9 @@ support it but cannot silently set or substitute it.
   route stdout/stderr through the exact pre-sink redactor, suppress output
   whose safety cannot be proved, leave no browser artifact file, and persist
   only the scanned typed redacted record after the capability-bearing interval.
+- **R15 (ubiquitous):** The deterministic installed-plugin fixture shall
+  verify and byte-stage exactly SPEC-0001@v10's ten candidate paths, including
+  `VERSION` and `surfaces.json`, into the manifest-version cache directory.
 
 ## Verification matrix
 
@@ -538,12 +573,12 @@ None.
 
 ## Rubric check
 
-**PASS.** Frontmatter is complete; the approved ADR and behavioral upstream
-are declared and correctly versioned; scope is bounded; repository, execution,
-evidence, and cadence contracts are implementable; GWT scenarios cover the
-end-to-end outcomes; EARS requirements state the invariants; and no unresolved
-question is hidden. Per the Grove lifecycle companion, this self-check
-promotes the agent-authored spec from `draft` to `gated`.
+**PASS.** Frontmatter is complete; ADR-0009 and SPEC-0001@v10 are approved or
+gated consumable upstreams with exact pins; scope is bounded; repository,
+execution, evidence, and cadence contracts are implementable; GWT scenarios
+cover the end-to-end outcomes; EARS requirements state the invariants; and no
+unresolved question is hidden. Per the Grove lifecycle companion, this
+self-check promotes version 6 from `draft` to `gated`.
 
 ## Gate record
 
@@ -555,3 +590,15 @@ completed gates; it does not claim the retained implementation debt has
 landed. Hosted Codex review then found and this version corrected one
 overbroad sentence: an exit-`0` Codex verifier is necessary evidence, never a
 substitute for Wisp's remaining product-owned release gates.
+
+Version 6 records ADR-0009's exact ten-path installed-candidate staging and
+dependency-ledger amendment. It also records the independent spec review's
+clarification of the already implemented Playwright package/image pins and
+exact canary command, callback, health, and kill deadlines, plus the
+contracted direct/container pre-sink ownership whose retained implementation
+debt is not claimed complete here. The rubric self-check above passed and
+moved this version to `gated`. On 2026-07-25 the independent spec adversary
+returned `APPROVE-READY`, which is the agent-owned spec-gate ratification
+under the steward profile; the independent conformance review returned
+`PASS`, and the corpus review returned `PASS`. The version remains `gated`,
+the consumable state recorded by that agent-owned gate.
