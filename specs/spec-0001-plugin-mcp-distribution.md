@@ -1,19 +1,41 @@
 ---
 id: spec-0001-plugin-mcp-distribution
 type: spec
-status: approved  # maintainer authorized the family rollout and merge after independent review; spec-adversary APPROVE-READY and conformance PASS preceded this recording
+status: gated  # v8 self-checked 2026-07-24; independent spec-adversary and conformance review are owed before approval
 depends_on:
   - adr-0004-codex-session-bootstrap
   - adr-0005-plugin-dashboard-lifecycle
   - adr-0006-family-plugin-release-and-surface-contract
-  - stewards/kodhama-spec-0001-family-plugin-release-and-distribution-metadata@v1
+  - stewards/kodhama-spec-0001-family-plugin-release-and-distribution-metadata@v2
 implements: adr-0006-family-plugin-release-and-surface-contract
 owner: agent
 updated: 2026-07-24
-version: 7
+version: 8
 ---
 
 # SPEC-0001 — Dual-host Wisp plugin, bundled stdio MCP, and project dashboard
+
+> **AMENDED 2026-07-24**
+> **WHAT:** Bound family validation to Stewards metadata spec v2, including
+> the explicit POSIX runtime store, immutable extension-runtime digest,
+> exact repeated validator subprocess protocol, common public results, and
+> release-history validation against retained tag bytes.
+> **WHY:** Stewards v2 closes execution and retained-byte boundaries that v1
+> left underdetermined; Wisp must consume those boundaries without weakening
+> its dual-host, MCP, dashboard, qualification, or exact-surface gates.
+> **SCOPE:** Family release metadata and validator execution, candidate and
+> release invocations, candidate receipts, tag/history ordering, verification,
+> and acceptance criteria; version advanced from 7 to 8. The nine-path
+> payload, six canonical surface rows, behavioral support states, MCP
+> protocol, dashboard behavior, and qualification requirements are unchanged.
+> **POINTER:** ADR-0006 and
+> `stewards/kodhama-spec-0001-family-plugin-release-and-distribution-metadata@v2`
+> as approved at Stewards merge
+> `fe95bb93e59e4e24faaabe5ddfe1a6c8e8b9215c`.
+> **VALUE:** A Wisp release operator can reproduce the same bounded product
+> validation and retained release identity without trusting ambient runtime
+> state or weakening Wisp's product evidence.
+> **CONFIDENCE:** verified.
 
 > **AMENDED 2026-07-24**
 > **WHAT:** Added the family release metadata, complete inventory, append-only
@@ -1098,6 +1120,7 @@ package remains `plugins/wisp/`.
 | `release_history` | `release/wisp/history.json` |
 | `inventory_provider` | `scripts/wisp-release-contract.mjs` |
 | `extensions.wisp.validator` | `scripts/wisp-release-contract.mjs` |
+| `extensions.wisp.validator_runtime_sha256` | Lowercase SHA-256 of the exact platform-matched `extension-validator-runtime.v1` manifest selected for Wisp family validation |
 
 Its common `version_carriers` contains the two package-lock occurrences, both
 host-manifest versions, `qualification.json#/plugin_version`, and
@@ -1119,6 +1142,72 @@ authority/carrier mismatch. It also proves the source `src/mcp.ts` value and
 the built MCP handshake agree, so a stale bundle cannot satisfy carrier
 parity. Release numbers in tests are derived from `package.json`; a literal
 candidate version in a test is not another authority.
+
+### Family extension runtime and validator protocol
+
+The Stewards family authority is
+`kodhama-spec-0001-family-plugin-release-and-distribution-metadata@v2`, as
+approved at Stewards commit
+`fe95bb93e59e4e24faaabe5ddfe1a6c8e8b9215c`. Wisp consumes its canonical JSON,
+extension request/result, immutable runtime, public result, and retained
+history semantics by reference; Wisp does not restate or fork those common
+grammars.
+
+Every Wisp command that invokes family `validate-product` SHALL require
+`--runtime-store <absolute-path>`. The argument is the sole runtime-store
+discovery input and SHALL be a normalized `/`-rooted POSIX path whose
+components are real non-symlink directories. An environment variable,
+default location, package-relative directory, upward search, network fetch,
+or fallback runtime SHALL NOT supply or replace it.
+
+`extensions.wisp.validator_runtime_sha256` SHALL match the lowercase SHA-256
+of the canonical, no-terminal-LF
+`extension-validator-runtime.v1` manifest at the exact content-addressed
+object location required by Stewards v2. The manifest platform SHALL equal
+the validator launcher's directly detected supported POSIX tuple. Wisp's
+automated candidate, E2E, canary, tag, and history gates SHALL provision the
+same declared runtime object for their runner tuple before validation. A
+missing object, unsupported platform, tuple mismatch, malformed manifest,
+image drift, changed object, or unavailable filesystem/network enforcement
+fails before Wisp code runs with Stewards v2's exact diagnostic. The runtime
+store and object are validation inputs, not installed Wisp payload paths,
+product evidence, or an independently editable package-version carrier.
+
+The runtime image SHALL enumerate the interpreter, executable, loader,
+library, configuration, and runtime-data entries needed to execute
+`scripts/wisp-release-contract.mjs`; no host `PATH`, profile, home, toolchain,
+or unlisted runtime subtree is inherited. The script SHALL be an executable,
+regular, non-symlink package-root file with no symlink path component.
+
+When invoked as the Wisp product extension, the script SHALL implement only
+this Stewards v2 process boundary:
+
+1. accept exactly
+   `[<resolved-script>, "--stewards-extension-validator-v1"]` without a shell;
+2. read exactly one canonical `extension-validator-request.v1` object plus
+   one LF from stdin and no other input;
+3. validate the request kind, phase, Wisp namespace, authority version,
+   expected tag, nullable release commit, four declared paths, runtime digest,
+   and the complete extension value after the two reserved validator fields
+   are removed;
+4. run Wisp's existing installed-payload, embedded-carrier, inventory,
+   public-contract snapshot, surface-extension, qualification, generated
+   support, and dashboard/MCP consistency checks without writing the package;
+5. write exactly one canonical `extension-validator-result.v1` object plus
+   one LF to stdout, with the exact request-byte SHA-256 and findings sorted
+   by the family tuple; and
+6. exit `0` only for `pass` with no findings, or `1` only for `fail` with at
+   least one Wisp-namespaced finding whose RFC 6901 instance pointer identifies
+   the failing request subject.
+
+The extension invocation SHALL emit no stderr for protocol exits, perform no
+network operation, expose no descendant outside the same sandbox, and leave
+the package-root snapshot byte-identical. Both family executions SHALL return
+byte-identical results. Timeout, size, canonicalization, environment,
+filesystem, network-audit, repetition, result/exit, or request-digest
+nonconformance is a common validation failure even if Wisp catches the
+underlying error. Stewards reports Wisp findings without interpreting them as
+family support facts or promoting a surface.
 
 ### Complete release inventory and public support derivatives
 
@@ -1578,6 +1667,7 @@ Candidate validation is invoked as:
 scripts/wisp-release-contract.mjs \
   --package-root <repository-root> \
   --validate-candidate \
+  --runtime-store <absolute-posix-runtime-store> \
   --receipt <absolute-new-file>
 ```
 
@@ -1600,6 +1690,7 @@ properties and contains exactly:
   "package_version": "<authority SemVer>",
   "expected_release_tag": "wisp-v<authority SemVer>",
   "source_commit": "<40 lowercase hexadecimal clean-checkout commit>",
+  "validator_runtime_sha256": "<release.json extensions.wisp.validator_runtime_sha256>",
   "candidate_state_sha256": "<sha256 of release/wisp/candidate-state.json>",
   "bundle_sha256": "<sha256 of plugins/wisp/dist/wisp.mjs>",
   "release_metadata_sha256": "<sha256 of release/wisp/release.json>",
@@ -1619,7 +1710,9 @@ properties and contains exactly:
 `qualification_result` uses the exact qualification enum rather than always
 being pending. Candidate validation requires a clean checkout at
 `source_commit`, the committed candidate-state digest, and equality between
-all receipt subjects and validated sources. The two skill digests additionally
+all receipt subjects and validated sources. The validator-runtime digest
+additionally equals the release-metadata declaration and the verified
+runtime-store manifest used for both extension executions. The two skill digests additionally
 equal the raw-byte extracts used by their fifteen-row inventory fingerprints.
 The receipt itself is not release approval or evidence. `--receipt` shall be
 an absolute normalized path outside the repository whose leaf does not exist;
@@ -1634,14 +1727,25 @@ human-approval release conditions. Its exact invocation is:
 scripts/wisp-release-contract.mjs \
   --package-root <repository-root> \
   --validate-release \
-  --phase pre-tag
+  --phase pre-tag \
+  --runtime-store <absolute-posix-runtime-store>
 ```
 
 Product release-phase validation uses the same invocation with
-`--phase release`, repeats that complete pre-tag gate, and resolves only
-`refs/tags/wisp-v<version>` to its peeled full source commit. It accepts no
-caller-supplied version, tag, commit, bundle digest, support state, or
-qualification result as substitute truth.
+`--phase release` only after the prospective history row is present. It
+repeats that complete pre-tag gate, resolves only
+`refs/tags/wisp-v<version>` to its peeled full source commit, loads
+metadata/inventory/surface bytes from that tag, and validates the current
+ledger as the prior ledger plus exactly one appended row. It accepts no
+caller-supplied version, tag, commit, bundle digest, support state, history
+identity, or qualification result as substitute truth.
+
+On success, `--phase pre-tag` writes exactly the Stewards v2 canonical result
+`{"expected_tag":<string>,"package_version":<string>}` plus one LF.
+`--phase release` writes exactly
+`{"expected_tag":<string>,"package_version":<string>,"source_commit":<string>}`
+plus one LF. A contract failure writes no stdout and one Stewards v2
+`error: <message>\n` line; product findings remain within that failure.
 
 Clean-tree rules are phase-specific:
 
@@ -1649,18 +1753,22 @@ Clean-tree rules are phase-specific:
 |---|---|---|
 | `--validate-candidate` | Clean at `source_commit`; receipt is outside repository | Untagged candidate sources |
 | `--validate-release --phase pre-tag` | Clean at dispatched release commit | Complete release gate; expected tag absent or same-commit |
-| `--validate-release --phase release` | Clean at the commit peeled from the computed tag | Complete release gate plus immutable tag identity; history contains prior releases only or an already-identical current row |
-| `--validate-release --phase history-worktree` | Exactly one unstaged modification, `release/wisp/history.json`; index clean; every other tracked/untracked path absent or unchanged | Prospective current history row and prior-ledger preservation |
-| `--validate-release --phase history` | Clean at a committed history reference | Current history row plus a separate clean validation worktree at its recorded release tag |
+| `--validate-release --phase release` | Exactly one unstaged modification, `release/wisp/history.json`; index clean; every other tracked/untracked path absent or unchanged from the tag commit | Complete common release result, retained tagged product bytes, and prior ledger plus one prospective current row |
+| `--validate-release --phase history-worktree` | The same validated history-only worktree after successful release phase | Prospective row, prior-ledger preservation, and write-once history-branch inputs |
+| `--validate-release --phase history` | Clean at a committed history reference equal to or descending from the release commit | Current row, retained tagged metadata/inventory/surface bytes, and durable history reference |
 
-`history-worktree` and `history` do not reinterpret product bytes from the
-history checkout as released bytes. They derive the current row, tag, and
-release commit from the ledger, create a separate clean detached worktree at
-that tag, and run the complete `release` phase there. `history` additionally
+`release`, `history-worktree`, and `history` do not reinterpret descendant
+product bytes as released bytes. They derive the current row, tag, and release
+commit from the ledger, resolve the exact retained Git blobs and tag ref
+without fetching or reading a different product working tree, and require
+every non-history product byte to equal the tagged release. `history` additionally
 requires the current checkout's diff from its first parent to contain only
 `release/wisp/history.json`, the release tag commit to be an ancestor, and the
 current commit to be reachable from `origin/main`. It emits the full current
-history commit and file SHA-256 as the durable stable reference.
+history commit and raw file SHA-256 as a `repo-path` stable reference whose
+repository and path are exactly Wisp and `release/wisp/history.json`. That
+reference is the only Wisp history input that may satisfy Stewards' no-fetch
+verified-catalog resolver.
 
 A candidate is releasable only after:
 
@@ -1686,15 +1794,19 @@ reachable from `origin/main`, acquires the shared candidate lock, and runs
 this exact state machine:
 
 1. invoke `scripts/wisp-release-contract.mjs --package-root
-   <repository-root> --validate-release --phase pre-tag`;
+   <repository-root> --validate-release --phase pre-tag --runtime-store
+   <absolute-posix-runtime-store>`;
 2. compute the tag only from the validated authority;
 3. if the tag is absent, create and push it at the dispatched commit; if it
    already peels to that commit, continue; if it peels elsewhere, fail without
    mutation;
-4. explicitly invoke `scripts/wisp-release-contract.mjs --package-root
-   <repository-root> --validate-release --phase release`;
-5. invoke `--append-release-history`; and
-6. invoke `--validate-release --phase history-worktree`, commit exactly the
+4. invoke `--append-release-history --runtime-store
+   <absolute-posix-runtime-store>`;
+5. explicitly invoke `scripts/wisp-release-contract.mjs --package-root
+   <repository-root> --validate-release --phase release --runtime-store
+   <absolute-posix-runtime-store>`;
+6. invoke `--validate-release --phase history-worktree --runtime-store
+   <absolute-posix-runtime-store>`, commit exactly the
    history file on branch `release-history/wisp-v<version>`, push that branch,
    and create or reuse its PR to `main`.
 
@@ -1711,12 +1823,14 @@ never moves, deletes, or force-pushes a tag or history branch.
 
 A process death or workflow cancellation after step 3 leaves an immutable
 same-commit tag but no false history claim. Re-dispatch enters step 3's
-same-commit branch, performs release-phase validation, and deterministically
-creates or reuses the exact history PR.
+same-commit branch, appends or reuses the prospective row, performs
+release-phase validation against that row and the retained tag bytes, and
+deterministically creates or reuses the exact history PR.
 
 After that PR merges, the continuation checks out the resulting `main`
-commit, invokes `--validate-release --phase history`, and exposes only that
-command's durable full commit/file-digest reference to Stewards. Catalog
+commit, invokes `--validate-release --phase history --runtime-store
+<absolute-posix-runtime-store>`, and exposes only that command's durable full
+commit/file-digest reference to Stewards. Catalog
 publication and the next Wisp package release remain blocked until this
 continuation passes. A tagged release with an open history PR is explicitly
 `history-pending`, not publication-ready.
@@ -1728,12 +1842,16 @@ valid tag,
 ```text
 scripts/wisp-release-contract.mjs \
   --package-root <repository-root> \
-  --append-release-history
+  --append-release-history \
+  --runtime-store <absolute-posix-runtime-store>
 ```
 
-derives its prospective row only from release-phase validator output and the
+derives its prospective row only from a same-runtime-store successful pre-tag
+result, the exact peeled tag identity, the tagged release bytes, and the
 family-classified current inventories, including the two skill-contract
-fingerprints and any resulting `breaking-change` objects. It has exactly
+fingerprints and any resulting `breaking-change` objects. Release phase then
+validates that row through the common engine; append does not claim the common
+release result itself. It has exactly
 these outcomes:
 
 - when no row exists for the version and the exact tag peels to the validated
@@ -2424,9 +2542,10 @@ adds them.
 - **When** the release workflow runs, is interrupted immediately after tag
   push, and is re-dispatched,
 - **Then** it computes and creates only `wisp-v<package.json.version>` at that
-  commit, explicitly validates release phase, resumes through the same-commit
-  tag, creates or reuses the exact history PR, and fails without moving the
-  tag if the existing ref peels elsewhere.
+  commit, resumes through the same-commit tag, appends or reuses the prospective
+  history row, validates common release phase against that row and the retained
+  tag bytes, creates or reuses the exact history PR, and fails without moving
+  the tag if the existing ref peels elsewhere.
 
 **S61 — Append-only release history**
 
@@ -2437,6 +2556,25 @@ adds them.
   second run is a no-op, the conflict fails without overwrite, every prior row
   remains byte-identical, no installed payload byte changes, and only clean
   post-merge history-phase validation emits the durable Stewards reference.
+
+**S62 — Digest-bound extension runtime**
+
+- **Given** Wisp release metadata naming one validator-runtime digest and a
+  caller-supplied absolute POSIX runtime store,
+- **When** candidate or release validation starts,
+- **Then** the Stewards launcher selects only that digest object, verifies its
+  canonical manifest, matching platform, exact image, and enforcement boundary
+  before spawn, and fails with the applicable v2 diagnostic without executing
+  Wisp when the store, object, platform, image, or enforcement is invalid.
+
+**S63 — Exact repeated Wisp extension**
+
+- **Given** a valid Stewards v2 product-extension request for Wisp,
+- **When** the common engine invokes the declared validator twice,
+- **Then** both executions use the exact argv, input, environment, immutable
+  runtime, read-only package, private temporary filesystem, and denied/audited
+  network boundary, and validation passes only for identical canonical
+  request-bound `pass` results with empty findings and exit `0`.
 
 ### EARS requirements
 
@@ -2675,17 +2813,36 @@ adds them.
   condition is incomplete, Wisp shall create no package tag.
 - **R80 (event-driven):** When a fully qualified human-approved merged commit
   is released, automation shall derive only `wisp-v<version>`, create it
-  immutably at that commit, explicitly run release-phase validation, resume
-  after tag-before-history interruption through the exact history PR, and
-  reject a conflicting existing ref.
+  immutably at that commit, append or reuse the prospective history row,
+  explicitly run release-phase validation against that row and retained tag
+  bytes, resume after tag-before-history interruption through the exact
+  history PR, and reject a conflicting existing ref.
 - **R81 (event-driven):** When a valid new package tag is recorded, Wisp shall
   append exactly one family history row, treat an identical row as an
   idempotent no-op, reject a conflicting row, change neither prior rows nor
-  installed package bytes, and emit a durable reference only from clean
-  post-merge history-phase validation.
+  installed package bytes, and emit the exact repository/commit/path/raw-digest
+  stable reference only from clean post-merge history-phase validation.
 - **R82 (unwanted behavior):** If a catalog, provisioner, canary, or
   single-surface result exists without the complete Wisp release gate, Wisp
   shall neither tag the candidate nor claim effective support.
+- **R83 (ubiquitous):** Every Wisp command that transitively invokes family
+  `validate-product` shall require one explicit normalized absolute POSIX
+  `--runtime-store`, shall resolve only the digest declared in
+  `extensions.wisp.validator_runtime_sha256`, and shall never use an
+  environment, default, search, fetch, or substitute runtime.
+- **R84 (event-driven):** When the common engine invokes Wisp's product
+  extension, the executable shall consume and emit only Stewards v2's exact
+  canonical request/result protocol, shall return deterministic sorted
+  Wisp-namespaced findings, and shall satisfy the repeated process,
+  filesystem, network, size, timeout, side-effect, and exit contract.
+- **R85 (event-driven):** When family pre-tag or release validation succeeds,
+  Wisp shall expose exactly the applicable Stewards v2 canonical two-field or
+  three-field public result plus one LF and shall emit no partial result on
+  failure.
+- **R86 (state-driven):** While the current release history row and its exact
+  retained tag metadata, inventory, surface, approval, payload, and prior
+  ledger relations have not passed common release validation, Wisp shall not
+  emit a durable history reference or become publication-ready.
 
 ## Verification matrix
 
@@ -2709,24 +2866,26 @@ adds them.
 | Codex | Separately validate the manifest's one inline bootstrap, absent `cwd`, forwarded `CODEX_HOME`, exact marketplace/plugin/version cache path, and absence of a custom config path; install through marketplace `kodhama`, then smoke lists seven tools, checks, writes, explicitly opens the dashboard, and verifies fixture `.wisp/events.ndjson` |
 | Cross-host dashboard | Concurrent installed Claude and Codex sessions on one fixture return one URL; a second fixture remains isolated; command, security, lifecycle/recovery, live provider stability/child/absence evidence, and deterministic same-PID/new-token recovery populate the dashboard qualification object |
 | Plugin contents | Exact nine-path inventory including `surfaces.json`, equal manifest versions, no CLI/binary/daemon/legacy dashboard path, two portable-skill static checks and raw-byte fingerprints, bundle SHA-256, and exact qualification schema/state rules including all Node, host, and dashboard result objects |
-| Family release metadata | Positive and negative candidate fixtures validate the root authority; both lockfile values; both manifests; cache, MCP, qualification, and surface carriers; exact two/one/fifteen/two inventory cardinalities and every id/category/extractor including both skill contracts; public-contract snapshot derivation; bundle identity; common schema; and Wisp extension while permitting an exact pending candidate |
+| Family release metadata | Positive and negative candidate fixtures validate the root authority; both lockfile values; both manifests; cache, MCP, qualification, and surface carriers; exact two/one/fifteen/two inventory cardinalities and every id/category/extractor including both skill contracts; public-contract snapshot derivation; bundle identity; Stewards v2 common schema/public results; and Wisp extension while permitting an exact pending candidate |
+| Extension runtime and protocol | Four supported POSIX tuple fixtures plus unsupported-host cases prove the explicit absolute runtime-store boundary, metadata digest, exact content-addressed manifest/image verification, no ambient fallback, both repeated canonical request/result executions, sorted Wisp findings, request digest, no-write/network audit, timeout/size/exit rules, and every v2 runtime diagnostic |
 | Candidate reset | Fault-injected and killed-process preparation proves qualified-lock exclusion, staged journal phases, complete pending/false reset, pre-commit rollback, post-commit completion, candidate-state digest parity, preserved non-evidentiary descriptors, and no evidence-preservation input or inherited support |
 | Surface and support derivatives | Six registry-v1 rows exercise exact identity/state/setup/proof rules, cross-surface evidence rejection, candidate disclosures, and byte-checked generated regions in both READMEs |
-| Tag and history | Clean tagged repositories prove human approval binding, full qualification precedence, phase-specific clean-tree rules, explicit pre-tag/release/history invocations, computed/ref-peeled `wisp-v<version>`, main reachability, skill-contract fingerprint changes in the classified set and inventory digest, tag-before-history interruption recovery, write-once history branch/PR reuse, identical-row no-op, conflicting tag/row/branch refusal, and post-merge durable history reference with unchanged payload bytes |
+| Tag and history | Clean tagged repositories prove human approval binding, full qualification precedence, phase-specific clean-tree rules, exact common pre-tag/release results, computed/ref-peeled `wisp-v<version>`, append-before-release validation, retained tag metadata/inventory/surface bytes, complete last-row and prior-reference validation, main reachability, skill-contract fingerprint changes in the classified set and inventory digest, tag-before-history interruption recovery, write-once history branch/PR reuse, identical-row no-op, conflicting tag/row/branch refusal, and the exact post-merge repo-path durable history reference with unchanged payload bytes |
 | Marketplace | Stewards fixture resolves exactly to `kodhama/wisp:plugins/wisp` and contains no implementation/version copy |
 
 ## Rubric check
 
 The configured `SPEC_RUBRIC_PATH` says no dedicated rubric exists, so this
-check uses `specs/README.md`.
+check uses `specs/README.md` and the applicable structural checks (1–7) from
+Trellis's shared artifact-contract rubric.
 
-- **Frontmatter:** PASS — all required fields are present; `version: 7`
-  records the family release/surface amendment.
-- **Approved dependencies:** PASS — ADR-0004, ADR-0005, ADR-0006, and the
-  Stewards family metadata spec are approved and record the Codex adapter,
+- **Frontmatter:** PASS — all required fields are present; `version: 8`
+  records the Stewards v2 execution/retained-release amendment.
+- **Approved dependencies:** PASS — ADR-0004, ADR-0005, ADR-0006, and
+  Stewards family metadata spec v2 are approved and record the Codex adapter,
   dashboard, and shared release/surface intent.
-- **Testable acceptance criteria:** PASS — S1–S61 and S3a are GWT scenarios,
-  R1–R82 are EARS requirements, and the matrix names executable evidence.
+- **Testable acceptance criteria:** PASS — S1–S63 and S3a are GWT scenarios,
+  R1–R86 are EARS requirements, and the matrix names executable evidence.
 - **Exactness:** PASS — all seven schemas, outputs, error mapping, project
   selection, stored-event validity, confinement/decoding, duplicate/unique
   command reduction, irreversible append/release behavior, qualified
@@ -2735,7 +2894,9 @@ check uses `specs/README.md`.
   nine payload paths, exact version/digest carriers, surface rows, inventory,
   skill-contract fingerprints, reset, README projections, immutable
   tag/history, root-Claude/inline-Codex launch definitions, and
-  Node/host/dashboard qualification policy are fixed rather than deferred.
+  Node/host/dashboard qualification policy, explicit runtime store,
+  digest-bound repeated extension protocol, common public results, and
+  retained history validation are fixed rather than deferred.
 - **Open questions:** PASS — the required section is present below.
 - **Scope fidelity:** PASS — the plugin-only distribution, dual-host evidence,
   project bus and dashboard isolation, explicit skill boundary, session-owned
@@ -2749,12 +2910,11 @@ Result: **PASS**.
 
 None.
 
-## Approval record
+## Gate record
 
-On 2026-07-24 the maintainer authorized the family-wide rollout, including
-Wisp's product-specific implementation, and authorized merge after independent
-review. The spec-adversary returned `APPROVE-READY` after the inventory,
-candidate transaction, tag/history, evidence, and generated-support findings
-were resolved; the conformance reviewer returned `PASS` against ADR-0006 and
-the approved family spec. This `approved` status records that prior human
-intent act.
+Version 7 was approved on 2026-07-24 after the maintainer's family-rollout
+intent act, spec-adversary `APPROVE-READY`, and conformance `PASS`. Version 8
+does not reuse that approval for Stewards v2's new execution and retained-byte
+requirements. The contract-author self-check above gates this amendment;
+independent intrinsic-quality and conformance review are owed before a human
+approval act may move it from `gated` to `approved`.
