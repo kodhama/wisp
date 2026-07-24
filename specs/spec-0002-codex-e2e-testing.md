@@ -19,20 +19,25 @@ version: 4
 > **WHAT:** Bound deterministic and canary candidate validation to SPEC-0001
 > v8's explicit runtime store, immutable Wisp validator-runtime digest, exact
 > Stewards v2 extension protocol, and typed candidate-receipt field; required
-> capability-safe transcript transformation before artifact retention.
+> capability-safe transcript and Playwright-failure transformation before
+> artifact retention.
 > **WHY:** Candidate evidence cannot reproduce Wisp's family pre-tag result
 > unless it proves the same digest-bound validator runtime used by the release
-> contract. An uploaded raw `wisp_dashboard` result would also persist its
-> capability and violate SPEC-0001's no-persistence invariant.
+> contract. An uploaded raw `wisp_dashboard` result or Playwright failure
+> trace, screenshot, video, console, network, or reporter artifact would also
+> persist its capability and violate SPEC-0001's no-persistence invariant.
 > **SCOPE:** Dependency pins, E2E/canary validation inputs, candidate receipt
-> verification, transcript retention, scenarios, requirements, and
-> verification matrix; version advanced from 3 to 4. Installed payload, MCP,
-> dashboard, browser, surface, and non-promotion evidence remain unchanged.
+> verification, transcript/browser retention, scenarios, requirements, and
+> verification matrix; version advanced from 3 to 4. Installed payload,
+> MCP/dashboard behavior, browser interaction assertions, surface evidence,
+> and non-promotion semantics remain unchanged; only their safe retention
+> boundary is tightened.
 > **POINTER:** SPEC-0001 v8 and
 > `stewards/kodhama-spec-0001-family-plugin-release-and-distribution-metadata@v2`;
-> spec-adversary `NEEDS-REVISION` on `f503602`.
+> spec-adversary `NEEDS-REVISION` reviews on `f503602` and `8eb520f`.
 > **VALUE:** A Wisp maintainer can trust Codex evidence to cover the same
-> bounded product validator that the release gate runs.
+> bounded product validator that the release gate runs without leaking the
+> live dashboard capability through retained failure evidence.
 > **CONFIDENCE:** verified.
 
 > **AMENDED 2026-07-24**
@@ -80,7 +85,7 @@ here.
 | Path | Contract |
 |---|---|
 | `test/e2e/codex-plugin.e2e.ts` | The single deterministic Playwright suite described below |
-| `test/e2e/playwright.config.ts` | Chromium only; one worker; no retries; failure trace and screenshot |
+| `test/e2e/playwright.config.ts` | Chromium only; one worker; no retries; trace, video, screenshot, attachment, file reporter, console artifact, and network artifact persistence disabled |
 | `test/e2e/Dockerfile` | Pinned official Playwright image by tag and digest; installs with `npm ci`, copies the candidate, and runs unprivileged |
 | `test/test-deps.toml` | Repo test-dependency ledger with `unit` and `e2e` package entries |
 | `scripts/run-e2e-container.mjs` | Shell-free Docker build/run driver; runs the image with `--network none`, an ephemeral home, and no host credential mounts |
@@ -186,6 +191,73 @@ Assertions SHALL use unique run-scoped sentinel values and observable MCP,
 filesystem, HTTP, and DOM evidence. Fixed sleeps SHALL NOT determine success;
 bounded polling SHALL wait on the relevant observable state. Cleanup SHALL
 close clients, children, browser contexts, and listeners even after failure.
+
+### Capability-safe Playwright failure boundary
+
+The capability-bearing browser interval begins when the suite receives the
+MCP-returned dashboard URL and ends only after every page/context is closed,
+all console/network observers are detached, and the observed capability is
+discarded. Throughout that interval:
+
+- Playwright `trace`, `video`, and `screenshot` are exactly `off`; no retry,
+  attachment, snapshot, error-context, HTML/JSON/JUnit/blob reporter, console
+  artifact, or request/response archive is created;
+- console, page-error, request, response, and authorization observations are
+  held only in process memory and reduced to typed booleans, counts, status,
+  and redacted shape fields;
+- Playwright/test stdout and stderr have no direct terminal, workflow-log, or
+  file descriptor sink: the container driver reads both through pipes and,
+  before emitting a byte, replaces `#capability=<observed>` with
+  `#capability=<redacted>`, `Bearer <observed>` with `Bearer <redacted>`, and
+  every remaining exact `<observed>` value with `<redacted>`; and
+- the sanitizer scans each prospective emitted message for the observed
+  capability, `#capability=[A-Za-z0-9_-]{43}`, and
+  `Bearer [A-Za-z0-9_-]{43}`. On a match or sanitizer failure it suppresses
+  the entire message, emits only
+  `error: browser-capability-redaction-failed\n`, marks the gate failed, and
+  permits no artifact upload.
+
+The Playwright output directory SHALL be absent or empty before this interval
+and SHALL receive no file during it. A post-step asserts that condition, but
+deleting a file after creation does not satisfy it. An exception, assertion
+failure, timeout, browser crash, process signal, or cleanup failure follows
+the same pre-sink rules; no framework default failure writer may bypass the
+driver.
+
+After the interval ends, and only after the same absence scans pass, the suite
+may persist canonical JSON plus one LF at
+`test-results/browser-evidence.json`. The object rejects unknown properties
+and contains exactly:
+
+```json
+{
+  "schema": 1,
+  "result": "pass",
+  "failure_stage": null,
+  "loopback_origin": "http://127.0.0.1:<port>",
+  "dashboard_url_shape": "http://127.0.0.1:<port>/#capability=<redacted>",
+  "authorization_shape": "Bearer <redacted>",
+  "fragment_removed": true,
+  "authenticated_health_status": 200,
+  "external_request_count": 0
+}
+```
+
+`result` is `pass` or `fail`. `failure_stage` is `null` only on pass and
+otherwise the first applicable value among `pre-dashboard`, `dashboard-call`,
+`browser-launch`, `navigation`, `dom`, `authorization`, `cleanup`, and
+`redaction`. `loopback_origin` is `null` or the exact shown loopback grammar
+with a decimal port from 1 through 65535. `dashboard_url_shape` is `null` or
+that same origin followed by the exact shown redacted fragment.
+`authorization_shape` is `null` or exactly `Bearer <redacted>`.
+`fragment_removed` is boolean or `null`; `authenticated_health_status` is an
+integer from 100 through 599 or `null`; and `external_request_count` is a
+nonnegative safe integer. A pass requires all shown non-null values exactly.
+This record is structural evidence only: it never authenticates, substitutes
+for the live checks, or contains raw console, network, exception, page,
+request, response, trace, screenshot, or video content. If the browser
+interval or scans cannot be proved safe, no `browser-evidence.json` is
+written.
 
 The DOM evidence mapping is exact:
 
@@ -572,6 +644,17 @@ approval conditions all pass for the same candidate.
   value remains in transcript, evidence, or logs, and uploads nothing if that
   proof fails.
 
+**S12 — Browser failures cannot persist a live capability**
+
+- **Given** a live dashboard capability and an injected assertion, timeout,
+  crash, signal, or cleanup failure at each capability-bearing browser stage,
+- **When** Playwright and its reporter handle that failure,
+- **Then** raw trace, video, screenshot, attachment, console, network, and
+  reporter artifacts have no filesystem or log sink, every emitted failure
+  byte passes the exact in-memory redactor first, unsafe output is suppressed,
+  and only the post-interval typed redacted evidence record may persist after
+  its absence scans pass.
+
 ### Requirements (EARS)
 
 - **R1 (ubiquitous):** The pull-request E2E gate shall require no Codex
@@ -619,6 +702,11 @@ approval conditions all pass for the same candidate.
   apply the exact fragment and bearer replacements before the first
   persistent write, verify absence of the observed and capability-shaped
   values, and block persistence and upload on failure.
+- **R14 (unwanted behavior):** If a capability-bearing Playwright step or its
+  cleanup fails, the suite shall disable every raw framework artifact writer,
+  route stdout/stderr through the exact pre-sink redactor, suppress output
+  whose safety cannot be proved, leave no browser artifact file, and persist
+  only the scanned typed redacted record after the capability-bearing interval.
 
 ## Verification matrix
 
@@ -627,6 +715,7 @@ approval conditions all pass for the same candidate.
 | Inventory-bound staging | Positive and omission/extra/mismatch fixtures run candidate validation with the explicit runtime store plus the inventory provider twice, hash the candidate bundle and both skill files, verify all fifteen public-contract fingerprints, and prove the cache receives exactly the nine declared bytes |
 | Extension runtime | Container and canary fixtures prove the release-metadata digest, platform-matched immutable runtime object, repeated exact request/result protocol, typed receipt field, missing/mismatched/drifted/enforcement failures, no ambient fallback, cleanup before Codex, and no product-source mutation |
 | Capability-safe artifacts | Positive fixtures cover one and multiple fragment/bearer occurrences in top-level and nested JSON strings for pass, fail, and inconclusive runs; byte comparisons prove exact sentinel replacement and otherwise-identical retained JSONL, scans cover transcript/evidence/logs, raw-output spies prove no tee or write, and injected transform/scan failures prove no artifact upload |
+| Capability-safe browser failures | Playwright configuration inspection proves trace/video/screenshot/retry/file reporters and attachments are disabled; injected assertion, timeout, crash, signal, and cleanup failures at every browser stage place the observed capability in page URL, bearer, console, network, exception, and reporter inputs; sink spies prove interception precedes writes/logs, unsafe messages reduce only to the fixed error, the output directory receives no interval file, and the only allowed post-interval file has the exact scanned typed schema |
 | Surface boundary | Fixtures prove staged `codex.local.interactive` identity/version/state, reject cross-surface evidence, and show E2E leaves source, generated support, and inventory files unchanged |
 | Candidate canary | Driver/verifier fixtures regenerate the canonical typed candidate receipt, bind its captured SHA-256 and source commit plus the validator-runtime/metadata/inventory/public-contract/contract-snapshot/surface/qualification/candidate-state/skill-contract/README-support/bundle subjects to exact validated bytes and evidence, and fail before Codex on any mismatch |
 | Release non-promotion | A passing Codex fixture with pending Claude, Node, dashboard, overall, approval, or derivative state creates no tag/history mutation and fails the complete release gate |
@@ -641,8 +730,8 @@ None.
 (1–7) from Trellis's shared artifact-contract rubric, frontmatter is complete;
 ADR-0006, ADR-0007, SPEC-0001 v8, and the approved Stewards metadata spec v2
 are declared; scope is bounded; repository, execution, inventory, evidence,
-non-promotion, and cadence contracts are implementable; S1–S11 are GWT
-scenarios; R1–R13 are EARS requirements; the verification matrix names
+non-promotion, and cadence contracts are implementable; S1–S12 are GWT
+scenarios; R1–R14 are EARS requirements; the verification matrix names
 executable evidence; and no unresolved question is hidden.
 
 ## Gate record
