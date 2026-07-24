@@ -32,9 +32,10 @@ in this repo's AGENTS.md) — plugin-carried since `grove/adr-0026`
 
 ## Decisions are append-only
 
-**Never edit a ratified (`approved`) decision in place.** To change one:
-write a new decision, mark the old one `status: superseded` (or
-`superseded in part` for a partial change), and add a one-line forward
-pointer at the top of the superseded text naming the new decision's
-`id`. No reader should ever land on stale text without a link forward
-— this is how "why is it this way?" stays answerable later.
+**Never edit a ratified (`approved`) decision in place.** To replace one:
+write a new decision, mark the old one `status: superseded`, and add a
+one-line forward pointer at the top of the superseded text naming the new
+decision's `id`. For a partial change, keep the old decision `approved` and
+add the same forward pointer naming the decision that supersedes the affected
+part. No reader should ever land on stale text without a link forward — this
+is how "why is it this way?" stays answerable later.

@@ -1,7 +1,7 @@
 ---
 id: adr-0002-plugin-mcp-distribution
 type: adr
-status: superseded in part
+status: approved
 depends_on: []
 owner: human
 updated: 2026-07-24
