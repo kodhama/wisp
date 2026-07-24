@@ -1,17 +1,36 @@
 ---
 id: spec-0002-codex-e2e-testing
 type: spec
-status: gated
+status: approved  # maintainer authorized the family rollout and merge after independent review; spec-adversary APPROVE-READY and conformance PASS preceded this recording
 depends_on:
   - adr-0007-codex-canary-evidence
-  - spec-0001-plugin-mcp-distribution@v6
+  - adr-0006-family-plugin-release-and-surface-contract
+  - spec-0001-plugin-mcp-distribution@v7
+  - stewards/kodhama-spec-0001-family-plugin-release-and-distribution-metadata@v1
 implements: adr-0007-codex-canary-evidence
 owner: agent
 updated: 2026-07-24
-version: 2
+version: 3
 ---
 
 # SPEC-0002 — Reproducible Codex adapter and dashboard E2E
+
+> **AMENDED 2026-07-24**
+> **WHAT:** Bound the installed-plugin gate and canary to SPEC-0001 v7's
+> nine-path payload, family release inventory, exact candidate bundle digest,
+> and non-promoting surface evidence.
+> **WHY:** ADR-0006 makes release identity and exact-surface claims
+> version-bound; Codex evidence must prove the staged candidate without
+> silently turning a candidate surface into support or bypassing Wisp's full
+> qualification gate.
+> **SCOPE:** Candidate staging, inventory and surface assertions, evidence
+> handoff, release blocking, dependency pins, and verification; version
+> advanced from 2 to 3. Existing deterministic/browser/canary behavior remains
+> unchanged.
+> **POINTER:** ADR-0006, SPEC-0001 v7, and the Stewards family metadata spec.
+> **VALUE:** Codex evidence becomes reusable release input while remaining
+> bounded to the exact Codex surface and candidate artifact it observed.
+> **CONFIDENCE:** verified.
 
 ## Scope
 
@@ -31,9 +50,9 @@ lifecycle. The deterministic gate owns the exact seven-tool inventory because
 `codex exec --json` emits individual MCP calls but no startup inventory event.
 Claude remains outside scope and tracked by issue #25.
 
-All Wisp behavior under test, including the exact eight-path plugin payload,
+All Wisp behavior under test, including the exact nine-path plugin payload,
 seven MCP tools, canonical bus, dashboard security, and ownership lifecycle,
-is inherited from `spec-0001-plugin-mcp-distribution@v6` and is not redefined
+is inherited from `spec-0001-plugin-mcp-distribution@v7` and is not redefined
 here.
 
 ## Required repository surfaces
@@ -47,6 +66,14 @@ here.
 | `scripts/run-e2e-container.mjs` | Shell-free Docker build/run driver; runs the image with `--network none`, an ephemeral home, and no host credential mounts |
 | `scripts/codex-canary.mjs` | Real-host canary driver and evidence writer |
 | `scripts/verify-codex-canary.mjs` | Deterministic candidate-evidence verifier used by the dispatched canary job and release operator |
+| `scripts/wisp-release-contract.mjs` | Product inventory provider and release validator; the E2E gate consumes its checked output |
+| `release/wisp/release.json` | Family release identity and carrier declaration used before staging |
+| `release/wisp/release-inventory.json` | Checked-in complete inventory used to prove the staged nine-path payload |
+| `release/wisp/candidate-state.json` | Committed candidate transaction identity included in candidate-validation receipts |
+| `release/wisp/candidate-validation.v1.schema.json` | Typed receipt schema shared by candidate validation, canary driver, and verifier |
+| `release/wisp/public-contract.json` | Machine source whose digest and rows are validated before staging |
+| `release/wisp/contract-snapshots.json` | Closed public-contract digest preimages bound by candidate validation |
+| `plugins/wisp/surfaces.json` | Version-bound exact-surface source staged with the plugin |
 | `.github/workflows/ci.yml` | Existing Node 20/22/24 checks plus one required `codex-e2e` job |
 | `.github/workflows/codex-canary.yml` | Weekly schedule and candidate `workflow_dispatch` |
 | `package.json` | Exact scripts `test:e2e` and `test:e2e:container`, plus an exact Playwright development version |
@@ -63,9 +90,9 @@ delegate to this command without changing the test architecture.
 
 `test/test-deps.toml` SHALL have schema `1` and exactly two package tables.
 `packages.unit` covers `test/*.test.ts` and names
-`spec-0001-plugin-mcp-distribution@v6`. `packages.e2e` covers
-`test/e2e/**`, names `spec-0001-plugin-mcp-distribution@v6`,
-`spec-0002-codex-e2e-testing@v2`, and the unversioned decisions
+`spec-0001-plugin-mcp-distribution@v7`. `packages.e2e` covers
+`test/e2e/**`, names `spec-0001-plugin-mcp-distribution@v7`,
+`spec-0002-codex-e2e-testing@v3`, and the unversioned decisions
 `adr-0006-codex-e2e-testing` and `adr-0007-codex-canary-evidence`. The
 implementation SHALL update
 `.grove/config.toml`'s `TEST_DEPS_LEDGER` token to this path.
@@ -73,12 +100,31 @@ implementation SHALL update
 ## Deterministic pull-request gate
 
 Each run SHALL create fresh fixture projects, `HOME`, and `CODEX_HOME`. It
-SHALL build the candidate once, verify the source plugin has exactly the eight
+SHALL build the candidate once, verify the source plugin has exactly the nine
 release paths, and byte-copy those paths to:
 
 ```text
 <CODEX_HOME>/plugins/cache/kodhama/wisp/<manifest-version>/
 ```
+
+Before copying, the suite SHALL run Wisp's exact `--validate-candidate`
+contract, which includes family pre-tag metadata validation but permits
+pending qualification and requires neither a release tag nor human release
+approval. It SHALL require the two clean
+inventory-provider byte streams to equal
+`release/wisp/release-inventory.json`; the recursive installed-file inventory
+to equal the metadata extension's exact nine staged paths; and package,
+manifest, cache, MCP, qualification, surface, and inventory identities to bind
+the same candidate version and bundle digest. The inventory SHALL contain
+exactly fifteen public-contract rows, including the two `file-bytes`
+host-visible skill contracts, and the gate SHALL independently hash both
+skill files and the built `plugins/wisp/dist/wisp.mjs`.
+
+The staged `surfaces.json` SHALL be byte-identical to the declared source,
+carry that same version, and include `codex.local.interactive` without
+asserting a broader Codex surface. A candidate row remains candidate; an
+installed E2E pass is evidence input only and SHALL NOT edit the surface file,
+qualification record, release inventory, or README derivatives.
 
 The suite SHALL read the staged Codex manifest and launch its literal
 `mcpServers.wisp.command`, `args`, and declared environment from each fixture
@@ -144,8 +190,8 @@ and run the container command once.
 - `schedule`: once per week, install current stable Codex CLI and the current
   `wisp@kodhama` marketplace release;
 - `workflow_dispatch`: require candidate version, candidate bundle SHA-256,
-  and candidate marketplace source/ref, then install current stable Codex CLI
-  and that exact candidate.
+  candidate-validation receipt SHA-256, and candidate marketplace source/ref,
+  then install current stable Codex CLI and that exact candidate.
 
 Both modes SHALL use a fresh `CODEX_HOME` and fixture project. The driver
 SHALL record `codex --version`, resolved plugin version, bundle SHA-256, and
@@ -201,8 +247,10 @@ The six behavioral booleans have these exclusive truth conditions:
   deadline.
 
 The workflow SHALL upload, without printing it to the job log, an artifact
-containing `codex.jsonl` and `evidence.json`. `evidence.json` rejects unknown
-properties and has exactly this schema:
+containing `codex.jsonl` and `evidence.json`; candidate mode additionally
+contains the exact `candidate-validation.json` receipt while weekly mode
+forbids it. `evidence.json` rejects unknown properties and has exactly this
+schema:
 
 ```json
 {
@@ -217,6 +265,7 @@ properties and has exactly this schema:
   "codex_version": "<nonblank exact version or null when unobserved>",
   "plugin_version": "<SemVer or null when unobserved>",
   "bundle_sha256": "<64 lowercase hexadecimal characters or null when unobserved>",
+  "candidate_validation_sha256": "<64 lowercase hexadecimal characters or null in weekly mode>",
   "completed_tools": [
     "wisp_check",
     "wisp_status",
@@ -238,12 +287,14 @@ millisecond-precision ISO form and `finished_at` is not earlier than
 HTTPS GitHub Actions run URL ending in that decimal id; `git_sha` matches
 `^[0-9a-f]{40}$`; each of `codex_version`, `plugin_version`, and
 `bundle_sha256` is either its observed value or `null` when execution did not
-reach that observation. An observed Codex version is nonblank, an observed
-plugin version is SemVer, and an observed bundle hash matches
-`^[0-9a-f]{64}$`. Sentinel substitutes for unobserved values are forbidden.
-All six named evidence fields are booleans. On `pass`, all three identity
-fields SHALL be non-null and `completed_tools` SHALL equal the three-name list
-above exactly, without omissions, additions, duplicates, or reordering.
+reach that observation. `candidate_validation_sha256` is required and
+non-null in candidate mode and exactly `null` in weekly mode. An observed
+Codex version is nonblank, an observed plugin version is SemVer, and every
+non-null digest matches `^[0-9a-f]{64}$`. Sentinel substitutes for unobserved
+values are forbidden. All six named evidence fields are booleans. On `pass`,
+all three identity fields SHALL be non-null and `completed_tools` SHALL equal
+the three-name list above exactly, without omissions, additions, duplicates,
+or reordering.
 `workflow_id`, `workflow_run_url`, and `git_sha` SHALL come from valid
 `GITHUB_RUN_ID`, `GITHUB_REPOSITORY`, and `GITHUB_SHA` values; the driver
 SHALL reject missing or invalid workflow provenance rather than synthesize
@@ -275,18 +326,39 @@ node scripts/verify-codex-canary.mjs \
   --evidence <evidence.json> \
   --bundle <installed-dist/wisp.mjs> \
   --version <requested-version> \
-  --sha256 <requested-bundle-sha256>
+  --sha256 <requested-bundle-sha256> \
+  --candidate-validation <candidate-validation.json> \
+  --candidate-validation-sha256 <requested-receipt-sha256>
 ```
 
 The verifier SHALL accept no unknown or duplicate arguments. It exits `0`
 only when the evidence is schema-valid, mode `candidate`, overall `pass`, all
 three completed tool names match exactly, all six behavioral booleans are
-true, and its requested version and hash exactly match the evidence. The
+true, and its requested version, bundle hash, and candidate-validation digest
+exactly match the evidence. The
 `--bundle` value SHALL be an absolute path whose canonical value is exactly
 `<real-CODEX_HOME>/plugins/cache/kodhama/wisp/<requested-version>/dist/wisp.mjs`;
 it SHALL be a real regular file, not a symbolic link. The verifier hashes
 those exact file bytes with SHA-256 and requires equality with both
-`--sha256` and `evidence.bundle_sha256`. It exits `1` for valid negative or
+`--sha256` and `evidence.bundle_sha256`.
+
+`--candidate-validation` SHALL be an absolute path to the canonical receipt
+written by SPEC-0001 v7 candidate validation for this workflow commit. The
+verifier rejects a symlink, unsafe path, unknown receipt field, schema
+mismatch, noncanonical bytes, or receipt whose `source_commit` differs from
+`evidence.git_sha`; it hashes the exact receipt bytes and requires equality
+with the dispatch input, `--candidate-validation-sha256`, and
+`evidence.candidate_validation_sha256`. Receipt package version and bundle
+digest shall equal the requested values, evidence, manifest, and installed
+bundle. The receipt's release-metadata, inventory, public-contract, surface,
+contract-snapshot, qualification, candidate-state, lifecycle-skill, and
+dashboard-skill digests shall equal those files in the exact checked-out
+source commit; each skill digest shall also equal its inventory `file-bytes`
+extract, and the two README support digests shall equal the exact
+marker-bounded support-line extracts selected by that inventory before Codex
+starts.
+
+It exits `1` for valid negative or
 mismatched evidence and `2` for invalid/duplicate arguments, absent
 `CODEX_HOME`, an unsafe or unreadable bundle/input, or invalid evidence
 schema. Candidate evidence carrying `inconclusive` is schema-valid but exits
@@ -311,6 +383,30 @@ by SPEC-0001. A release's checked-in `plugins/wisp/qualification.json` is the
 required record boundary for that macOS result; Codex canary artifacts may
 support it but cannot silently set or substitute it.
 
+Before installation, candidate mode runs SPEC-0001 v7
+`--validate-candidate --receipt <new-temp-file>` at `GITHUB_SHA`, hashes those
+canonical bytes, and requires equality with the required
+`candidate_validation_sha256` dispatch input captured from the prior
+candidate-validation job. The input grammar is exactly 64 lowercase
+hexadecimal characters. The workflow passes the typed receipt and digest to
+the driver and final verifier; neither may reconstruct a receipt from caller
+version/hash strings. Version, bundle SHA-256, source commit, release
+metadata, inventory, public contract, contract snapshots, surface,
+qualification, candidate state, both raw-byte skill contracts, and both
+marker-bounded README support subjects must all match before Codex starts.
+
+Successful evidence may be incorporated only by the product-owned
+qualification operation that revalidates the exact candidate and atomically
+updates the checked-in record. The canary workflow itself SHALL NOT mutate
+`qualification.json`, `surfaces.json`, release metadata/inventory/history, or
+support documentation.
+
+Even an exit-`0` candidate verifier is only the exact
+`codex.local.interactive` portion of Wisp's standing gate. No
+`wisp-v<version>` tag is eligible until SPEC-0001 v7's Node, Claude, Codex,
+dashboard, overall, carrier, inventory, surface, derivative, and human
+approval conditions all pass for the same candidate.
+
 ## Acceptance criteria
 
 ### Scenarios (Given/When/Then)
@@ -324,7 +420,7 @@ support it but cannot silently set or substitute it.
 
 **S2 — Installed adapter boundary**
 
-- **Given** the staged eight-path candidate and an empty fixture project,
+- **Given** the staged nine-path candidate and an empty fixture project,
 - **When** the literal manifest bootstrap is launched from that project,
 - **Then** the client lists seven tools and writes only to that project's
   canonical bus.
@@ -358,7 +454,38 @@ support it but cannot silently set or substitute it.
 - **When** the real Codex canary completes,
 - **Then** it stores exact-schema structured-call/bus/dashboard evidence under
   automatic approval review, and only a verifier exit `0` after hashing the
-  exact installed candidate bundle qualifies Wisp's release claim.
+  exact installed candidate bundle qualifies the Codex portion of Wisp's
+  release evidence.
+
+**S7 — Family inventory-bound staging**
+
+- **Given** a built candidate and checked-in family release metadata,
+- **When** the deterministic gate prepares its Codex cache,
+- **Then** candidate validation and two inventory runs agree on the candidate
+  version, source commit, candidate-state, bundle, metadata, inventory,
+  public contract, contract snapshots, qualification, surface source, both
+  raw-byte skill contracts, both marker-bounded README support projections,
+  all fifteen public-contract rows, and exact nine bytes/paths before those
+  paths are staged, and write one canonical typed receipt.
+
+**S8 — Evidence does not promote or release**
+
+- **Given** a passing installed Codex E2E or candidate canary with exact
+  version and digest,
+- **When** its evidence is retained,
+- **Then** no source, qualification, surface, support, tag, or history file is
+  mutated and release remains blocked until SPEC-0001 v7's complete
+  qualification and approval gate passes.
+
+**S9 — Captured candidate receipt binds the canary**
+
+- **Given** the canonical candidate-validation receipt captured by the prior
+  validation job and its SHA-256 dispatch input,
+- **When** candidate mode revalidates the workflow commit, installs Wisp, and
+  verifies its evidence,
+- **Then** the regenerated receipt bytes and every typed subject equal the
+  captured digest, checked-out sources, installed bundle, and evidence record;
+  any mismatch fails before Codex starts.
 
 ### Requirements (EARS)
 
@@ -379,6 +506,33 @@ support it but cannot silently set or substitute it.
   exact version and SHA-256, Wisp shall not claim it qualified for marketplace
   release; external Stewards enforcement requires that repository to invoke
   the verifier.
+- **R7 (event-driven):** When deterministic E2E stages a plugin, it shall first
+  verify the complete family inventory and copy exactly the nine inventoried
+  product-extension payload paths without rewriting the candidate.
+- **R8 (ubiquitous):** The staged manifest, cache bootstrap, MCP initialize
+  version, qualification record, surface contract, inventory, both
+  host-consumed skill contracts, and built bundle digest shall bind the same
+  authority version and candidate bytes.
+- **R9 (unwanted behavior):** If Codex E2E or canary evidence passes, the test
+  layer shall not mutate product release, qualification, surface, support,
+  tag, or history sources and shall not promote another surface.
+- **R10 (state-driven):** While any SPEC-0001 v7 full-release condition is
+  incomplete, Codex evidence shall remain bounded input and shall not
+  authorize `wisp-v<version>`.
+- **R11 (event-driven):** When candidate canary mode starts, it shall
+  regenerate the typed candidate-validation receipt at `GITHUB_SHA`, require
+  byte-digest equality with the captured dispatch input, bind every receipt
+  subject to source/installed/evidence facts, and fail before Codex on any
+  mismatch.
+
+## Verification matrix
+
+| Contract area | Minimum evidence |
+|---|---|
+| Inventory-bound staging | Positive and omission/extra/mismatch fixtures run candidate validation plus the inventory provider twice, hash the candidate bundle and both skill files, verify all fifteen public-contract fingerprints, and prove the cache receives exactly the nine declared bytes |
+| Surface boundary | Fixtures prove staged `codex.local.interactive` identity/version/state, reject cross-surface evidence, and show E2E leaves source, generated support, and inventory files unchanged |
+| Candidate canary | Driver/verifier fixtures regenerate the canonical typed candidate receipt, bind its captured SHA-256 and source commit plus every metadata/inventory/public-contract/contract-snapshot/surface/qualification/candidate-state/skill-contract/README-support/bundle subject to exact installed bytes and evidence, and fail before Codex on any mismatch |
+| Release non-promotion | A passing Codex fixture with pending Claude, Node, dashboard, overall, approval, or derivative state creates no tag/history mutation and fails the complete release gate |
 
 ## Open questions
 
@@ -386,9 +540,18 @@ None.
 
 ## Rubric check
 
-**PASS.** Frontmatter is complete; the approved ADR and behavioral upstream
-are declared and correctly versioned; scope is bounded; repository, execution,
-evidence, and cadence contracts are implementable; GWT scenarios cover the
-end-to-end outcomes; EARS requirements state the invariants; and no unresolved
-question is hidden. Per the Grove lifecycle companion, this self-check
-promotes the agent-authored spec from `draft` to `gated`.
+**PASS.** Frontmatter is complete; ADR-0006, ADR-0007, SPEC-0001 v7, and the
+approved Stewards metadata spec are declared; scope is bounded; repository,
+execution, inventory, evidence, non-promotion, and cadence contracts are
+implementable; S1–S9 are GWT scenarios; R1–R11 are EARS requirements; the
+verification matrix names executable evidence; and no unresolved question is
+hidden.
+
+## Approval record
+
+On 2026-07-24 the maintainer authorized the family-wide rollout, including
+Wisp's version-bound Codex evidence path, and authorized merge after
+independent review. The spec-adversary returned `APPROVE-READY` and the
+conformance reviewer returned `PASS` after candidate-receipt, inventory,
+skill-contract, and non-promotion semantics were made exact. This `approved`
+status records that prior human intent act.
