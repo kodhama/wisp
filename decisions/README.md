@@ -30,6 +30,13 @@ states, lives in the grove **lifecycle companion**, `plugin@0.1.0` (the stamp
 in this repo's AGENTS.md) — plugin-carried since `grove/adr-0026`
 (`grove/adr-0008`), not restated here.
 
+## External reference registry
+
+Qualified external dependencies use `<repo>/<id>@vN` when the upstream is
+counter-versioned. Wisp registers `stewards/` as
+`https://github.com/kodhama/stewards`; structural corpus checks resolve that
+prefix and pin shape without treating the external repository as Wisp-owned.
+
 ## Decisions are append-only
 
 **Never edit a ratified (`approved`) decision in place.** To replace one:
