@@ -29,9 +29,6 @@ jobs:
   canary:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    env:
-      CODEX_HOME: ${{ runner.temp }}/wisp-codex-home
-      EVIDENCE_DIR: ${{ runner.temp }}/wisp-codex-evidence
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -46,6 +43,8 @@ jobs:
         if: github.event_name == 'schedule'
         continue-on-error: true
         env:
+          CODEX_HOME: ${{ runner.temp }}/wisp-codex-home
+          EVIDENCE_DIR: ${{ runner.temp }}/wisp-codex-evidence
           CANARY_CODEX_API_KEY: ${{ secrets.CODEX_API_KEY }}
           CODEX_INSTALL_OUTCOME: ${{ steps.install_codex.outcome }}
         run: >-
@@ -59,6 +58,8 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         continue-on-error: true
         env:
+          CODEX_HOME: ${{ runner.temp }}/wisp-codex-home
+          EVIDENCE_DIR: ${{ runner.temp }}/wisp-codex-evidence
           CANARY_CODEX_API_KEY: ${{ secrets.CODEX_API_KEY }}
           CODEX_INSTALL_OUTCOME: ${{ steps.install_codex.outcome }}
           CANARY_MARKETPLACE_SOURCE: ${{ inputs.candidate_marketplace_source }}
@@ -76,6 +77,8 @@ jobs:
       - name: Verify exact candidate evidence
         if: github.event_name == 'workflow_dispatch'
         env:
+          CODEX_HOME: ${{ runner.temp }}/wisp-codex-home
+          EVIDENCE_DIR: ${{ runner.temp }}/wisp-codex-evidence
           CANARY_VERSION: ${{ inputs.candidate_version }}
           CANARY_SHA256: ${{ inputs.candidate_bundle_sha256 }}
         run: >-
@@ -89,6 +92,8 @@ jobs:
         run: exit 1
       - name: Upload private canary evidence
         if: always()
+        env:
+          EVIDENCE_DIR: ${{ runner.temp }}/wisp-codex-evidence
         uses: actions/upload-artifact@v4
         with:
           name: codex-canary-${{ github.run_id }}
