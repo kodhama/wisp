@@ -1,2 +1,4 @@
 node_modules
 .grove/runtime/
+test-results/
+playwright-report/

@@ -11,6 +11,9 @@ updated: 2026-07-24
 
 # ADR-0006 — Establish reproducible Codex end-to-end testing
 
+> **PARTIAL SUPERSESSION:** `adr-0007-codex-canary-evidence` supersedes only
+> this decision's real-Codex canary evidence and headless-approval details.
+
 ## Decision state
 
 ### Decided
