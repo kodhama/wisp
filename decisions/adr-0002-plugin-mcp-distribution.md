@@ -13,6 +13,12 @@ updated: 2026-07-24
 > disproven Codex roots binding, and
 > `adr-0005-plugin-dashboard-lifecycle`, which adds the explicit bundled
 > dashboard while preserving this decision's distribution model.
+>
+> **Forward pointer.**
+> `adr-0006-family-plugin-release-and-surface-contract` makes root
+> `package.json` the one SemVer authority; the existing equal-manifest and
+> qualification requirements remain release gates, now version-bound to the
+> product surface contract and immutable `wisp-v<version>` tag.
 
 ## Decision state
 
