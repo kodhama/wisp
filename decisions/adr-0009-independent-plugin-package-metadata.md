@@ -1,7 +1,7 @@
 ---
 id: adr-0009-independent-plugin-package-metadata
 type: adr
-status: draft
+status: gated
 depends_on:
   - adr-0002-plugin-mcp-distribution
   - adr-0004-codex-session-bootstrap
@@ -40,8 +40,7 @@ updated: 2026-07-24
 
 The maintainer confirmed this exact rollout on 2026-07-24 after reviewing the
 version choice, artifact/spec propagation, implementation carriers, tests,
-and exclusions. This draft records that direction; lifecycle promotion still
-waits for the independent soundness gate.
+and exclusions. This record still waits for the independent soundness gate.
 
 ### Open
 
@@ -228,4 +227,8 @@ Rejected because availability and behavior are independently evidenced facts.
 ## Lifecycle record
 
 Drafted after the maintainer confirmed the exact Wisp-local rollout on
-2026-07-24. Independent soundness and corpus review are still owed.
+2026-07-24. The author self-check found the package authority, pending
+qualification, surface/evidence separation, downstream propagation, and
+explicit exclusions internally consistent with ADR-0008 and the standing
+product decisions, with no open intent item; that self-check moved the record
+to `gated`. Independent soundness and corpus review are still owed.
