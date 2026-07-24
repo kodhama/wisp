@@ -1,6 +1,6 @@
 {
-  "plugin_version": "0.1.0",
-  "artifact_sha256": "dc319c5f3d8d9193d6594f8f58c26f905f4b4e162c848c9301d9061cbde97dc7",
+  "plugin_version": "0.2.0",
+  "artifact_sha256": "dce54d85d2edb7c6f78b2f8cb9a9d1039adcac2afb716d6dbcbc88951bfc0450",
   "date": "2026-07-24",
   "platform": "darwin",
   "architecture": "arm64",
@@ -19,9 +19,9 @@
     }
   },
   "claude": {
-    "version": "2.1.206",
+    "version": "2.1.199",
     "result": "pending",
-    "tools_listed": true,
+    "tools_listed": false,
     "check_passed": false,
     "write_passed": false,
     "bus_path_verified": false
@@ -33,6 +33,18 @@
     "check_passed": true,
     "write_passed": true,
     "bus_path_verified": true
+  },
+  "dashboard": {
+    "result": "pending",
+    "explicit_start_only": true,
+    "claude_open_passed": false,
+    "codex_open_passed": true,
+    "cross_host_singleton_passed": false,
+    "project_isolation_passed": true,
+    "command_append_passed": true,
+    "security_passed": true,
+    "cleanup_recovery_passed": true,
+    "process_identity_passed": true
   },
   "result": "pending"
 }

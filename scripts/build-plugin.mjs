@@ -18,7 +18,7 @@ const result = await build({
 const forbidden = /(?:^|[/\\])(?:@hono|hono|express)(?:[/\\]|$)|serve-static|streamableHttp/i;
 const forbiddenInputs = Object.keys(result.metafile.inputs).filter((input) => forbidden.test(input));
 if (forbiddenInputs.length > 0) {
-  throw new Error(`HTTP server code entered the stdio bundle:\n${forbiddenInputs.join("\n")}`);
+  throw new Error(`Third-party or remote HTTP transport entered the self-contained bundle:\n${forbiddenInputs.join("\n")}`);
 }
 
 const generated = await readFile(outfile, "utf8");

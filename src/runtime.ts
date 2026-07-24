@@ -3,6 +3,7 @@ import {
   lstat,
   mkdir,
   open,
+  readdir,
   realpath,
   rename,
   rmdir,
@@ -11,6 +12,7 @@ import {
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { randomUUID } from "node:crypto";
+import { currentProcessIdentity, observeProcess, processInstanceIsGone } from "./process-identity.ts";
 
 export const PROTOCOL_VERSION = 1 as const;
 export const BUS_RELATIVE_PATH = ".wisp/events.ndjson";
@@ -52,6 +54,8 @@ type ErrorCode =
   | "command_conflict"
   | "command_not_pending"
   | "command_not_targeted"
+  | "dashboard_unavailable"
+  | "dashboard_version_conflict"
   | "internal_error";
 
 export class WispError extends Error {
@@ -189,6 +193,7 @@ const INPUT_KEYS: Record<string, readonly string[]> = {
   wisp_question: ["run", "agent", "question_id", "text", "to", "via"],
   wisp_check: ["run", "agent"],
   wisp_ack: ["run", "agent", "command_id", "result", "note", "to", "via"],
+  wisp_dashboard: [],
 };
 
 export function validateToolInput(tool: string, input: unknown): AnyRecord {
@@ -196,6 +201,7 @@ export function validateToolInput(tool: string, input: unknown): AnyRecord {
   if (allowed === undefined) inputError("", "invalid_enum");
   const record = ownRecord(input, "");
   rejectUnknown(record, allowed);
+  if (tool === "wisp_dashboard") return record;
   const base = {
     run: identifier(required(record, "run"), "/run"),
     agent: identifier(required(record, "agent"), "/agent"),
@@ -644,24 +650,58 @@ async function appendEventUnlocked(project: string, event: CanonicalEvent): Prom
 
 const LOCK_STALE_MS = 120_000;
 const LOCK_WAIT_MS = 5_000;
+const RELEASE_SYNC_MS = 250;
+const RELEASE_RETRY_MS = 10;
+const committedTokens = new Set<string>();
+let committedReleaseHorizonMs = LOCK_WAIT_MS;
+
+export function setCommittedReleaseHorizonForTesting(milliseconds: number): void {
+  committedReleaseHorizonMs = milliseconds;
+}
+
+export function hasCommittedTokenForTesting(token: string): boolean {
+  return committedTokens.has(token);
+}
+
+interface LockOwner {
+  token: string;
+  pid: number;
+  process_identity: string;
+  created: number;
+  phase: "held" | "committed";
+}
 
 async function withWriteLock<T>(project: string, operation: () => Promise<T>): Promise<T> {
   const { directory } = await inspectOwnedPaths(project, "write");
   const lockPath = join(directory, "write.lock");
   const ownerPath = join(lockPath, "owner.json");
   const token = randomUUID();
+  const identity = await currentProcessIdentity();
+  if (identity === undefined) {
+    throw new WispError("bus_unwritable", "Process identity is unavailable", {
+      path: lockPath,
+      reason: "process_identity_unavailable",
+    });
+  }
   const deadline = Date.now() + LOCK_WAIT_MS;
+  const owner: LockOwner = {
+    token,
+    pid: process.pid,
+    process_identity: identity,
+    created: Date.now(),
+    phase: "held",
+  };
 
   while (true) {
     try {
       await mkdir(lockPath, { mode: 0o700 });
-      const owner = Buffer.from(JSON.stringify({ token, pid: process.pid, created: Date.now() }), "utf8");
+      const ownerBytes = Buffer.from(JSON.stringify(owner), "utf8");
       const flags = fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL |
         (typeof fsConstants.O_NOFOLLOW === "number" ? fsConstants.O_NOFOLLOW : 0);
       const handle = await open(ownerPath, flags, 0o600);
       try {
-        const { bytesWritten } = await handle.write(owner, 0, owner.byteLength, null);
-        if (bytesWritten !== owner.byteLength) throw new Error("short lock owner write");
+        const { bytesWritten } = await handle.write(ownerBytes, 0, ownerBytes.byteLength, null);
+        if (bytesWritten !== ownerBytes.byteLength) throw new Error("short lock owner write");
       } finally {
         await handle.close().catch(() => undefined);
       }
@@ -672,6 +712,14 @@ async function withWriteLock<T>(project: string, operation: () => Promise<T>): P
         await rmdir(lockPath).catch(() => undefined);
         throw new WispError("bus_unwritable", "Cannot acquire write lock", { path: lockPath, reason: "open_failed" });
       }
+      const blocked = await readLockOwner(ownerPath).catch(() => undefined);
+      if (
+        blocked !== undefined && committedTokens.has(blocked.token) &&
+        blocked.pid === process.pid && blocked.process_identity === identity
+      ) {
+        await releaseCommittedLock(lockPath, ownerPath, blocked, Date.now() + RELEASE_SYNC_MS, false);
+        continue;
+      }
       await recoverStaleLock(lockPath, ownerPath);
       if (Date.now() >= deadline) {
         throw new WispError("bus_unwritable", "Timed out acquiring write lock", { path: lockPath, reason: "open_failed" });
@@ -680,19 +728,118 @@ async function withWriteLock<T>(project: string, operation: () => Promise<T>): P
     }
   }
 
+  let committed = false;
   try {
-    return await operation();
+    const result = await operation();
+    committed = true;
+    return result;
   } finally {
-    try {
-      const owner = await readLockOwner(ownerPath);
-      if (owner.token === token) {
-        await unlink(ownerPath);
-        await rmdir(lockPath);
+    if (committed) {
+      owner.phase = "committed";
+      const commitHorizon = Date.now() + committedReleaseHorizonMs;
+      const released = await releaseCommittedLock(lockPath, ownerPath, owner, Date.now() + RELEASE_SYNC_MS);
+      if (!released) {
+        committedTokens.add(token);
+        scheduleCommittedRelease(lockPath, ownerPath, owner, commitHorizon);
       }
-    } catch {
-      // A stale-lock recovery may already have moved this owner's directory.
+    } else {
+      await releaseHeldLock(lockPath, ownerPath, owner, Date.now() + RELEASE_SYNC_MS);
     }
   }
+}
+
+async function releaseCommittedLock(
+  lockPath: string,
+  ownerPath: string,
+  owner: LockOwner,
+  deadline: number,
+  diagnose = true,
+): Promise<boolean> {
+  let stage: "phase_publish" | "release_rename" = "phase_publish";
+  let diagnosed = false;
+  while (Date.now() <= deadline) {
+    try {
+      stage = "phase_publish";
+      const current = await readLockOwner(ownerPath);
+      if (
+        current.token !== owner.token || current.pid !== owner.pid ||
+        current.process_identity !== owner.process_identity
+      ) return false;
+      if (current.phase !== "committed") await replaceLockOwner(ownerPath, owner);
+      stage = "release_rename";
+      const published = await readLockOwner(ownerPath);
+      if (!sameLockOwner(published, owner)) return false;
+      const retired = `${lockPath}.retired-${owner.token}`;
+      await rename(lockPath, retired);
+      committedTokens.delete(owner.token);
+      scheduleRetiredCleanup(retired);
+      return true;
+    } catch {
+      if (diagnose && !diagnosed) {
+        releaseDiagnostic(stage);
+        diagnosed = true;
+      }
+      await delay(RELEASE_RETRY_MS);
+    }
+  }
+  if (diagnose && !diagnosed) releaseDiagnostic(stage);
+  return false;
+}
+
+async function releaseHeldLock(
+  lockPath: string,
+  ownerPath: string,
+  owner: LockOwner,
+  deadline: number,
+): Promise<void> {
+  while (Date.now() <= deadline) {
+    try {
+      const current = await readLockOwner(ownerPath);
+      if (!sameLockOwner(current, owner)) return;
+      const retired = `${lockPath}.retired-${owner.token}`;
+      await rename(lockPath, retired);
+      scheduleRetiredCleanup(retired);
+      return;
+    } catch {
+      await delay(RELEASE_RETRY_MS);
+    }
+  }
+  releaseDiagnostic("release_rename");
+}
+
+function scheduleCommittedRelease(
+  lockPath: string,
+  ownerPath: string,
+  owner: LockOwner,
+  horizon: number,
+): void {
+  const worker = async (): Promise<void> => {
+    if (Date.now() > horizon) {
+      committedTokens.delete(owner.token);
+      return;
+    }
+    if (!committedTokens.has(owner.token)) return;
+    const released = await releaseCommittedLock(lockPath, ownerPath, owner, Date.now() + 45, false);
+    if (!released && Date.now() <= horizon) {
+      const timer = setTimeout(() => { void worker(); }, 50);
+      timer.unref();
+    } else if (!released) {
+      committedTokens.delete(owner.token);
+    }
+  };
+  const timer = setTimeout(() => { void worker(); }, 50);
+  timer.unref();
+}
+
+function scheduleRetiredCleanup(path: string): void {
+  const timer = setTimeout(async () => {
+    if (!await cleanupLockDirectory(path)) releaseDiagnostic("retired_cleanup");
+  }, 0);
+  timer.unref();
+}
+
+function releaseDiagnostic(stage: "phase_publish" | "release_rename" | "retired_cleanup"): void {
+  process.stderr.write(`wisp lock incident ${randomUUID()} stage=${stage}\n`);
 }
 
 export async function recoverStaleLock(lockPath: string, ownerPath: string): Promise<void> {
@@ -709,30 +856,37 @@ export async function recoverStaleLock(lockPath: string, ownerPath: string): Pro
     throw new WispError("bus_unwritable", "Write lock is not a directory", { path: lockPath, reason: "path_not_directory" });
   }
   let dead = false;
+  let owner: LockOwner | undefined;
   try {
     const ownerInfo = await lstat(ownerPath);
-    if (ownerInfo.isSymbolicLink() || !ownerInfo.isFile()) return;
-    const owner = await readLockOwner(ownerPath);
-    const ownerPid = typeof owner.pid === "number" && Number.isInteger(owner.pid) && owner.pid > 0
-      ? owner.pid
-      : undefined;
-    if (ownerPid !== undefined) {
-      try {
-        process.kill(ownerPid, 0);
-        return;
-      } catch (error) {
-        dead = error instanceof Error && "code" in error && error.code === "ESRCH";
-        if (!dead) return;
-      }
+    if (ownerInfo.isSymbolicLink()) {
+      throw new WispError("bus_unwritable", "Write-lock owner is a symlink", {
+        path: ownerPath,
+        reason: "path_is_symlink",
+      });
     }
-    if (ownerPid === undefined) {
-      const ageBase = typeof owner.created === "number" ? owner.created : info.mtimeMs;
-      dead = Date.now() - ageBase > LOCK_STALE_MS;
+    if (!ownerInfo.isFile()) {
+      throw new WispError("bus_unwritable", "Write-lock owner is not a regular file", {
+        path: ownerPath,
+        reason: "path_not_regular_file",
+      });
     }
-  } catch {
-    dead = Date.now() - info.mtimeMs > LOCK_STALE_MS;
+    owner = await readLockOwner(ownerPath);
+    const observed = await observeProcess(owner.pid);
+    const gone = processInstanceIsGone(owner.process_identity, observed);
+    if (gone === undefined) return;
+    dead = gone || (!gone && owner.phase === "committed");
+  } catch (error) {
+    if (error instanceof WispError) throw error;
+    const created = await readMalformedOwnerCreated(ownerPath);
+    dead = Date.now() - (created ?? info.mtimeMs) > LOCK_STALE_MS;
   }
   if (!dead) return;
+  if (owner !== undefined) {
+    let current: LockOwner;
+    try { current = await readLockOwner(ownerPath); } catch { return; }
+    if (!sameLockOwner(current, owner)) return;
+  }
   const stale = `${lockPath}.stale-${randomUUID()}`;
   try {
     await rename(lockPath, stale);
@@ -743,26 +897,101 @@ export async function recoverStaleLock(lockPath: string, ownerPath: string): Pro
   await rmdir(stale).catch(() => undefined);
 }
 
-async function readLockOwner(path: string): Promise<{ token?: unknown; pid?: unknown; created?: unknown }> {
+function sameLockOwner(left: LockOwner, right: LockOwner): boolean {
+  return left.token === right.token && left.pid === right.pid &&
+    left.process_identity === right.process_identity && left.created === right.created &&
+    left.phase === right.phase;
+}
+
+async function readMalformedOwnerCreated(path: string): Promise<number | undefined> {
+  const flags = fsConstants.O_RDONLY |
+    (typeof fsConstants.O_NOFOLLOW === "number" ? fsConstants.O_NOFOLLOW : 0);
+  try {
+    const handle = await open(path, flags);
+    try {
+      const value = JSON.parse(await handle.readFile("utf8")) as Record<string, unknown>;
+      return typeof value.created === "number" &&
+        Number.isFinite(value.created) && Number.isInteger(value.created) && value.created >= 0
+        ? value.created
+        : undefined;
+    } finally {
+      await handle.close();
+    }
+  } catch {
+    return undefined;
+  }
+}
+
+async function readLockOwner(path: string): Promise<LockOwner> {
   const flags = fsConstants.O_RDONLY |
     (typeof fsConstants.O_NOFOLLOW === "number" ? fsConstants.O_NOFOLLOW : 0);
   const handle = await open(path, flags);
   try {
     const info = await handle.stat();
     if (!info.isFile()) throw new Error("lock owner is not a regular file");
-    return JSON.parse(await handle.readFile("utf8")) as {
-      token?: unknown;
-      pid?: unknown;
-      created?: unknown;
-    };
+    const value = JSON.parse(await handle.readFile("utf8")) as Record<string, unknown>;
+    if (
+      Object.keys(value).sort().join(",") !== "created,phase,pid,process_identity,token" ||
+      typeof value.token !== "string" || !/^[0-9a-f-]{36}$/u.test(value.token) ||
+      typeof value.pid !== "number" || !Number.isInteger(value.pid) || value.pid <= 0 ||
+      typeof value.process_identity !== "string" || value.process_identity.length === 0 ||
+      typeof value.created !== "number" || !Number.isInteger(value.created) || value.created < 0 ||
+      (value.phase !== "held" && value.phase !== "committed")
+    ) throw new Error("invalid lock owner");
+    return value as unknown as LockOwner;
   } finally {
     await handle.close().catch(() => undefined);
   }
 }
 
+async function replaceLockOwner(path: string, owner: LockOwner): Promise<void> {
+  const temporary = `${path}.tmp-${randomUUID()}`;
+  const handle = await open(temporary, fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL, 0o600);
+  try {
+    try {
+      await handle.writeFile(JSON.stringify(owner), "utf8");
+    } finally {
+      await handle.close();
+    }
+    await rename(temporary, path);
+  } catch (error) {
+    await handle.close().catch(() => undefined);
+    await unlink(temporary).catch(() => undefined);
+    throw error;
+  }
+}
+
+async function cleanupLockDirectory(path: string): Promise<boolean> {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      await unlink(join(path, "owner.json")).catch(() => undefined);
+      const entries = await readdir(path).catch(() => []);
+      await Promise.all(entries
+        .filter((entry) => entry.startsWith("owner.json.tmp-"))
+        .map((entry) => unlink(join(path, entry)).catch(() => undefined)));
+      await rmdir(path);
+      return true;
+    } catch {
+      await delay(50);
+    }
+  }
+  return false;
+}
+
 interface CommandState {
   event: CanonicalEvent;
   status: "pending" | (typeof ACK_RESULTS)[number];
+}
+
+export interface DashboardCommandState {
+  run: string;
+  id: string;
+  type: (typeof COMMAND_TYPES)[number];
+  target: string;
+  issued_by: string;
+  issued_at: string;
+  status: "pending" | (typeof ACK_RESULTS)[number];
+  payload?: JsonObject;
 }
 
 function commandStates(events: CanonicalEvent[], run: string): CommandState[] {
@@ -940,6 +1169,67 @@ export function createRuntime(project: string, now: () => Date = () => new Date(
         await appendEventUnlocked(projectPath, event);
         return event;
       });
+    },
+    async dashboardEvents(): Promise<{
+      events: CanonicalEvent[];
+      parse_errors: ParseErrorRecord[];
+      command_states: DashboardCommandState[];
+    }> {
+      const parsed = await readBus(await canonicalProject);
+      if (parsed.parse_errors.length > LIMITS.parse_errors) {
+        throw new WispError("bus_limit_exceeded", "Too many parse errors", {
+          subject: "parse_errors", unit: "items", limit: LIMITS.parse_errors,
+          actual: parsed.parse_errors.length,
+        });
+      }
+      const runs: string[] = [];
+      for (const event of parsed.events) {
+        if (event.kind === "command" && !runs.includes(event.run)) runs.push(event.run);
+      }
+      const command_states = runs.flatMap((run) => commandStates(parsed.events, run).map(({ event, status }) => {
+        const body = event.command as AnyRecord;
+        return {
+          run,
+          id: body.id as string,
+          type: body.type as DashboardCommandState["type"],
+          target: body.target as string,
+          issued_by: event.agent,
+          issued_at: event.ts,
+          status,
+          ...(Object.hasOwn(body, "payload") ? { payload: body.payload as JsonObject } : {}),
+        };
+      }));
+      if (command_states.length > LIMITS.commands) {
+        throw new WispError("bus_limit_exceeded", "Too many commands", {
+          subject: "commands", unit: "items", limit: LIMITS.commands, actual: command_states.length,
+        });
+      }
+      return { ...parsed, command_states };
+    },
+    async issueCommand(input: unknown): Promise<CanonicalEvent> {
+      const record = ownRecord(input, "");
+      rejectUnknown(record, ["run", "type", "target", "payload"]);
+      const run = identifier(required(record, "run"), "/run");
+      const type = enumValue(required(record, "type"), "/type", COMMAND_TYPES);
+      const target = identifier(required(record, "target"), "/target");
+      let payload: JsonObject | undefined;
+      if (Object.hasOwn(record, "payload")) {
+        payload = ownRecord(record.payload, "/payload") as JsonObject;
+      }
+      const event = stamp(now, {
+        run,
+        agent: "maintainer",
+        kind: "command",
+        command: {
+          id: `cmd-${randomUUID()}`,
+          type,
+          target,
+          ...(payload === undefined ? {} : { payload }),
+        },
+      });
+      const projectPath = await canonicalProject;
+      await withWriteLock(projectPath, () => appendEventUnlocked(projectPath, event));
+      return event;
     },
   };
 }

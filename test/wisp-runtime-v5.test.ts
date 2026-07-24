@@ -15,6 +15,7 @@ import {
   validateStoredEvent,
   validateToolInput,
 } from "../src/runtime.ts";
+import { currentProcessIdentity } from "../src/process-identity.ts";
 
 const ts = "2026-07-23T12:34:56.789Z";
 
@@ -285,11 +286,17 @@ describe("SPEC-0001 cross-process lock recovery", () => {
     await mkdir(lock, { recursive: true });
     await writeFile(
       join(lock, "owner.json"),
-      JSON.stringify({ token: "live", pid: process.pid, created: 0 }),
+      JSON.stringify({
+        token: "00000000-0000-4000-8000-000000000001",
+        pid: process.pid,
+        process_identity: await currentProcessIdentity(),
+        created: 0,
+        phase: "held",
+      }),
     );
     await recoverStaleLock(lock, join(lock, "owner.json"));
     expect(JSON.parse(await readFile(join(lock, "owner.json"), "utf8"))).toMatchObject({
-      token: "live",
+      token: "00000000-0000-4000-8000-000000000001",
       pid: process.pid,
     });
   });
@@ -300,7 +307,13 @@ describe("SPEC-0001 cross-process lock recovery", () => {
     await mkdir(first, { recursive: true });
     await writeFile(
       join(first, "owner.json"),
-      JSON.stringify({ token: "dead", pid: 2_147_483_647, created: Date.now() }),
+      JSON.stringify({
+        token: "00000000-0000-4000-8000-000000000002",
+        pid: 2_147_483_647,
+        process_identity: "darwin:1970-01-01T00:00:00",
+        created: Date.now(),
+        phase: "held",
+      }),
     );
     await recoverStaleLock(first, join(first, "owner.json"));
     await expect(readFile(join(first, "owner.json"))).rejects.toMatchObject({ code: "ENOENT" });

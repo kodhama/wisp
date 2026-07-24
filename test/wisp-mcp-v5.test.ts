@@ -1,4 +1,4 @@
-// SPEC-0001 v5: S11, S13, S17-S19, S22 / R13-R23.
+// SPEC-0001 v6: S11, S13, S17-S19, S22, S32 / R13-R23.
 import { describe, expect, it, vi } from "vitest";
 import { TOOL_NAMES, callWispTool, createToolDefinitions } from "../src/mcp.ts";
 import { WispError } from "../src/runtime.ts";
@@ -17,7 +17,7 @@ function runtime() {
 }
 
 describe("SPEC-0001 S11/S13/S17/S22 — exact MCP boundary", () => {
-  it("exposes exactly six strict tool definitions and no command tool", () => {
+  it("exposes exactly seven strict tool definitions and no MCP command-issuance tool", () => {
     expect(TOOL_NAMES).toEqual([
       "wisp_status",
       "wisp_heartbeat",
@@ -25,6 +25,7 @@ describe("SPEC-0001 S11/S13/S17/S22 — exact MCP boundary", () => {
       "wisp_question",
       "wisp_check",
       "wisp_ack",
+      "wisp_dashboard",
     ]);
     const definitions = createToolDefinitions();
     expect(definitions.map((tool) => tool.name)).toEqual(TOOL_NAMES);
