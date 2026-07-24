@@ -1,18 +1,33 @@
 ---
 id: spec-0002-codex-e2e-testing
 type: spec
-status: approved
+status: gated
 depends_on:
   - adr-0007-codex-canary-evidence
   - adr-0008-retire-family-release-certification
-  - spec-0001-plugin-mcp-distribution@v9
+  - adr-0009-independent-plugin-package-metadata
+  - spec-0001-plugin-mcp-distribution@v10
 implements: adr-0007-codex-canary-evidence
 owner: agent
 updated: 2026-07-24
-version: 5
+version: 6
 ---
 
 # SPEC-0002 — Reproducible Codex adapter and dashboard E2E
+
+> **AMENDED 2026-07-24**
+> **WHAT:** Advanced deterministic installed-plugin staging from the prior
+> eight-path payload to SPEC-0001@v10's ten-path payload, including `VERSION`
+> and `surfaces.json`, and advanced dependency-ledger identity.
+> **WHY:** ADR-0009 makes those files part of the exact Wisp candidate rather
+> than optional repository metadata.
+> **SCOPE:** Candidate file inventory, staging, and dependency pins; version
+> advanced from 5 to 6. Codex launch, model, MCP, dashboard, browser,
+> capability-safety, and canary behavior remain unchanged.
+> **POINTER:** ADR-0009 and SPEC-0001@v10.
+> **VALUE:** A contributor's deterministic Codex fixture exercises the same
+> complete package that a host cache receives.
+> **CONFIDENCE:** verified.
 
 > **AMENDED 2026-07-24**
 > **WHAT:** Retired the family release/runtime machinery while retaining the
@@ -47,9 +62,9 @@ lifecycle. The deterministic gate owns the exact seven-tool inventory because
 `codex exec --json` emits individual MCP calls but no startup inventory event.
 Claude remains outside scope and tracked by issue #25.
 
-All Wisp behavior under test, including the exact eight-path plugin payload,
+All Wisp behavior under test, including the exact ten-path plugin payload,
 seven MCP tools, canonical bus, dashboard security, and ownership lifecycle,
-is inherited from `spec-0001-plugin-mcp-distribution@v9` and is not redefined
+is inherited from `spec-0001-plugin-mcp-distribution@v10` and is not redefined
 here.
 
 ## Required repository surfaces
@@ -79,9 +94,9 @@ delegate to this command without changing the test architecture.
 
 `test/test-deps.toml` SHALL have schema `1` and exactly two package tables.
 `packages.unit` covers `test/*.test.ts` and names
-`spec-0001-plugin-mcp-distribution@v9`. `packages.e2e` covers
-`test/e2e/**`, names `spec-0001-plugin-mcp-distribution@v9`,
-`spec-0002-codex-e2e-testing@v5`, and the unversioned decisions
+`spec-0001-plugin-mcp-distribution@v10`. `packages.e2e` covers
+`test/e2e/**`, names `spec-0001-plugin-mcp-distribution@v10`,
+`spec-0002-codex-e2e-testing@v6`, and the unversioned decisions
 `adr-0006-codex-e2e-testing` and `adr-0007-codex-canary-evidence`. The
 implementation SHALL update
 `.grove/config.toml`'s `TEST_DEPS_LEDGER` token to this path.
@@ -89,8 +104,9 @@ implementation SHALL update
 ## Deterministic pull-request gate
 
 Each run SHALL create fresh fixture projects, `HOME`, and `CODEX_HOME`. It
-SHALL build the candidate once, verify the source plugin has exactly the eight
-release paths, and byte-copy those paths to:
+SHALL build the candidate once, verify the source plugin has exactly the ten
+candidate paths defined by SPEC-0001@v10, and byte-copy all ten paths,
+including `VERSION` and `surfaces.json`, to:
 
 ```text
 <CODEX_HOME>/plugins/cache/kodhama/wisp/<manifest-version>/
@@ -436,10 +452,11 @@ support it but cannot silently set or substitute it.
 
 **S2 — Installed adapter boundary**
 
-- **Given** the staged eight-path candidate and an empty fixture project,
+- **Given** the staged ten-path candidate and an empty fixture project,
 - **When** the literal manifest bootstrap is launched from that project,
 - **Then** the client lists seven tools and writes only to that project's
-  canonical bus.
+  canonical bus, while the staged `VERSION` and `surfaces.json` remain
+  byte-identical to the source candidate.
 
 **S3 — Explicit singleton dashboard**
 
@@ -524,6 +541,9 @@ support it but cannot silently set or substitute it.
   route stdout/stderr through the exact pre-sink redactor, suppress output
   whose safety cannot be proved, leave no browser artifact file, and persist
   only the scanned typed redacted record after the capability-bearing interval.
+- **R15 (ubiquitous):** The deterministic installed-plugin fixture shall
+  verify and byte-stage exactly SPEC-0001@v10's ten candidate paths, including
+  `VERSION` and `surfaces.json`, into the manifest-version cache directory.
 
 ## Verification matrix
 
@@ -538,12 +558,12 @@ None.
 
 ## Rubric check
 
-**PASS.** Frontmatter is complete; the approved ADR and behavioral upstream
-are declared and correctly versioned; scope is bounded; repository, execution,
-evidence, and cadence contracts are implementable; GWT scenarios cover the
-end-to-end outcomes; EARS requirements state the invariants; and no unresolved
-question is hidden. Per the Grove lifecycle companion, this self-check
-promotes the agent-authored spec from `draft` to `gated`.
+**PASS.** Frontmatter is complete; ADR-0009 and SPEC-0001@v10 are approved or
+gated consumable upstreams with exact pins; scope is bounded; repository,
+execution, evidence, and cadence contracts are implementable; GWT scenarios
+cover the end-to-end outcomes; EARS requirements state the invariants; and no
+unresolved question is hidden. Per the Grove lifecycle companion, this
+self-check promotes version 6 from `draft` to `gated`.
 
 ## Gate record
 
@@ -555,3 +575,8 @@ completed gates; it does not claim the retained implementation debt has
 landed. Hosted Codex review then found and this version corrected one
 overbroad sentence: an exit-`0` Codex verifier is necessary evidence, never a
 substitute for Wisp's remaining product-owned release gates.
+
+Version 6 records ADR-0009's exact ten-path installed-candidate staging and
+dependency-ledger amendment. The rubric self-check above passed and moved this
+version to `gated`; independent intrinsic-quality and fidelity gates are
+still owed.
