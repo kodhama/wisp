@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-import { constants as fsConstants } from "node:fs";
+import { constants as fsConstants, type Stats } from "node:fs";
 import { lstat, mkdir, open, realpath, rename, rmdir, unlink } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { homedir } from "node:os";
@@ -237,6 +237,10 @@ async function ensurePrivateDirectory(path: string): Promise<void> {
 
 async function assertPrivateDirectory(path: string): Promise<void> {
   const info = await lstat(path).catch(() => { throw unavailable("runtime_unsafe", false); });
+  assertPrivateDirectoryInfo(info);
+}
+
+function assertPrivateDirectoryInfo(info: Stats): void {
   if (info.isSymbolicLink() || !info.isDirectory()) throw unavailable("runtime_unsafe", false);
   if (typeof info.uid === "number" && typeof process.getuid === "function" && info.uid !== process.getuid()) {
     throw unavailable("runtime_unsafe", false);
@@ -587,17 +591,14 @@ async function writeRecord(path: string, record: OwnerRecord, replace = false): 
 }
 
 async function readOwner(directory: string, path: string): Promise<OwnerRecord | undefined> {
+  let directoryInfo: Stats;
   try {
-    await assertPrivateDirectory(directory);
+    directoryInfo = await lstat(directory);
   } catch (error) {
     if (isCode(error, "ENOENT")) return undefined;
-    try {
-      await lstat(directory);
-    } catch (statError) {
-      if (isCode(statError, "ENOENT")) return undefined;
-    }
-    throw error;
+    throw unavailable("runtime_unsafe", false);
   }
+  assertPrivateDirectoryInfo(directoryInfo);
   let info;
   try { info = await lstat(path); } catch (error) {
     if (isCode(error, "ENOENT")) return undefined;

@@ -5,7 +5,11 @@ import { mkdtemp, readFile, realpath, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const seam = vi.hoisted(() => ({ replaceAfterAcquisition: false }));
+const seam = vi.hoisted(() => ({
+  replaceAfterAcquisition: false,
+  transientMissingDirectory: undefined as string | undefined,
+  transientMissingObserved: false,
+}));
 
 vi.mock("node:fs/promises", async () => {
   const actual = await vi.importActual<typeof import("node:fs/promises")>(
@@ -13,6 +17,16 @@ vi.mock("node:fs/promises", async () => {
   );
   return {
     ...actual,
+    lstat: async (path: Parameters<typeof actual.lstat>[0]) => {
+      if (String(path) === seam.transientMissingDirectory) {
+        seam.transientMissingDirectory = undefined;
+        seam.transientMissingObserved = true;
+        throw Object.assign(new Error("transiently absent owner directory"), {
+          code: "ENOENT",
+        });
+      }
+      return await actual.lstat(path);
+    },
     rename: async (from: Parameters<typeof actual.rename>[0], to: Parameters<typeof actual.rename>[1]) => {
       await actual.rename(from, to);
       const source = String(from);
@@ -51,6 +65,8 @@ const originalHome = process.env.HOME;
 
 afterEach(() => {
   seam.replaceAfterAcquisition = false;
+  seam.transientMissingDirectory = undefined;
+  seam.transientMissingObserved = false;
   if (originalHome === undefined) delete process.env.HOME;
   else process.env.HOME = originalHome;
   vi.restoreAllMocks();
@@ -58,6 +74,35 @@ afterEach(() => {
 });
 
 describe("SPEC-0001 v7 dashboard acquisition and post-acquisition recheck", () => {
+  it("issue #38 treats an owner published after an absent probe as convergence, not runtime_unsafe", async () => {
+    const project = await realpath(
+      await mkdtemp(join(tmpdir(), "wisp-dashboard-owner-appeared-project-")),
+    );
+    const home = await realpath(
+      await mkdtemp(join(tmpdir(), "wisp-dashboard-owner-appeared-home-")),
+    );
+    process.env.HOME = home;
+    const publisher = new DashboardCoordinator(project);
+    const follower = new DashboardCoordinator(project);
+    const published = await publisher.start();
+    seam.transientMissingDirectory = join(
+      home,
+      ".wisp/runtime/dashboard",
+      createHash("sha256").update(project, "utf8").digest("hex"),
+      "owner",
+    );
+
+    try {
+      await expect(follower.start()).resolves.toEqual({
+        url: published.url,
+        reused: true,
+      });
+      expect(seam.transientMissingObserved).toBe(true);
+    } finally {
+      await Promise.all([publisher.cleanup(), follower.cleanup()]);
+    }
+  });
+
   it("does not bind when the promoted owner changes to a live incompatible record", async () => {
     const project = await realpath(
       await mkdtemp(join(tmpdir(), "wisp-dashboard-recheck-project-")),

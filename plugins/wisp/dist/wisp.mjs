@@ -16835,6 +16835,9 @@ async function assertPrivateDirectory(path) {
   const info = await lstat2(path).catch(() => {
     throw unavailable("runtime_unsafe", false);
   });
+  assertPrivateDirectoryInfo(info);
+}
+function assertPrivateDirectoryInfo(info) {
   if (info.isSymbolicLink() || !info.isDirectory()) throw unavailable("runtime_unsafe", false);
   if (typeof info.uid === "number" && typeof process.getuid === "function" && info.uid !== process.getuid()) {
     throw unavailable("runtime_unsafe", false);
@@ -17165,17 +17168,14 @@ async function writeRecord(path, record2, replace = false) {
   }
 }
 async function readOwner(directory, path) {
+  let directoryInfo;
   try {
-    await assertPrivateDirectory(directory);
+    directoryInfo = await lstat2(directory);
   } catch (error2) {
     if (isCode(error2, "ENOENT")) return void 0;
-    try {
-      await lstat2(directory);
-    } catch (statError) {
-      if (isCode(statError, "ENOENT")) return void 0;
-    }
-    throw error2;
+    throw unavailable("runtime_unsafe", false);
   }
+  assertPrivateDirectoryInfo(directoryInfo);
   let info;
   try {
     info = await lstat2(path);
