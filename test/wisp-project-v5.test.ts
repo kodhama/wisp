@@ -1,4 +1,4 @@
-// SPEC-0001 v4: S1, S3-S8, S21 / R4-R9, R27.
+// SPEC-0001 v5: S1, S3-S8, S21 / R4-R9, R27.
 import { mkdtemp, realpath, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

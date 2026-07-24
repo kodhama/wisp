@@ -1,5 +1,6 @@
-// SPEC-0001 v4: S2, S9, S11, S18, S21, S22 / R2-R3, R11, R13, R21, R27.
-import { mkdir, readFile, mkdtemp, writeFile } from "node:fs/promises";
+// SPEC-0001 v5: S2, S3a, S9, S11, S18, S21, S22 / R2-R3, R11, R13, R21, R27, R37.
+import { spawn } from "node:child_process";
+import { copyFile, mkdir, readFile, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -100,5 +101,104 @@ describe("SPEC-0001 S2/S9/S11/S18/S21/S22 — clean bundled stdio MCP", () => {
     expect(stored.to).toBeUndefined();
     await expect(readFile(join(unrelatedCwd, ".wisp/events.ndjson"))).rejects.toMatchObject({ code: "ENOENT" });
     expect(stderr.join("")).toBe("");
+  });
+
+  it.each(["configured CODEX_HOME", "default home"] as const)(
+    "launches the exact Codex bootstrap from the active session directory with %s",
+    async (homeMode) => {
+      const project = await mkdtemp(join(tmpdir(), "wisp-codex-project-"));
+      const home = await mkdtemp(join(tmpdir(), "wisp-codex-user-home-"));
+      const codexHome =
+        homeMode === "configured CODEX_HOME"
+          ? await mkdtemp(join(tmpdir(), "wisp-codex-home-"))
+          : join(home, ".codex");
+      const manifest = JSON.parse(
+        await readFile(resolve("plugins/wisp/.codex-plugin/plugin.json"), "utf8"),
+      );
+      const bundleDirectory = join(
+        codexHome,
+        "plugins/cache/kodhama/wisp",
+        manifest.version,
+        "dist",
+      );
+      await mkdir(bundleDirectory, { recursive: true });
+      await copyFile(
+        resolve("plugins/wisp/dist/wisp.mjs"),
+        join(bundleDirectory, "wisp.mjs"),
+      );
+
+      const transport = new StdioClientTransport({
+        command: manifest.mcpServers.wisp.command,
+        args: manifest.mcpServers.wisp.args,
+        cwd: project,
+        env: {
+          PATH: process.env.PATH ?? "",
+          HOME: home,
+          ...(homeMode === "configured CODEX_HOME" ? { CODEX_HOME: codexHome } : {}),
+        },
+        stderr: "pipe",
+      });
+      transports.push(transport);
+      const client = new Client({ name: "codex-bootstrap-test", version: "1.0.0" });
+      await client.connect(transport);
+
+      expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual(TOOL_NAMES);
+      expect(
+        await client.callTool({
+          name: "wisp_check",
+          arguments: { run: "codex-bootstrap", agent: "worker" },
+        }),
+      ).toMatchObject({ isError: false });
+      expect(
+        await client.callTool({
+          name: "wisp_status",
+          arguments: {
+            run: "codex-bootstrap",
+            agent: "worker",
+            state: "working",
+          },
+        }),
+      ).toMatchObject({ isError: false });
+
+      const bus = await readFile(join(project, ".wisp/events.ndjson"), "utf8");
+      expect(bus.trim()).toContain('"run":"codex-bootstrap"');
+      await expect(
+        readFile(join(codexHome, ".wisp/events.ndjson")),
+      ).rejects.toMatchObject({ code: "ENOENT" });
+    },
+  );
+
+  it("fails the Codex bootstrap on stderr when its installed bundle is missing", async () => {
+    const project = await mkdtemp(join(tmpdir(), "wisp-codex-missing-project-"));
+    const home = await mkdtemp(join(tmpdir(), "wisp-codex-missing-home-"));
+    const codexHome = join(home, ".codex");
+    const manifest = JSON.parse(
+      await readFile(resolve("plugins/wisp/.codex-plugin/plugin.json"), "utf8"),
+    );
+    const child = spawn(
+      manifest.mcpServers.wisp.command,
+      manifest.mcpServers.wisp.args,
+      {
+        cwd: project,
+        env: {
+          PATH: process.env.PATH ?? "",
+          HOME: home,
+          CODEX_HOME: codexHome,
+        },
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+    child.stdout.on("data", (chunk) => stdout.push(String(chunk)));
+    child.stderr.on("data", (chunk) => stderr.push(String(chunk)));
+    const code = await new Promise<number | null>((resolveCode, reject) => {
+      child.once("error", reject);
+      child.once("close", resolveCode);
+    });
+
+    expect(code).toBe(1);
+    expect(stdout.join("")).toBe("");
+    expect(stderr.join("")).toMatch(/^wisp failed to load: /u);
   });
 });

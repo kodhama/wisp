@@ -9,7 +9,7 @@
     "build": "node scripts/build-plugin.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "validate:plugin": "vitest run test/wisp-plugin-v4.test.ts",
+    "validate:plugin": "vitest run test/wisp-plugin-v5.test.ts",
     "verify": "npm run typecheck && npm test && npm run build && npm run validate:plugin",
     "serve": "node server.ts",
     "demo": "node demo.ts"

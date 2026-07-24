@@ -1,4 +1,4 @@
-// SPEC-0001 v4: S9-S16, S26-S30 / R10-R18, R31-R36.
+// SPEC-0001 v5: S9-S16, S26-S30 / R10-R18, R31-R36.
 import { mkdir, readFile, readdir, symlink, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";

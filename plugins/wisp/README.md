@@ -11,5 +11,6 @@ The MCP server exposes six tools: `wisp_status`, `wisp_heartbeat`,
 `wisp_verdict`, `wisp_question`, `wisp_check`, and `wisp_ack`.
 
 Claude binds the server to the active project through its plugin environment.
-Codex binds through the session's single MCP file root. Sessions with no local
-root or multiple roots fail closed instead of guessing.
+Codex starts from its host-selected session directory and binds that directory
+before importing the installed bundle. Both paths require no project setup,
+and an invalid host binding fails closed instead of guessing.

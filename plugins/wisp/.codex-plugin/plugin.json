@@ -19,9 +19,12 @@
     "wisp": {
       "command": "node",
       "args": [
-        "./dist/wisp.mjs"
+        "-e",
+        "const p=require('node:path'),o=require('node:os'),u=require('node:url');process.env.WISP_PROJECT_ROOT=process.cwd();const h=process.env.CODEX_HOME||p.join(o.homedir(),'.codex');import(u.pathToFileURL(p.join(h,'plugins','cache','kodhama','wisp','0.1.0','dist','wisp.mjs')).href).catch(e=>{process.stderr.write(`wisp failed to load: ${e instanceof Error?e.stack??e.message:String(e)}\\n`);process.exitCode=1})"
       ],
-      "cwd": "."
+      "env_vars": [
+        "CODEX_HOME"
+      ]
     }
   }
 }

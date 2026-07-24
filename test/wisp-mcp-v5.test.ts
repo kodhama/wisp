@@ -1,4 +1,4 @@
-// SPEC-0001 v4: S11, S13, S17-S19, S22 / R13-R23.
+// SPEC-0001 v5: S11, S13, S17-S19, S22 / R13-R23.
 import { describe, expect, it, vi } from "vitest";
 import { TOOL_NAMES, callWispTool, createToolDefinitions } from "../src/mcp.ts";
 import { WispError } from "../src/runtime.ts";

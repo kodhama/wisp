@@ -2,13 +2,28 @@
 id: spec-0001-plugin-mcp-distribution
 type: spec
 status: gated
-depends_on: [adr-0002-plugin-mcp-distribution]
+depends_on: [adr-0004-codex-session-bootstrap]
 owner: agent
-updated: 2026-07-23
-version: 4
+updated: 2026-07-24
+version: 5
 ---
 
 # SPEC-0001 — Dual-host Wisp plugin and bundled stdio MCP server
+
+> **AMENDED 2026-07-24**
+> **WHAT:** Replaced Codex MCP-roots project binding with a host-selected
+> session-directory bootstrap that binds `WISP_PROJECT_ROOT` before importing
+> the installed bundle.
+> **WHY:** Live Codex 0.145.0 qualification and protocol capture proved that
+> Codex advertises no roots capability or project metadata, while Codex source
+> confirms that an MCP definition without `cwd` launches from the active
+> session directory.
+> **SCOPE:** Codex launch adapter and qualification contract; version advanced
+> from 4 to 5. Tool and bus semantics remain unchanged.
+> **POINTER:** ADR-0004, which supersedes ADR-0002's Codex roots assumption.
+> **VALUE:** One user install works in Codex CLI without project configuration
+> or a model-authorized filesystem path.
+> **CONFIDENCE:** verified.
 
 > **AMENDED 2026-07-23**
 > **WHAT:** Replaced the invalid custom Codex MCP-config reference with the
@@ -31,10 +46,12 @@ separate Claude and Codex distributions, one bundled stdio MCP server, a
 portable lifecycle skill, and the Stewards marketplace pointer needed to
 install it.
 
-MCP is the plugin's only executable interface. A normal host session that
-reports exactly one local file root requires no Wisp configuration. Legacy
-CLI source may remain outside the plugin, but this release defines and ships
-no CLI, binary declaration, or CLI compatibility behavior.
+MCP is the plugin's only executable interface. Claude binds from its official
+project substitution; Codex binds from its host-selected active session
+directory. Neither requires Wisp project configuration. Other MCP clients may
+use the single-file-root fallback. Legacy CLI source may remain outside the
+plugin, but this release defines and ships no CLI, binary declaration, or CLI
+compatibility behavior.
 
 Remote transport, hosted multi-tenancy, OpenTelemetry, CloudEvents, npm, and
 Homebrew publication are outside this specification.
@@ -75,7 +92,8 @@ explicit `null` and unknown object properties are invalid.
 | Component | Owns | Must not |
 |---|---|---|
 | Runtime | Constants, domain validation, event stamping, bus reads/appends, command reduction, pending-command filtering, acknowledgement authorization | Parse process arguments, perform MCP framing, or start listeners |
-| MCP adapter | Initialization, immutable project resolution, six tool adapters, MCP result mapping, stdio discipline | Issue or execute commands, use process cwd, or accept per-call paths |
+| MCP adapter | Initialization, immutable project resolution, six tool adapters, MCP result mapping, stdio discipline | Issue or execute commands, use process cwd inside the generic resolver, or accept per-call paths |
+| Codex bootstrap | Bind Codex's host-selected session cwd into `WISP_PROJECT_ROOT` and import the installed bundle | Accept model-supplied paths, fetch, install, or emit protocol text |
 | Bundled entrypoint | Start the stdio MCP server | Dispatch CLI commands, fetch dependencies, or perform work on import |
 | Plugin payload | Exact files named below | Depend on global `wisp`, `npm`/`npx`, project `node_modules`, or a daemon |
 | Lifecycle skill | Portable lifecycle guidance using the six MCP tools | Define transport mechanics or consumer-specific governance |
@@ -106,9 +124,12 @@ process lifetime.
    directory. Any violation returns `invalid_file_root`.
 6. The real path of that directory is the project.
 
-Process cwd, `GROVE_EVENTS`, other environment variables, and tool arguments
-SHALL NOT affect MCP selection. A roots change notification after resolution
-does not retarget the process.
+Process cwd inside the generic resolver, `GROVE_EVENTS`, other environment
+variables, and tool arguments SHALL NOT affect MCP selection. The Codex
+adapter is the sole exception before server import: its host-selected launch
+cwd is copied into `WISP_PROJECT_ROOT`, after which the ordinary explicit-root
+contract applies. A roots change notification after resolution does not
+retarget the process.
 
 The bus path is exactly `<real-project>/.wisp/events.ndjson`.
 
@@ -371,13 +392,20 @@ Claude `.mcp.json` is exactly one `wisp` stdio-server definition with command
 substitutions; the project therefore binds without a roots request.
 
 The Codex `.codex-plugin/plugin.json` contains exactly one inline
-`mcpServers.wisp` definition with command `node`, args
-`["./dist/wisp.mjs"]`, and cwd `.` (the installed plugin root). Its cwd
-locates the artifact only and SHALL NOT select a project bus. Codex project
-binding uses the MCP roots resolver unless the qualified Codex host contract
-supports an explicit project-root environment substitution, in which case
-that substitution may set `WISP_PROJECT_ROOT` without changing the resolver
-fallback. A custom Codex MCP-config path is prohibited.
+`mcpServers.wisp` definition with command `node`, args `["-e",
+"<bootstrap>"]`, no `cwd`, and `env_vars: ["CODEX_HOME"]`. The bootstrap:
+
+1. sets `WISP_PROJECT_ROOT=process.cwd()` before importing Wisp;
+2. selects Codex home from `CODEX_HOME` or `<user-home>/.codex`;
+3. imports
+   `<codex-home>/plugins/cache/kodhama/wisp/<plugin-version>/dist/wisp.mjs`
+   by file URL; and
+4. reports load failure on stderr and sets a failing exit status.
+
+The bootstrap cache version SHALL exactly equal the Codex manifest version.
+It SHALL contain no model-supplied path, `cwd` override, network access,
+install action, or stdout diagnostic. A custom Codex MCP-config path is
+prohibited.
 
 Neither launch invokes `npm`/`npx`, a global `wisp`, or project dependencies.
 Resolving `node` from the host's `PATH` is permitted.
@@ -398,7 +426,8 @@ A plugin version is releasable only when one build:
 3. installs in a single-project fixture under current stable Claude Code,
    lists the exact six tools, invokes `wisp_check`, performs one write, and
    verifies the exact `<fixture>/.wisp/events.ndjson` bus;
-4. independently performs the same evidence under current stable Codex CLI;
+4. installs the exact candidate through a marketplace named `kodhama`, then
+   independently performs the same evidence under current stable Codex CLI;
    and
 5. hashes the exact `dist/wisp.mjs` artifact and records all evidence in
    `qualification.json`.
@@ -460,9 +489,10 @@ unsupported unless a future qualification record explicitly adds them.
 
 **S1 — Zero-configuration single project**
 
-- **Given** no `WISP_PROJECT_ROOT` and one valid local file root,
-- **When** the first bus tool is called,
-- **Then** it selects `<real-root>/.wisp/events.ndjson` without user setup.
+- **Given** a Claude or Codex session opened on one project,
+- **When** the host launches Wisp and the first bus tool is called,
+- **Then** it selects `<real-project>/.wisp/events.ndjson` without project
+  setup.
 
 **S2 — Clean installation**
 
@@ -477,6 +507,13 @@ unsupported unless a future qualification record explicitly adds them.
 - **Then** the real environment-root directory is selected and roots are not
   consulted.
 
+**S3a — Codex session bootstrap**
+
+- **Given** Codex launches the installed plugin without an MCP `cwd`,
+- **When** the inline bootstrap runs,
+- **Then** it binds the host-selected session directory through
+  `WISP_PROJECT_ROOT` before importing the version-matched bundle.
+
 **S4 — Invalid explicit root**
 
 - **Given** a present blank, relative, missing, or non-directory
@@ -487,7 +524,8 @@ unsupported unless a future qualification record explicitly adds them.
 
 **S5 — Roots capability absent**
 
-- **Given** no explicit root and a client without roots capability,
+- **Given** no explicit root after host adaptation and a client without roots
+  capability,
 - **When** a bus tool is called,
 - **Then** `project_unresolved/roots_unsupported` is returned with no bus I/O.
 
@@ -686,8 +724,9 @@ unsupported unless a future qualification record explicitly adds them.
   plugin version and launch one bundled executable.
 - **R3 (ubiquitous):** Installation and startup shall require no global Wisp,
   daemon, lifecycle script, registry access, or project dependency.
-- **R4 (event-driven):** When one valid MCP file root is the only project
-  source, Wisp shall select its real directory with no Wisp configuration.
+- **R4 (event-driven):** When Claude or Codex starts Wisp for one active
+  project, the host adapter shall bind its real directory with no Wisp project
+  configuration.
 - **R5 (optional):** Where `WISP_PROJECT_ROOT` is present, Wisp shall validate
   and select it before roots.
 - **R6 (unwanted behavior):** If an explicit root is invalid, Wisp shall fail
@@ -697,8 +736,9 @@ unsupported unless a future qualification record explicitly adds them.
   `project_unresolved` reason without bus I/O.
 - **R8 (state-driven):** While an MCP process lives, its first resolution
   result shall remain immutable.
-- **R9 (ubiquitous):** MCP cwd, `GROVE_EVENTS`, and tool arguments shall not
-  select a project or bus.
+- **R9 (ubiquitous):** The generic resolver's cwd, `GROVE_EVENTS`, and tool
+  arguments shall not select a project or bus; only the Codex bootstrap may
+  copy its host-selected launch cwd into `WISP_PROJECT_ROOT` before import.
 - **R10 (event-driven):** When a missing bus is read, Wisp shall return empty
   data and create nothing.
 - **R11 (event-driven):** When the first valid write occurs, Wisp shall create
@@ -764,13 +804,16 @@ unsupported unless a future qualification record explicitly adds them.
 - **R36 (ubiquitous):** Every stored event shall satisfy the complete
   canonical version, timestamp, identifier, kind, field, null, unknown-field,
   nested-body, payload, and size contract before participating in reduction.
+- **R37 (ubiquitous):** Codex shall omit MCP `cwd`, bind the host-selected
+  session directory before import, resolve the bundle from the version-matched
+  `kodhama/wisp` Codex cache entry, and accept no model-supplied project path.
 
 ## Verification matrix
 
 | Contract area | Minimum evidence |
 |---|---|
 | Constants and schemas | Generated-schema snapshot plus table-driven at-limit/over-limit tests for every fixed value, all six tools, all six stored-event kinds, exact timestamp/version, null/unknown rejection, and recursively arbitrary command-payload JSON |
-| Resolution | Table-driven tests for environment root, capability absence, list failure/timeout, counts, URI validity, realpath, no-I/O, and memoization |
+| Resolution | Table-driven tests for environment root, capability absence, list failure/timeout, counts, URI validity, realpath, no-I/O, and memoization; Codex host smoke verifies session-cwd binding |
 | Filesystem | Temp-project tests for missing read, first-write creation, lstat/symlink/type/containment rejection, one-line append, fatal UTF-8, LF/CR/final-segment/blank handling, limits, and no truncation |
 | Runtime boundary | Spies or dependency injection prove all six MCP handlers call shared operations |
 | Command safety | Append-order tests prove issued fields, whole-check first-duplicate conflict/count/no-partial-data, ack duplicate conflict, unique-id-only reduction, same-run/following-ack filtering, last-ack wins, stable ordering, no execution, and every acknowledgement result |
@@ -779,7 +822,7 @@ unsupported unless a future qualification record explicitly adds them.
 | Import safety | Isolated import probes for every reusable module |
 | Bundle | Clean fixtures with no global Wisp or dependency tree launch the exact distributed artifact on recorded Node 20, 22, and 24 patches |
 | Claude | Validate exact `.mcp.json`; installed current-stable smoke lists tools, checks, writes, and verifies fixture `.wisp/events.ndjson` |
-| Codex | Separately validate the manifest's one inline `mcpServers.wisp` object and absence of a custom config path; smoke lists tools, checks, writes, and verifies fixture `.wisp/events.ndjson` |
+| Codex | Separately validate the manifest's one inline bootstrap, absent `cwd`, forwarded `CODEX_HOME`, exact marketplace/plugin/version cache path, and absence of a custom config path; install through marketplace `kodhama`, then smoke lists tools, checks, writes, and verifies fixture `.wisp/events.ndjson` |
 | Plugin contents | Exact seven-path inventory, equal manifest versions, no CLI/binary, portable-skill static checks, bundle SHA-256, and exact qualification schema/state rules including all three Node version/result objects |
 | Marketplace | Stewards fixture resolves exactly to `kodhama/wisp:plugins/wisp` and contains no implementation/version copy |
 
@@ -788,12 +831,12 @@ unsupported unless a future qualification record explicitly adds them.
 The configured `SPEC_RUBRIC_PATH` says no dedicated rubric exists, so this
 check uses `specs/README.md`.
 
-- **Frontmatter:** PASS — all required fields are present; `version: 4`
+- **Frontmatter:** PASS — all required fields are present; `version: 5`
   records the externally required Codex host-contract correction.
-- **Approved dependency:** PASS — ADR-0002 is approved and records the
-  maintainer's amendment.
-- **Testable acceptance criteria:** PASS — S1–S30 are GWT scenarios,
-  R1–R36 are EARS requirements, and the matrix names executable evidence.
+- **Approved dependency:** PASS — ADR-0004 is approved and records the
+  source-verified Codex adapter correction.
+- **Testable acceptance criteria:** PASS — S1–S30 and S3a are GWT scenarios,
+  R1–R37 are EARS requirements, and the matrix names executable evidence.
 - **Exactness:** PASS — all six schemas, outputs, error mapping, project
   selection, stored-event validity, confinement/decoding, duplicate/unique
   command reduction, first-write behavior, finite limits, seven payload paths,
