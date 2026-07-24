@@ -1,21 +1,21 @@
 {
-  "plugin_version": "0.2.0",
-  "artifact_sha256": "99523f17cf40bcb6271907e8e8525d7779d6634832894c90c4fdb319537de10c",
+  "plugin_version": "0.2.1-rc.1",
+  "artifact_sha256": "28fdf9d945a241f7fb448732d25ac696c92ee32f08fa631d1ed4235a76a8680e",
   "date": "2026-07-24",
   "platform": "darwin",
   "architecture": "arm64",
   "node_versions": {
     "20": {
-      "version": "20.20.2",
-      "result": "pass"
+      "version": "pending",
+      "result": "pending"
     },
     "22": {
-      "version": "22.23.1",
-      "result": "pass"
+      "version": "pending",
+      "result": "pending"
     },
     "24": {
-      "version": "24.18.0",
-      "result": "pass"
+      "version": "pending",
+      "result": "pending"
     }
   },
   "claude": {
@@ -27,24 +27,24 @@
     "bus_path_verified": false
   },
   "codex": {
-    "version": "0.145.0",
-    "result": "pass",
-    "tools_listed": true,
-    "check_passed": true,
-    "write_passed": true,
-    "bus_path_verified": true
+    "version": "pending",
+    "result": "pending",
+    "tools_listed": false,
+    "check_passed": false,
+    "write_passed": false,
+    "bus_path_verified": false
   },
   "dashboard": {
     "result": "pending",
-    "explicit_start_only": true,
+    "explicit_start_only": false,
     "claude_open_passed": false,
-    "codex_open_passed": true,
+    "codex_open_passed": false,
     "cross_host_singleton_passed": false,
-    "project_isolation_passed": true,
-    "command_append_passed": true,
-    "security_passed": true,
-    "cleanup_recovery_passed": true,
-    "process_identity_passed": true
+    "project_isolation_passed": false,
+    "command_append_passed": false,
+    "security_passed": false,
+    "cleanup_recovery_passed": false,
+    "process_identity_passed": false
   },
   "result": "pending"
 }
