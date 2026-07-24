@@ -1,7 +1,7 @@
 ---
 id: adr-0002-plugin-mcp-distribution
 type: adr
-status: superseded in part
+status: approved
 depends_on: []
 owner: human
 updated: 2026-07-24
@@ -9,9 +9,10 @@ updated: 2026-07-24
 
 # ADR-0002 — Distribute Wisp as a dual-host plugin with a bundled stdio MCP server
 
-> Superseded in part by `adr-0004-codex-session-bootstrap`, which preserves
-> this distribution decision while replacing the disproven Codex roots
-> binding.
+> Superseded in part by `adr-0004-codex-session-bootstrap`, which replaces the
+> disproven Codex roots binding, and
+> `adr-0005-plugin-dashboard-lifecycle`, which adds the explicit bundled
+> dashboard while preserving this decision's distribution model.
 
 ## Decision state
 
