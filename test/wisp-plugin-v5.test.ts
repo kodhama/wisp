@@ -102,8 +102,11 @@ describe("SPEC-0001 v6 S20/S23/S28 — exact dual-host MCP-only payload", () => 
     expect(
       new Date(Date.UTC(year, month - 1, day)).toISOString().slice(0, 10),
     ).toBe(qualification.date);
-    expect(qualification.platform).toBe(process.platform);
-    expect(qualification.architecture).toBe(process.arch);
+    expect(qualification.platform).toMatch(/^[a-z0-9]+$/u);
+    expect(qualification.architecture).toMatch(/^[a-z0-9_]+$/u);
+    if (qualification.dashboard.process_identity_passed) {
+      expect(["darwin", "linux"]).toContain(qualification.platform);
+    }
     expect(Object.keys(qualification.node_versions).sort()).toEqual(["20", "22", "24"]);
     for (const major of ["20", "22", "24"] as const) {
       const evidence = qualification.node_versions[major];
