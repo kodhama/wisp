@@ -27,7 +27,7 @@ updated: YYYY-MM-DD
 
 What each `status` value means, and who moves an artifact between
 states, lives in the grove **lifecycle companion**, `plugin@0.1.0` (the stamp
-in this repo's CLAUDE.md) — plugin-carried since `grove/adr-0026`
+in this repo's AGENTS.md) — plugin-carried since `grove/adr-0026`
 (`grove/adr-0008`), not restated here.
 
 ## Decisions are append-only
