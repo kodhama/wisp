@@ -1,18 +1,38 @@
 ---
 id: spec-0001-plugin-mcp-distribution
 type: spec
-status: approved
+status: gated
 depends_on:
   - adr-0004-codex-session-bootstrap
   - adr-0005-plugin-dashboard-lifecycle
   - adr-0008-retire-family-release-certification
+  - adr-0009-independent-plugin-package-metadata
+  - stewards/kodhama-spec-0003-marketplace-test-observation@v1
 implements: adr-0005-plugin-dashboard-lifecycle
 owner: agent
 updated: 2026-07-24
-version: 9
+version: 10
 ---
 
 # SPEC-0001 — Dual-host Wisp plugin, bundled stdio MCP, and project dashboard
+
+> **AMENDED 2026-07-24**
+> **WHAT:** Added the Wisp-local `VERSION` authority, ten-path payload,
+> dual-manifest and runtime-carrier parity, and closed product-owned surface
+> metadata joined to existing qualification and optional Stewards marketplace
+> observations.
+> **WHY:** ADR-0009 assigns changed candidate bytes the honest independent
+> `0.2.1-rc.2` identity while keeping package, qualification, marketplace, and
+> support facts separate.
+> **SCOPE:** Package identity, plugin inventory, surface metadata, README
+> availability wording, and their static verification; version advanced from
+> 9 to 10. MCP, dashboard, bus, skill, host-binding, and qualification
+> behavior remain unchanged.
+> **POINTER:** ADR-0009.
+> **VALUE:** A Wisp user and maintainer can identify one candidate and inspect
+> its actual qualification/marketplace evidence without an invented support
+> or release claim.
+> **CONFIDENCE:** verified.
 
 > **AMENDED 2026-07-24**
 > **WHAT:** Retired the family release-certification additions from v7-v8,
@@ -81,7 +101,8 @@ version: 9
 This specification defines one Wisp-owned, self-contained plugin with
 separate Claude and Codex distributions, one bundled stdio MCP server, a
 lazy project-singleton dashboard, portable lifecycle and dashboard skills,
-and the Stewards marketplace pointer needed to install it.
+and product-owned package, qualification, and surface metadata. Marketplace
+catalog admission is external evidence, not part of this package contract.
 
 MCP is the plugin's only launchable executable interface. Claude binds from
 its official project substitution; Codex binds from its host-selected active
@@ -1052,18 +1073,34 @@ has no CLI command dispatcher.
 
 ## Plugin, skill, marketplace, and qualification contract
 
-`plugins/wisp/` SHALL contain exactly these eight release paths:
+`plugins/wisp/` SHALL contain exactly these ten candidate paths:
 
 - `.claude-plugin/plugin.json`;
 - `.codex-plugin/plugin.json`;
 - `.mcp.json`;
+- `VERSION`;
 - `dist/wisp.mjs`;
 - `skills/wisp/SKILL.md`;
 - `skills/dashboard/SKILL.md`;
-- `README.md`; and
-- `qualification.json`.
+- `README.md`;
+- `qualification.json`; and
+- `surfaces.json`.
 
-Both manifests declare the same semantic version.
+`VERSION` SHALL contain one canonical SemVer plus one terminal LF and no other
+bytes. For the first package under this contract it is exactly
+`0.2.1-rc.2\n`. Its value SHALL equal:
+
+- both host manifest versions;
+- the Codex bootstrap's cache-path version segment;
+- root `package.json` and both root-package versions in `package-lock.json`;
+- the MCP server identity emitted by `src/mcp.ts` and projected into
+  `dist/wisp.mjs`;
+- `qualification.json.plugin_version`; and
+- `surfaces.json.version`.
+
+The SemVer validator SHALL implement the full SemVer 2.0.0 grammar, including
+nonnumeric prerelease identifiers that begin with a digit, and SHALL reject
+leading zeroes only for purely numeric identifiers.
 
 Claude `.mcp.json` is exactly one `wisp` stdio-server definition with command
 `node`, args `["${CLAUDE_PLUGIN_ROOT}/dist/wisp.mjs"]`, and environment
@@ -1099,8 +1136,44 @@ start the Wisp dashboard. It calls `wisp_dashboard`, presents the exact
 returned link, and does not manufacture a URL, invoke a shell, open a browser,
 start the legacy server, or add lifecycle policy.
 
-Stewards adds one `git-subdir` entry for `kodhama/wisp`, path `plugins/wisp`;
-it carries neither a bundle copy nor a separate Wisp version.
+`surfaces.json` SHALL be one closed object with exactly
+`schema_version`, `version`, and `rows`. `schema_version` is integer `1`;
+`version` equals `VERSION`; and `rows` is an array of closed row objects with
+exactly:
+
+- `surface_id`: unique and matching
+  `^[a-z0-9][a-z0-9._/-]{0,127}$`;
+- `host`: `claude` or `codex`;
+- `qualification_path`: normalized plugin-relative `qualification.json`,
+  with no absolute or `..` segment and no symlink escape from the plugin;
+- `qualification_key`: the same host key in `qualification.json`;
+- `marketplace_test_observations`: a present array of normalized
+  repository-relative `.json` paths with no absolute, backslash, or `..`
+  segment; and
+- `disclosure`: nonblank UTF-8 text.
+
+The initial rows SHALL be exactly:
+
+| `surface_id` | `host` | qualification | disclosure obligation |
+|---|---|---|---|
+| `claude-interactive` | `claude` | `qualification.json#claude` | qualification is pending; Stewards catalog admission and marketplace registration for `0.2.1-rc.2` are not evidenced |
+| `codex-cli-local-session` | `codex` | `qualification.json#codex` | qualification is pending; Stewards catalog admission and marketplace registration for `0.2.1-rc.2` are not evidenced |
+
+Every referenced qualification host object SHALL exist, remain closed under
+the qualification schema below, and have `result: "pending"` for this
+candidate. Surface metadata SHALL NOT derive a support state from that value.
+
+Every present marketplace observation SHALL satisfy the exact closed
+`stewards/kodhama-spec-0003-marketplace-test-observation@v1` structure, match
+its row's `host` and `surface_id`, and remain only marketplace-registration
+evidence. The initial observation arrays are empty. An observation SHALL NOT
+create or change qualification, support, release readiness, or catalog
+availability.
+
+The plugin README SHALL describe the independent `VERSION`/manifest/surface
+carrier relationship and SHALL NOT state that a Wisp Stewards catalog entry
+presently exists. A later Stewards entry may point to `kodhama/wisp`, path
+`plugins/wisp`; Stewards carries neither bundle bytes nor a Wisp version.
 
 A plugin version is releasable only when one build:
 
@@ -1677,12 +1750,37 @@ adds them.
   console/network/reporter data, and a failed redaction check blocks
   persistence and upload.
 
+**S65 — One independent candidate identity**
+
+- **Given** the complete Wisp plugin candidate and its repository carriers,
+- **When** package validation reads `VERSION`,
+- **Then** `VERSION` is canonical SemVer `0.2.1-rc.2` plus LF and every
+  manifest, cache-path, package, runtime, qualification, bundle, and surface
+  carrier equals that value.
+
+**S66 — Pending surfaces remain nonclaims**
+
+- **Given** pending Claude and Codex qualification and no retained marketplace
+  observation,
+- **When** `surfaces.json` is inspected,
+- **Then** it contains exactly the two closed host rows, links each to its
+  matching pending qualification object, discloses absent catalog/registration
+  evidence, and states no support or release result.
+
+**S67 — Invalid evidence joins fail closed**
+
+- **Given** a surface row with an absent observation array, escaping path,
+  unknown property, malformed Stewards record, or mismatched host/surface id,
+- **When** static package validation runs,
+- **Then** validation fails without changing qualification or manufacturing
+  marketplace, support, or release evidence.
+
 ### EARS requirements
 
-- **R1 (ubiquitous):** Wisp shall own the complete payload and Stewards shall
-  own only its thin pointer and repository-local provenance.
-- **R2 (ubiquitous):** Claude and Codex manifests shall declare one semantic
-  plugin version and launch one bundled executable.
+- **R1 (ubiquitous):** Wisp shall own the complete payload; any later Stewards
+  catalog entry shall remain a thin pointer with no bundle or Wisp version.
+- **R2 (ubiquitous):** Claude and Codex manifests shall derive one semantic
+  plugin version from `VERSION` and launch one bundled executable.
 - **R3 (ubiquitous):** Installation and startup shall require no global Wisp,
   daemon, lifecycle script, package-registry access, or project dependency.
 - **R4 (event-driven):** When Claude or Codex starts Wisp for one active
@@ -1733,8 +1831,8 @@ adds them.
   memoized dashboard coordinator.
 - **R24 (ubiquitous):** The plugin bundle shall expose no CLI entrypoint,
   binary declaration, or CLI command dispatch.
-- **R25 (ubiquitous):** The plugin payload shall contain exactly the eight
-  specified release paths, with Claude's server in root `.mcp.json` and
+- **R25 (ubiquitous):** The plugin payload shall contain exactly the ten
+  specified candidate paths, with Claude's server in root `.mcp.json` and
   Codex's server inline in its manifest.
 - **R26 (ubiquitous):** The lifecycle and dashboard skills shall contain
   portable policy only and shall delegate mechanics to MCP.
@@ -1885,6 +1983,20 @@ adds them.
   first-seen run then agent, use append-order last event for `last_seen`, last
   status for state and activity-with-absence-clearing, last verdict for
   verdict, and render reduced command states and parse errors as safe text.
+- **R73 (ubiquitous):** `VERSION` shall be the sole Wisp package SemVer
+  authority, contain exactly one canonical SemVer plus LF, and equal every
+  named manifest, cache, package, runtime, qualification, bundle, and surface
+  carrier.
+- **R74 (ubiquitous):** `surfaces.json` shall use the exact closed schema and
+  initial two-row qualification joins, with present observation arrays and
+  nonblank pending-evidence disclosures.
+- **R75 (unwanted behavior):** If a surface or marketplace observation is
+  absent, unknown, malformed, escaping, or inconsistent, static validation
+  shall fail and shall not alter or infer qualification, support, release
+  readiness, or catalog availability.
+- **R76 (ubiquitous):** Wisp package documentation shall describe carrier
+  parity and shall not claim a present Stewards catalog entry until separate
+  host-specific evidence and admission exist.
 - **R87 (event-driven):** When host qualification, canary, or browser evidence
   is retained, the harness shall use dashboard capability material only in
   volatile memory, disable or pre-sink sanitize every browser failure writer,
@@ -1915,20 +2027,22 @@ adds them.
 | Claude | Validate exact `.mcp.json`; installed current-stable smoke lists seven tools, checks, writes, explicitly opens the dashboard, and verifies fixture `.wisp/events.ndjson` |
 | Codex | Separately validate the manifest's one inline bootstrap, absent `cwd`, forwarded `CODEX_HOME`, exact marketplace/plugin/version cache path, and absence of a custom config path; install through marketplace `kodhama`, then smoke lists seven tools, checks, writes, explicitly opens the dashboard, and verifies fixture `.wisp/events.ndjson` |
 | Cross-host dashboard | Concurrent installed Claude and Codex sessions on one fixture return one URL; a second fixture remains isolated; command, security, lifecycle/recovery, live provider stability/child/absence evidence, and deterministic same-PID/new-token recovery populate the dashboard qualification object |
-| Plugin contents | Exact eight-path inventory, equal manifest versions, no CLI/binary/daemon/legacy dashboard path, two portable-skill static checks, bundle SHA-256, and exact qualification schema/state rules including all Node, host, and dashboard result objects |
-| Marketplace | Stewards fixture resolves exactly to `kodhama/wisp:plugins/wisp` and contains no implementation/version copy |
+| Plugin contents | Exact ten-path inventory, strict `VERSION` SemVer and all-carrier parity, closed two-row surface/qualification joins, observation-schema rejection fixtures, no CLI/binary/daemon/legacy dashboard path, two portable-skill static checks, bundle SHA-256, and exact qualification schema/state rules including all Node, host, and dashboard result objects |
+| Marketplace separation | README and initial surfaces claim no current catalog admission or registration evidence; every future referenced Stewards observation passes closed structural and row-match fixtures without changing qualification/support |
 
 ## Rubric check
 
 The configured `SPEC_RUBRIC_PATH` says no dedicated rubric exists, so this
 check uses `specs/README.md`.
 
-- **Frontmatter:** PASS — all required fields are present; `version: 9`
-  records the retirement amendment while preserving forward-only spec identity.
-- **Approved dependencies:** PASS — ADR-0004 and ADR-0005 are approved and
-  record the Codex adapter and dashboard intent respectively.
-- **Testable acceptance criteria:** PASS — S1–S53, S64, and S3a are GWT
-  scenarios, R1–R72 and R87 are EARS requirements, and the matrix names
+- **Frontmatter:** PASS — all required fields are present; `version: 10`
+  records the independent-package amendment while preserving forward-only
+  spec identity.
+- **Approved dependencies:** PASS — ADR-0004, ADR-0005, ADR-0008, and
+  ADR-0009 are approved and record the adapter, dashboard, reset, and package
+  intent respectively.
+- **Testable acceptance criteria:** PASS — S1–S53, S64–S67, and S3a are GWT
+  scenarios, R1–R76 and R87 are EARS requirements, and the matrix names
   executable evidence. The gaps preserve the historical identifiers of the
   retained product-local security clauses while retiring intervening family
   machinery.
@@ -1937,13 +2051,15 @@ check uses `specs/README.md`.
   command reduction, irreversible append/release behavior, qualified
   process-birth identity, finite limits, dashboard write-lock,
   discovery/ownership/HTTP deadline/error/UI-projection/lifecycle behavior,
-  eight payload paths, root-Claude/inline-Codex launch definitions, and
+  ten payload paths, package/surface/evidence joins,
+  root-Claude/inline-Codex launch definitions, and
   Node/host/dashboard qualification and capability-safe evidence policy are
   fixed rather than deferred.
 - **Open questions:** PASS — the required section is present below.
 - **Scope fidelity:** PASS — the plugin-only distribution, dual-host evidence,
   project bus and dashboard isolation, explicit skill boundary, session-owned
-  listener, and Stewards pointer derive from ADR-0004 and ADR-0005; parked
+  listener, and package evidence separation derive from ADR-0004, ADR-0005,
+  and ADR-0009; parked
   CLI, daemon, remote transport, and legacy dashboard behavior are absent.
 
 Result: **PASS**.
@@ -1960,3 +2076,7 @@ evidence boundary was restored, and the independent conformance reviewer
 returned `PASS`. Recording `approved` here records those completed gates; it
 does not claim that the retained capability-safety implementation debt has
 landed.
+
+Version 10 records the ADR-0009 package-metadata amendment. The configured
+rubric self-check above passed and moved this version to `gated`; independent
+intrinsic-quality and fidelity gates are still owed.
