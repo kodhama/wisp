@@ -16,6 +16,9 @@ updated: 2026-07-24
 
 # ADR-0009 — Adopt independent plugin package metadata
 
+> Observation-provenance semantics in §2 are amended by
+> `adr-0010-preserve-marketplace-observation-provenance`.
+
 ## Decision state
 
 ### Decided
