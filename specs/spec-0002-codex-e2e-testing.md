@@ -18,16 +18,19 @@ version: 4
 > **AMENDED 2026-07-24**
 > **WHAT:** Bound deterministic and canary candidate validation to SPEC-0001
 > v8's explicit runtime store, immutable Wisp validator-runtime digest, exact
-> Stewards v2 extension protocol, and typed candidate-receipt field.
+> Stewards v2 extension protocol, and typed candidate-receipt field; required
+> capability-safe transcript transformation before artifact retention.
 > **WHY:** Candidate evidence cannot reproduce Wisp's family pre-tag result
 > unless it proves the same digest-bound validator runtime used by the release
-> contract.
+> contract. An uploaded raw `wisp_dashboard` result would also persist its
+> capability and violate SPEC-0001's no-persistence invariant.
 > **SCOPE:** Dependency pins, E2E/canary validation inputs, candidate receipt
-> verification, scenarios, requirements, and verification matrix; version
-> advanced from 3 to 4. Installed payload, MCP, dashboard, browser, surface,
-> and non-promotion evidence remain unchanged.
+> verification, transcript retention, scenarios, requirements, and
+> verification matrix; version advanced from 3 to 4. Installed payload, MCP,
+> dashboard, browser, surface, and non-promotion evidence remain unchanged.
 > **POINTER:** SPEC-0001 v8 and
-> `stewards/kodhama-spec-0001-family-plugin-release-and-distribution-metadata@v2`.
+> `stewards/kodhama-spec-0001-family-plugin-release-and-distribution-metadata@v2`;
+> spec-adversary `NEEDS-REVISION` on `f503602`.
 > **VALUE:** A Wisp maintainer can trust Codex evidence to cover the same
 > bounded product validator that the release gate runs.
 > **CONFIDENCE:** verified.
@@ -110,7 +113,8 @@ delegate to this command without changing the test architecture.
 `spec-0001-plugin-mcp-distribution@v8`. `packages.e2e` covers
 `test/e2e/**`, names `spec-0001-plugin-mcp-distribution@v8`,
 `spec-0002-codex-e2e-testing@v4`, and the unversioned decisions
-`adr-0006-codex-e2e-testing` and `adr-0007-codex-canary-evidence`. The
+`adr-0006-family-plugin-release-and-surface-contract` and
+`adr-0007-codex-canary-evidence`. The
 implementation SHALL update
 `.grove/config.toml`'s `TEST_DEPS_LEDGER` token to this path.
 
@@ -269,11 +273,40 @@ The six behavioral booleans have these exclusive truth conditions:
   `turn.failed` or top-level `error`, and `codex exec` exits `0` before its
   deadline.
 
-The workflow SHALL upload, without printing it to the job log, an artifact
-containing `codex.jsonl` and `evidence.json`; candidate mode additionally
-contains the exact `candidate-validation.json` receipt while weekly mode
-forbids it. `evidence.json` rejects unknown properties and has exactly this
-schema:
+The driver SHALL consume raw Codex stdout through a bounded volatile
+pipe/buffer and SHALL NOT tee, log, cache, persist, or upload those raw bytes.
+It computes the six behavioral booleans and performs the authenticated health
+request from that volatile stream while the Codex process is live.
+
+Before the first persistent write, it derives retained `codex.jsonl` from the
+raw bytes with exactly these byte replacements everywhere, including nested
+JSON strings and failure output:
+
+| Sensitive form | Retained form |
+|---|---|
+| `#capability=<43-character-base64url>` | `#capability=<redacted>` |
+| `Bearer <43-character-base64url>` | `Bearer <redacted>` |
+
+All bytes outside those matched 55-byte fragment forms and 50-byte bearer
+forms remain byte-identical and in the same order. The driver then scans the
+prospective retained bytes and requires absence of the exact observed
+capability, every `#capability=[A-Za-z0-9_-]{43}` occurrence, and every
+`Bearer [A-Za-z0-9_-]{43}` occurrence. The literal `<redacted>` sentinel
+preserves URL/header structure but is not accepted as authentication or
+behavioral proof. The raw stream, not the retained transcript, is the sole
+input for `dashboard_call_passed`, `dashboard_health_passed`, and
+`transcript_verified`; `evidence.json` retains their typed structural
+results. If transformation or the post-transform scan fails, the run is
+`fail`, no transcript crosses a persistent boundary, and artifact upload is
+blocked.
+
+Only after that check SHALL the workflow upload, without printing any member
+to the job log, an artifact containing the redacted `codex.jsonl` and
+`evidence.json`; candidate mode additionally contains the exact
+`candidate-validation.json` receipt while weekly mode forbids it.
+`evidence.json` itself SHALL contain no capability-shaped fragment, bearer,
+or exact observed capability. It rejects unknown properties and has exactly
+this schema:
 
 ```json
 {
@@ -528,6 +561,17 @@ approval conditions all pass for the same candidate.
   records that digest in the typed receipt, and removes the store before the
   model-driven or installed Wisp runtime begins.
 
+**S11 — Retained canary transcript is capability-safe**
+
+- **Given** raw Codex JSONL containing a valid dashboard fragment or bearer at
+  any top-level or nested string position,
+- **When** the workflow prepares its retained artifact,
+- **Then** it derives behavioral evidence from volatile raw bytes, replaces
+  every sensitive form with the exact structural sentinel before the first
+  write, preserves all other bytes, proves no observed or capability-shaped
+  value remains in transcript, evidence, or logs, and uploads nothing if that
+  proof fails.
+
 ### Requirements (EARS)
 
 - **R1 (ubiquitous):** The pull-request E2E gate shall require no Codex
@@ -570,6 +614,11 @@ approval conditions all pass for the same candidate.
   protocol as SPEC-0001 v8, shall discover no ambient runtime, and shall not
   expose the validation store or product findings to the Wisp MCP/dashboard
   process or model.
+- **R13 (event-driven):** When a Codex canary transcript or evidence is
+  retained, the workflow shall keep raw capability-bearing bytes volatile,
+  apply the exact fragment and bearer replacements before the first
+  persistent write, verify absence of the observed and capability-shaped
+  values, and block persistence and upload on failure.
 
 ## Verification matrix
 
@@ -577,6 +626,7 @@ approval conditions all pass for the same candidate.
 |---|---|
 | Inventory-bound staging | Positive and omission/extra/mismatch fixtures run candidate validation with the explicit runtime store plus the inventory provider twice, hash the candidate bundle and both skill files, verify all fifteen public-contract fingerprints, and prove the cache receives exactly the nine declared bytes |
 | Extension runtime | Container and canary fixtures prove the release-metadata digest, platform-matched immutable runtime object, repeated exact request/result protocol, typed receipt field, missing/mismatched/drifted/enforcement failures, no ambient fallback, cleanup before Codex, and no product-source mutation |
+| Capability-safe artifacts | Positive fixtures cover one and multiple fragment/bearer occurrences in top-level and nested JSON strings for pass, fail, and inconclusive runs; byte comparisons prove exact sentinel replacement and otherwise-identical retained JSONL, scans cover transcript/evidence/logs, raw-output spies prove no tee or write, and injected transform/scan failures prove no artifact upload |
 | Surface boundary | Fixtures prove staged `codex.local.interactive` identity/version/state, reject cross-surface evidence, and show E2E leaves source, generated support, and inventory files unchanged |
 | Candidate canary | Driver/verifier fixtures regenerate the canonical typed candidate receipt, bind its captured SHA-256 and source commit plus the validator-runtime/metadata/inventory/public-contract/contract-snapshot/surface/qualification/candidate-state/skill-contract/README-support/bundle subjects to exact validated bytes and evidence, and fail before Codex on any mismatch |
 | Release non-promotion | A passing Codex fixture with pending Claude, Node, dashboard, overall, approval, or derivative state creates no tag/history mutation and fails the complete release gate |
@@ -591,15 +641,16 @@ None.
 (1–7) from Trellis's shared artifact-contract rubric, frontmatter is complete;
 ADR-0006, ADR-0007, SPEC-0001 v8, and the approved Stewards metadata spec v2
 are declared; scope is bounded; repository, execution, inventory, evidence,
-non-promotion, and cadence contracts are implementable; S1–S10 are GWT
-scenarios; R1–R12 are EARS requirements; the verification matrix names
+non-promotion, and cadence contracts are implementable; S1–S11 are GWT
+scenarios; R1–R13 are EARS requirements; the verification matrix names
 executable evidence; and no unresolved question is hidden.
 
 ## Gate record
 
 Version 3 was approved on 2026-07-24 after the maintainer's family-rollout
 intent act, spec-adversary `APPROVE-READY`, and conformance `PASS`. Version 4
-does not reuse that approval for the new runtime-store and validator-digest
-evidence boundary. The contract-author self-check above gates this amendment;
+does not reuse that approval for the new runtime-store, validator-digest, and
+capability-safe artifact boundaries. The contract-author self-check above
+gates this amendment;
 independent intrinsic-quality and conformance review are owed before a human
 approval act may move it from `gated` to `approved`.
