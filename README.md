@@ -95,3 +95,17 @@ makes LP generation a design-system feature, triggered externally.
 ## License
 
 MIT — see `LICENSE`.
+
+## Plugin qualification
+
+`npm run verify` performs the repository-portable type, test, build, and
+payload-contract checks. Release qualification additionally runs the
+plugin-creator skill's official validator from that skill directory:
+
+```sh
+python3 scripts/validate_plugin.py /absolute/path/to/wisp/plugins/wisp
+```
+
+Claude validation is run separately with
+`claude plugin validate plugins/wisp`; live host and supported-Node evidence
+is recorded in `plugins/wisp/qualification.json`.
