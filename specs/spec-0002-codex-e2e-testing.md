@@ -1,7 +1,7 @@
 ---
 id: spec-0002-codex-e2e-testing
 type: spec
-status: gated  # v4 self-checked 2026-07-24; independent spec-adversary and conformance review are owed before approval
+status: approved  # Maintainer-authorized merge records v4 approval after independent gates passed
 depends_on:
   - adr-0007-codex-canary-evidence
   - adr-0006-family-plugin-release-and-surface-contract
@@ -737,9 +737,9 @@ executable evidence; and no unresolved question is hidden.
 ## Gate record
 
 Version 3 was approved on 2026-07-24 after the maintainer's family-rollout
-intent act, spec-adversary `APPROVE-READY`, and conformance `PASS`. Version 4
-does not reuse that approval for the new runtime-store, validator-digest, and
-capability-safe artifact boundaries. The contract-author self-check above
-gates this amendment;
-independent intrinsic-quality and conformance review are owed before a human
-approval act may move it from `gated` to `approved`.
+intent act, spec-adversary `APPROVE-READY`, and conformance `PASS`. The
+maintainer then authorized this family wave to merge when its independent
+gates passed. Version 4 received spec-adversary `APPROVE-READY`, conformance
+`PASS`, and a change-scoped corpus `PASS`; recording `approved` here records
+that maintainer act for the runtime-store, validator-digest, and
+capability-safe artifact amendment rather than reusing v3's approval.

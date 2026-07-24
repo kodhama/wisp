@@ -1,7 +1,7 @@
 ---
 id: spec-0001-plugin-mcp-distribution
 type: spec
-status: gated  # v8 self-checked 2026-07-24; independent spec-adversary and conformance review are owed before approval
+status: approved  # Maintainer-authorized merge records v8 approval after independent gates passed
 depends_on:
   - adr-0004-codex-session-bootstrap
   - adr-0005-plugin-dashboard-lifecycle
@@ -2959,9 +2959,9 @@ None.
 ## Gate record
 
 Version 7 was approved on 2026-07-24 after the maintainer's family-rollout
-intent act, spec-adversary `APPROVE-READY`, and conformance `PASS`. Version 8
-does not reuse that approval for Stewards v2's new execution/retained-byte
-requirements or the capability-safe host-evidence boundary. The
-contract-author self-check above gates this amendment;
-independent intrinsic-quality and conformance review are owed before a human
-approval act may move it from `gated` to `approved`.
+intent act, spec-adversary `APPROVE-READY`, and conformance `PASS`. The
+maintainer then authorized this family wave to merge when its independent
+gates passed. Version 8 received spec-adversary `APPROVE-READY`, conformance
+`PASS`, and a change-scoped corpus `PASS`; recording `approved` here records
+that maintainer act for the Stewards v2 and capability-safe evidence
+amendment rather than reusing v7's approval.
