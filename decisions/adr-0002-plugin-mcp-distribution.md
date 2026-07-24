@@ -23,6 +23,11 @@ updated: 2026-07-24
 > **Forward pointer.** `adr-0008-retire-family-release-certification`
 > supersedes that family release-certification addition. This ADR's original
 > dual-host plugin distribution and equal-manifest requirements remain current.
+>
+> **Forward pointer.** `adr-0009-independent-plugin-package-metadata`
+> supersedes only this ADR's exact payload-count inventory and makes
+> `plugins/wisp/VERSION` authoritative; the dual-host, bundled-MCP, and
+> product-owned qualification decisions remain current.
 
 ## Decision state
 
