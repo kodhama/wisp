@@ -16648,17 +16648,25 @@ var POLL_MS = 50;
 var SHUTDOWN_GRACE_MS = 1e3;
 var BODY_LIMIT = 32768;
 var backpressuredResponses = /* @__PURE__ */ new WeakSet();
+var systemClock = {
+  now: () => Date.now(),
+  sleep: (milliseconds) => delay2(milliseconds)
+};
 var DashboardCoordinator = class {
   #project;
   #runtime;
+  #clock;
+  #healthProof;
   #server;
   #record;
   #sockets = /* @__PURE__ */ new Set();
   #shuttingDown = false;
   #start;
-  constructor(project, runtime = createRuntime(project)) {
+  constructor(project, runtime = createRuntime(project), dependencies = {}) {
     this.#project = project;
     this.#runtime = runtime;
+    this.#clock = dependencies.clock ?? systemClock;
+    this.#healthProof = dependencies.healthProof ?? ((perform) => perform());
   }
   start() {
     if (this.#shuttingDown) return Promise.reject(unavailable("ownership_contended", true));
@@ -16694,15 +16702,20 @@ var DashboardCoordinator = class {
     const identity = await currentProcessIdentity();
     if (identity === void 0) throw unavailable("process_identity_unavailable", false);
     const location = await runtimeLocation(this.#project);
-    const deadline = Date.now() + CONVERGENCE_MS;
+    const deadline = this.#clock.now() + CONVERGENCE_MS;
     let liveStarting = false;
-    while (Date.now() <= deadline) {
+    while (this.#clock.now() <= deadline) {
       const existing = await readOwner(location.ownerDir, location.ownerFile);
       if (existing !== void 0) {
-        const reused = await inspectExisting(existing, location, this.#project);
+        const reused = await inspectExisting(
+          existing,
+          location,
+          this.#project,
+          (owner) => this.#proveHealth(owner, "follower")
+        );
         if (reused !== void 0) return reused;
         liveStarting = existing.state === "starting" && await pathExists(location.ownerDir);
-        await delay2(POLL_MS);
+        await this.#clock.sleep(POLL_MS);
         continue;
       }
       liveStarting = false;
@@ -16733,7 +16746,12 @@ var DashboardCoordinator = class {
         const authoritative = await readOwner(location.ownerDir, location.ownerFile);
         if (!exactOwner(authoritative, starting)) {
           if (authoritative === void 0) throw unavailable("ownership_contended", true);
-          const alternative = await inspectExisting(authoritative, location, this.#project);
+          const alternative = await inspectExisting(
+            authoritative,
+            location,
+            this.#project,
+            (owner) => this.#proveHealth(owner, "follower")
+          );
           if (alternative !== void 0) return alternative;
           throw unavailable(authoritative.state === "starting" ? "owner_starting" : "ownership_contended", true);
         }
@@ -16768,7 +16786,11 @@ var DashboardCoordinator = class {
         });
         this.#record = ready;
         const url = ownerUrl(ready);
-        await healthProof(ready);
+        try {
+          await this.#proveHealth(ready, "publisher");
+        } catch {
+          throw unavailable("owner_unhealthy", true);
+        }
         return { url, reused: false };
       } catch (error2) {
         await this.#closeListener();
@@ -16778,6 +16800,12 @@ var DashboardCoordinator = class {
       }
     }
     throw unavailable(liveStarting ? "owner_starting" : "ownership_contended", true);
+  }
+  async #proveHealth(owner, role) {
+    await this.#healthProof(
+      () => healthProof(owner),
+      { role, timeoutMs: HEALTH_TIMEOUT_MS }
+    );
   }
 };
 async function runtimeLocation(project) {
@@ -16813,7 +16841,7 @@ async function assertPrivateDirectory(path) {
   }
   if ((info.mode & 18) !== 0) throw unavailable("runtime_unsafe", false);
 }
-async function inspectExisting(owner, location, project) {
+async function inspectExisting(owner, location, project, proveHealth) {
   if (owner.project !== project || owner.project_key !== location.projectKey) {
     throw unavailable("owner_identity_unverifiable", false);
   }
@@ -16832,7 +16860,7 @@ async function inspectExisting(owner, location, project) {
   }
   if (owner.state === "starting") return void 0;
   try {
-    await healthProof(owner);
+    await proveHealth(owner);
     return { url: ownerUrl(owner), reused: true };
   } catch {
     throw unavailable("owner_unhealthy", true);

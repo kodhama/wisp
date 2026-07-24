@@ -39,18 +39,42 @@ type OwnerRecord = StartingOwner | ReadyOwner;
 
 export interface DashboardResult { url: string; reused: boolean }
 
+export interface DashboardCoordinatorDependencies {
+  clock?: {
+    now(): number;
+    sleep(milliseconds: number): Promise<void>;
+  };
+  healthProof?: (
+    perform: () => Promise<void>,
+    context: { role: "publisher" | "follower"; timeoutMs: number },
+  ) => Promise<void>;
+}
+
+const systemClock = {
+  now: () => Date.now(),
+  sleep: (milliseconds: number) => delay(milliseconds),
+};
+
 export class DashboardCoordinator {
   readonly #project: string;
   readonly #runtime: WispRuntime;
+  readonly #clock: NonNullable<DashboardCoordinatorDependencies["clock"]>;
+  readonly #healthProof: NonNullable<DashboardCoordinatorDependencies["healthProof"]>;
   #server: Server | undefined;
   #record: ReadyOwner | undefined;
   #sockets = new Set<Socket>();
   #shuttingDown = false;
   #start: Promise<DashboardResult> | undefined;
 
-  constructor(project: string, runtime: WispRuntime = createRuntime(project)) {
+  constructor(
+    project: string,
+    runtime: WispRuntime = createRuntime(project),
+    dependencies: DashboardCoordinatorDependencies = {},
+  ) {
     this.#project = project;
     this.#runtime = runtime;
+    this.#clock = dependencies.clock ?? systemClock;
+    this.#healthProof = dependencies.healthProof ?? ((perform) => perform());
   }
 
   start(): Promise<DashboardResult> {
@@ -90,15 +114,20 @@ export class DashboardCoordinator {
     const identity = await currentProcessIdentity();
     if (identity === undefined) throw unavailable("process_identity_unavailable", false);
     const location = await runtimeLocation(this.#project);
-    const deadline = Date.now() + CONVERGENCE_MS;
+    const deadline = this.#clock.now() + CONVERGENCE_MS;
     let liveStarting = false;
-    while (Date.now() <= deadline) {
+    while (this.#clock.now() <= deadline) {
       const existing = await readOwner(location.ownerDir, location.ownerFile);
       if (existing !== undefined) {
-        const reused = await inspectExisting(existing, location, this.#project);
+        const reused = await inspectExisting(
+          existing,
+          location,
+          this.#project,
+          (owner) => this.#proveHealth(owner, "follower"),
+        );
         if (reused !== undefined) return reused;
         liveStarting = existing.state === "starting" && await pathExists(location.ownerDir);
-        await delay(POLL_MS);
+        await this.#clock.sleep(POLL_MS);
         continue;
       }
       liveStarting = false;
@@ -124,7 +153,12 @@ export class DashboardCoordinator {
         const authoritative = await readOwner(location.ownerDir, location.ownerFile);
         if (!exactOwner(authoritative, starting)) {
           if (authoritative === undefined) throw unavailable("ownership_contended", true);
-          const alternative = await inspectExisting(authoritative, location, this.#project);
+          const alternative = await inspectExisting(
+            authoritative,
+            location,
+            this.#project,
+            (owner) => this.#proveHealth(owner, "follower"),
+          );
           if (alternative !== undefined) return alternative;
           throw unavailable(authoritative.state === "starting" ? "owner_starting" : "ownership_contended", true);
         }
@@ -152,7 +186,11 @@ export class DashboardCoordinator {
         await writeRecord(location.ownerFile, ready, true).catch(() => { throw unavailable("publish_failed", false); });
         this.#record = ready;
         const url = ownerUrl(ready);
-        await healthProof(ready);
+        try {
+          await this.#proveHealth(ready, "publisher");
+        } catch {
+          throw unavailable("owner_unhealthy", true);
+        }
         return { url, reused: false };
       } catch (error) {
         await this.#closeListener();
@@ -162,6 +200,13 @@ export class DashboardCoordinator {
       }
     }
     throw unavailable(liveStarting ? "owner_starting" : "ownership_contended", true);
+  }
+
+  async #proveHealth(owner: ReadyOwner, role: "publisher" | "follower"): Promise<void> {
+    await this.#healthProof(
+      () => healthProof(owner),
+      { role, timeoutMs: HEALTH_TIMEOUT_MS },
+    );
   }
 }
 
@@ -203,6 +248,7 @@ async function inspectExisting(
   owner: OwnerRecord,
   location: { projectKey: string; ownerDir: string; ownerFile: string },
   project: string,
+  proveHealth: (owner: ReadyOwner) => Promise<void>,
 ): Promise<DashboardResult | undefined> {
   if (owner.project !== project || owner.project_key !== location.projectKey) {
     throw unavailable("owner_identity_unverifiable", false);
@@ -221,7 +267,7 @@ async function inspectExisting(
   }
   if (owner.state === "starting") return undefined;
   try {
-    await healthProof(owner);
+    await proveHealth(owner);
     return { url: ownerUrl(owner), reused: true };
   } catch {
     throw unavailable("owner_unhealthy", true);
