@@ -147,6 +147,13 @@ describe("SPEC-0002 v2 reproducible Codex E2E surfaces", () => {
     expect(canary).toMatch(/id: install_codex[\s\S]{0,120}continue-on-error: true/u);
     expect(canary).toContain("CODEX_INSTALL_OUTCOME: ${{ steps.install_codex.outcome }}");
     expect(canary).toContain("timeout-minutes: 20");
+    const canaryJobPreamble = canary.slice(
+      canary.indexOf("jobs:"),
+      canary.indexOf("    steps:"),
+    );
+    expect(canaryJobPreamble).not.toContain("runner.temp");
+    expect(canary.match(/CODEX_HOME: \$\{\{ runner\.temp \}\}/gu)).toHaveLength(3);
+    expect(canary.match(/EVIDENCE_DIR: \$\{\{ runner\.temp \}\}/gu)).toHaveLength(4);
     const runBlocks = [...canary.matchAll(/\n\s+run:\s*>-([\s\S]*?)(?=\n\s+- name:|\n\s+- uses:|$)/gu)]
       .map((match) => match[1] ?? "");
     expect(runBlocks.join("\n")).not.toContain("${{ inputs.");
