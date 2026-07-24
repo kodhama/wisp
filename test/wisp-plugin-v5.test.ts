@@ -1,4 +1,4 @@
-// SPEC-0001 v5: S2, S20, S23, S28 / R1-R3, R24-R26, R34, R37.
+// SPEC-0001 v6: S2, S20, S23, S28 / R1-R3, R24-R26, R34, R37, R55, R57.
 import { createHash } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import { join, relative } from "node:path";
@@ -19,8 +19,8 @@ async function inventory(path = plugin): Promise<string[]> {
   return result.sort();
 }
 
-describe("SPEC-0001 S20/S23/S28 — exact dual-host MCP-only payload", () => {
-  it("contains exactly the seven release files", async () => {
+describe("SPEC-0001 v6 S20/S23/S28 — exact dual-host MCP-only payload", () => {
+  it("contains exactly the eight release files", async () => {
     expect(await inventory()).toEqual([
       ".claude-plugin/plugin.json",
       ".codex-plugin/plugin.json",
@@ -28,6 +28,7 @@ describe("SPEC-0001 S20/S23/S28 — exact dual-host MCP-only payload", () => {
       "README.md",
       "dist/wisp.mjs",
       "qualification.json",
+      "skills/dashboard/SKILL.md",
       "skills/wisp/SKILL.md",
     ]);
   });
@@ -36,7 +37,7 @@ describe("SPEC-0001 S20/S23/S28 — exact dual-host MCP-only payload", () => {
     const claude = JSON.parse(await readFile(join(plugin, ".claude-plugin/plugin.json"), "utf8"));
     const codex = JSON.parse(await readFile(join(plugin, ".codex-plugin/plugin.json"), "utf8"));
     const claudeMcp = JSON.parse(await readFile(join(plugin, ".mcp.json"), "utf8"));
-    expect(claude.version).toBe("0.1.0");
+    expect(claude.version).toBe("0.2.0");
     expect(codex.version).toBe(claude.version);
     expect(claude.bin).toBeUndefined();
     expect(codex.bin).toBeUndefined();
@@ -48,7 +49,7 @@ describe("SPEC-0001 S20/S23/S28 — exact dual-host MCP-only payload", () => {
     });
     const bootstrap = codexServer.args[1];
     expect(bootstrap).toContain("process.env.WISP_PROJECT_ROOT=process.cwd()");
-    expect(bootstrap).toContain("'plugins','cache','kodhama','wisp','0.1.0','dist','wisp.mjs'");
+    expect(bootstrap).toContain("'plugins','cache','kodhama','wisp','0.2.0','dist','wisp.mjs'");
     expect(bootstrap).toContain("process.env.CODEX_HOME");
     expect(bootstrap).not.toMatch(
       /CLAUDE|PLUGIN_ROOT|npm|npx|fetch|https?:|child_process|process\.stdout|console\.log/u,
@@ -64,11 +65,21 @@ describe("SPEC-0001 S20/S23/S28 — exact dual-host MCP-only payload", () => {
     });
   });
 
-  it("keeps the skill portable and qualification evidence coherent with the real bundle digest", async () => {
+  it("keeps both skills portable and qualification evidence coherent with the real bundle digest", async () => {
     const skill = await readFile(join(plugin, "skills/wisp/SKILL.md"), "utf8");
     expect(skill).toContain("wisp_status");
     expect(skill).toContain("wisp_check");
     expect(skill).not.toMatch(/Grove|grove|\/|node |npm |npx |shell|auto.?obey/i);
+    const dashboardSkill = await readFile(
+      join(plugin, "skills/dashboard/SKILL.md"),
+      "utf8",
+    );
+    expect(dashboardSkill).toContain("wisp_dashboard");
+    expect(dashboardSkill).toMatch(/open|show|start/i);
+    expect(dashboardSkill).toMatch(/exact|returned/i);
+    expect(dashboardSkill).not.toMatch(
+      /https?:\/\/|```|child_process|\.grove\/|(?:^|\n)\s*(?:node|npm|npx|open|xdg-open)\s/imu,
+    );
 
     const bundle = await readFile(join(plugin, "dist/wisp.mjs"));
     const qualification = JSON.parse(await readFile(join(plugin, "qualification.json"), "utf8"));
@@ -78,13 +89,14 @@ describe("SPEC-0001 S20/S23/S28 — exact dual-host MCP-only payload", () => {
       "artifact_sha256",
       "claude",
       "codex",
+      "dashboard",
       "date",
       "node_versions",
       "platform",
       "plugin_version",
       "result",
     ]);
-    expect(qualification.plugin_version).toBe("0.1.0");
+    expect(qualification.plugin_version).toBe("0.2.0");
     expect(qualification.date).toMatch(/^\d{4}-\d{2}-\d{2}$/u);
     const [year, month, day] = qualification.date.split("-").map(Number);
     expect(
@@ -99,6 +111,45 @@ describe("SPEC-0001 S20/S23/S28 — exact dual-host MCP-only payload", () => {
       expect(evidence.version).toMatch(new RegExp(`^(?:pending|${major}\\.\\d+\\.\\d+)$`, "u"));
       expect(["pending", "pass", "fail"]).toContain(evidence.result);
       if (evidence.result === "pass") expect(evidence.version).not.toBe("pending");
+    }
+    expect(Object.keys(qualification.dashboard).sort()).toEqual([
+      "claude_open_passed",
+      "cleanup_recovery_passed",
+      "codex_open_passed",
+      "command_append_passed",
+      "cross_host_singleton_passed",
+      "explicit_start_only",
+      "process_identity_passed",
+      "project_isolation_passed",
+      "result",
+      "security_passed",
+    ]);
+    expect(["pending", "pass", "fail"]).toContain(qualification.dashboard.result);
+    for (const field of [
+      "explicit_start_only",
+      "claude_open_passed",
+      "codex_open_passed",
+      "cross_host_singleton_passed",
+      "project_isolation_passed",
+      "command_append_passed",
+      "security_passed",
+      "cleanup_recovery_passed",
+      "process_identity_passed",
+    ] as const) {
+      expect(qualification.dashboard[field]).toEqual(expect.any(Boolean));
+    }
+    if (qualification.dashboard.result === "pass") {
+      expect([
+        qualification.dashboard.explicit_start_only,
+        qualification.dashboard.claude_open_passed,
+        qualification.dashboard.codex_open_passed,
+        qualification.dashboard.cross_host_singleton_passed,
+        qualification.dashboard.project_isolation_passed,
+        qualification.dashboard.command_append_passed,
+        qualification.dashboard.security_passed,
+        qualification.dashboard.cleanup_recovery_passed,
+        qualification.dashboard.process_identity_passed,
+      ]).toEqual([true, true, true, true, true, true, true, true, true]);
     }
     for (const host of ["claude", "codex"] as const) {
       const evidence = qualification[host];
@@ -139,7 +190,8 @@ describe("SPEC-0001 S20/S23/S28 — exact dual-host MCP-only payload", () => {
         ).map((value) => value.result),
         qualification.claude.result,
         qualification.codex.result,
-      ]).toEqual(["pass", "pass", "pass", "pass", "pass"]);
+        qualification.dashboard.result,
+      ]).toEqual(["pass", "pass", "pass", "pass", "pass", "pass"]);
     }
   });
 

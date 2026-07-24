@@ -1,4 +1,4 @@
-// SPEC-0001 v5: S2, S3a, S9, S11, S18, S21, S22 / R2-R3, R11, R13, R21, R27, R37.
+// SPEC-0001 v6: S2, S3a, S9, S11, S18, S21-S22, S31-S32 / R2-R3, R11, R13, R21, R27, R37-R38.
 import { spawn } from "node:child_process";
 import { copyFile, mkdir, readFile, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -53,8 +53,8 @@ describe("SPEC-0001 concurrent cross-process acknowledgement", () => {
   });
 });
 
-describe("SPEC-0001 S2/S9/S11/S18/S21/S22 — clean bundled stdio MCP", () => {
-  it("lists exactly six tools, checks, and writes only to its selected project", async () => {
+describe("SPEC-0001 v6 S2/S9/S11/S18/S21/S22/S31 — clean bundled stdio MCP", () => {
+  it("lists exactly seven tools, checks, and writes only to its selected project", async () => {
     const project = await mkdtemp(join(tmpdir(), "wisp-clean-project-"));
     const unrelatedCwd = await mkdtemp(join(tmpdir(), "wisp-clean-cwd-"));
     const stderr: string[] = [];

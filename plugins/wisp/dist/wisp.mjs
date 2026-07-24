@@ -3647,49 +3647,49 @@ var require_fast_uri = __commonJS({
       schemelessOptions.skipEscape = true;
       return serialize(resolved, schemelessOptions);
     }
-    function resolveComponent(base, relative2, options, skipNormalization) {
+    function resolveComponent(base, relative3, options, skipNormalization) {
       const target = {};
       if (!skipNormalization) {
         base = parse3(serialize(base, options), options);
-        relative2 = parse3(serialize(relative2, options), options);
+        relative3 = parse3(serialize(relative3, options), options);
       }
       options = options || {};
-      if (!options.tolerant && relative2.scheme) {
-        target.scheme = relative2.scheme;
-        target.userinfo = relative2.userinfo;
-        target.host = relative2.host;
-        target.port = relative2.port;
-        target.path = removeDotSegments(relative2.path || "");
-        target.query = relative2.query;
+      if (!options.tolerant && relative3.scheme) {
+        target.scheme = relative3.scheme;
+        target.userinfo = relative3.userinfo;
+        target.host = relative3.host;
+        target.port = relative3.port;
+        target.path = removeDotSegments(relative3.path || "");
+        target.query = relative3.query;
       } else {
-        if (relative2.userinfo !== void 0 || relative2.host !== void 0 || relative2.port !== void 0) {
-          target.userinfo = relative2.userinfo;
-          target.host = relative2.host;
-          target.port = relative2.port;
-          target.path = removeDotSegments(relative2.path || "");
-          target.query = relative2.query;
+        if (relative3.userinfo !== void 0 || relative3.host !== void 0 || relative3.port !== void 0) {
+          target.userinfo = relative3.userinfo;
+          target.host = relative3.host;
+          target.port = relative3.port;
+          target.path = removeDotSegments(relative3.path || "");
+          target.query = relative3.query;
         } else {
-          if (!relative2.path) {
+          if (!relative3.path) {
             target.path = base.path;
-            if (relative2.query !== void 0) {
-              target.query = relative2.query;
+            if (relative3.query !== void 0) {
+              target.query = relative3.query;
             } else {
               target.query = base.query;
             }
           } else {
-            if (relative2.path[0] === "/") {
-              target.path = removeDotSegments(relative2.path);
+            if (relative3.path[0] === "/") {
+              target.path = removeDotSegments(relative3.path);
             } else {
               if ((base.userinfo !== void 0 || base.host !== void 0 || base.port !== void 0) && !base.path) {
-                target.path = "/" + relative2.path;
+                target.path = "/" + relative3.path;
               } else if (!base.path) {
-                target.path = relative2.path;
+                target.path = relative3.path;
               } else {
-                target.path = base.path.slice(0, base.path.lastIndexOf("/") + 1) + relative2.path;
+                target.path = base.path.slice(0, base.path.lastIndexOf("/") + 1) + relative3.path;
               }
               target.path = removeDotSegments(target.path);
             }
-            target.query = relative2.query;
+            target.query = relative3.query;
           }
           target.userinfo = base.userinfo;
           target.host = base.host;
@@ -3697,7 +3697,7 @@ var require_fast_uri = __commonJS({
         }
         target.scheme = base.scheme;
       }
-      target.fragment = relative2.fragment;
+      target.fragment = relative3.fragment;
       return target;
     }
     function equal(uriA, uriB, options) {
@@ -6895,7 +6895,7 @@ var require_dist = __commonJS({
 });
 
 // src/mcp.ts
-import { randomUUID as randomUUID2 } from "node:crypto";
+import { randomUUID as randomUUID3 } from "node:crypto";
 
 // node_modules/zod/v4/core/core.js
 var _a;
@@ -15468,6 +15468,7 @@ import {
   lstat,
   mkdir,
   open,
+  readdir,
   realpath,
   rename,
   rmdir,
@@ -15476,6 +15477,82 @@ import {
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { randomUUID } from "node:crypto";
+
+// src/process-identity.ts
+import { execFile } from "node:child_process";
+import { readFile } from "node:fs/promises";
+import { promisify } from "node:util";
+function processInstanceIsGone(recordedToken, observation) {
+  if (observation.state === "inconclusive") return void 0;
+  if (observation.state === "absent") return true;
+  return observation.token !== recordedToken;
+}
+var execFileAsync = promisify(execFile);
+var BOOT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+var PS_DATE = /^(Sun|Mon|Tue|Wed|Thu|Fri|Sat) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) ([ 0-3][0-9]) ([0-2][0-9]):([0-5][0-9]):([0-5][0-9]) ([0-9]{4})$/;
+var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+function parseLinuxIdentity(bootIdText, statText, pid) {
+  const bootId = bootIdText.trim();
+  if (!BOOT_ID.test(bootId)) return void 0;
+  const prefix = `${pid} (`;
+  if (!statText.startsWith(prefix)) return void 0;
+  const close = statText.lastIndexOf(") ");
+  if (close < prefix.length) return void 0;
+  const fields = statText.slice(close + 2).trim().split(/\s+/u);
+  const starttime = fields[19];
+  if (starttime === void 0 || !/^[0-9]+$/u.test(starttime)) return void 0;
+  return `linux:${bootId}:${starttime}`;
+}
+function parseDarwinIdentity(value) {
+  const lines = value.trim().split(/\r?\n/u);
+  if (lines.length !== 1) return void 0;
+  const match = PS_DATE.exec(lines[0]);
+  if (match === null) return void 0;
+  const month = MONTHS.indexOf(match[2]) + 1;
+  const day = Number(match[3].trim());
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const second = Number(match[6]);
+  const year = Number(match[7]);
+  const date3 = new Date(year, month - 1, day, hour, minute, second);
+  if (date3.getFullYear() !== year || date3.getMonth() !== month - 1 || date3.getDate() !== day || date3.getHours() !== hour || date3.getMinutes() !== minute || date3.getSeconds() !== second) return void 0;
+  return `darwin:${year.toString().padStart(4, "0")}-${month.toString().padStart(2, "0")}-${day.toString().padStart(2, "0")}T${match[4]}:${match[5]}:${match[6]}`;
+}
+async function observeProcess(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return { state: "inconclusive" };
+  if (process.platform === "linux") {
+    try {
+      const [bootId, stat2] = await Promise.all([
+        readFile("/proc/sys/kernel/random/boot_id", "utf8"),
+        readFile(`/proc/${pid}/stat`, "utf8")
+      ]);
+      const token = parseLinuxIdentity(bootId, stat2, pid);
+      return token === void 0 ? { state: "inconclusive" } : { state: "present", token };
+    } catch (error2) {
+      return error2 instanceof Error && "code" in error2 && error2.code === "ENOENT" ? { state: "absent" } : { state: "inconclusive" };
+    }
+  }
+  if (process.platform === "darwin") {
+    try {
+      const { stdout } = await execFileAsync("/bin/ps", ["-p", String(pid), "-o", "lstart="], {
+        env: { LC_ALL: "C" },
+        timeout: 1e3
+      });
+      const token = parseDarwinIdentity(stdout);
+      return token === void 0 ? { state: "inconclusive" } : { state: "present", token };
+    } catch (error2) {
+      const candidate = error2;
+      return candidate.code === 1 && (candidate.stdout ?? "").trim() === "" ? { state: "absent" } : { state: "inconclusive" };
+    }
+  }
+  return { state: "inconclusive" };
+}
+async function currentProcessIdentity() {
+  const observed = await observeProcess(process.pid);
+  return observed.state === "present" ? observed.token : void 0;
+}
+
+// src/runtime.ts
 var ROOTS_LIST_TIMEOUT_MS = 5e3;
 var LIMITS = Object.freeze({
   identifier: 128,
@@ -15588,13 +15665,15 @@ var INPUT_KEYS = {
   wisp_verdict: ["run", "agent", "verdict", "activity", "refs", "to", "via"],
   wisp_question: ["run", "agent", "question_id", "text", "to", "via"],
   wisp_check: ["run", "agent"],
-  wisp_ack: ["run", "agent", "command_id", "result", "note", "to", "via"]
+  wisp_ack: ["run", "agent", "command_id", "result", "note", "to", "via"],
+  wisp_dashboard: []
 };
 function validateToolInput(tool, input) {
   const allowed = INPUT_KEYS[tool];
   if (allowed === void 0) inputError("", "invalid_enum");
   const record2 = ownRecord(input, "");
   rejectUnknown(record2, allowed);
+  if (tool === "wisp_dashboard") return record2;
   const base = {
     run: identifier(required2(record2, "run"), "/run"),
     agent: identifier(required2(record2, "agent"), "/agent")
@@ -16008,21 +16087,39 @@ async function appendEventUnlocked(project, event) {
 }
 var LOCK_STALE_MS = 12e4;
 var LOCK_WAIT_MS = 5e3;
+var RELEASE_SYNC_MS = 250;
+var RELEASE_RETRY_MS = 10;
+var committedTokens = /* @__PURE__ */ new Set();
+var committedReleaseHorizonMs = LOCK_WAIT_MS;
 async function withWriteLock(project, operation) {
   const { directory } = await inspectOwnedPaths(project, "write");
   const lockPath = join(directory, "write.lock");
   const ownerPath = join(lockPath, "owner.json");
   const token = randomUUID();
+  const identity = await currentProcessIdentity();
+  if (identity === void 0) {
+    throw new WispError("bus_unwritable", "Process identity is unavailable", {
+      path: lockPath,
+      reason: "process_identity_unavailable"
+    });
+  }
   const deadline = Date.now() + LOCK_WAIT_MS;
+  const owner = {
+    token,
+    pid: process.pid,
+    process_identity: identity,
+    created: Date.now(),
+    phase: "held"
+  };
   while (true) {
     try {
       await mkdir(lockPath, { mode: 448 });
-      const owner = Buffer.from(JSON.stringify({ token, pid: process.pid, created: Date.now() }), "utf8");
+      const ownerBytes = Buffer.from(JSON.stringify(owner), "utf8");
       const flags = fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL | (typeof fsConstants.O_NOFOLLOW === "number" ? fsConstants.O_NOFOLLOW : 0);
       const handle = await open(ownerPath, flags, 384);
       try {
-        const { bytesWritten } = await handle.write(owner, 0, owner.byteLength, null);
-        if (bytesWritten !== owner.byteLength) throw new Error("short lock owner write");
+        const { bytesWritten } = await handle.write(ownerBytes, 0, ownerBytes.byteLength, null);
+        if (bytesWritten !== ownerBytes.byteLength) throw new Error("short lock owner write");
       } finally {
         await handle.close().catch(() => void 0);
       }
@@ -16033,6 +16130,11 @@ async function withWriteLock(project, operation) {
         await rmdir(lockPath).catch(() => void 0);
         throw new WispError("bus_unwritable", "Cannot acquire write lock", { path: lockPath, reason: "open_failed" });
       }
+      const blocked = await readLockOwner(ownerPath).catch(() => void 0);
+      if (blocked !== void 0 && committedTokens.has(blocked.token) && blocked.pid === process.pid && blocked.process_identity === identity) {
+        await releaseCommittedLock(lockPath, ownerPath, blocked, Date.now() + RELEASE_SYNC_MS, false);
+        continue;
+      }
       await recoverStaleLock(lockPath, ownerPath);
       if (Date.now() >= deadline) {
         throw new WispError("bus_unwritable", "Timed out acquiring write lock", { path: lockPath, reason: "open_failed" });
@@ -16040,18 +16142,99 @@ async function withWriteLock(project, operation) {
       await delay(10);
     }
   }
+  let committed = false;
   try {
-    return await operation();
+    const result = await operation();
+    committed = true;
+    return result;
   } finally {
-    try {
-      const owner = await readLockOwner(ownerPath);
-      if (owner.token === token) {
-        await unlink(ownerPath);
-        await rmdir(lockPath);
+    if (committed) {
+      owner.phase = "committed";
+      const commitHorizon = Date.now() + committedReleaseHorizonMs;
+      const released = await releaseCommittedLock(lockPath, ownerPath, owner, Date.now() + RELEASE_SYNC_MS);
+      if (!released) {
+        committedTokens.add(token);
+        scheduleCommittedRelease(lockPath, ownerPath, owner, commitHorizon);
       }
-    } catch {
+    } else {
+      await releaseHeldLock(lockPath, ownerPath, owner, Date.now() + RELEASE_SYNC_MS);
     }
   }
+}
+async function releaseCommittedLock(lockPath, ownerPath, owner, deadline, diagnose = true) {
+  let stage = "phase_publish";
+  let diagnosed = false;
+  while (Date.now() <= deadline) {
+    try {
+      stage = "phase_publish";
+      const current = await readLockOwner(ownerPath);
+      if (current.token !== owner.token || current.pid !== owner.pid || current.process_identity !== owner.process_identity) return false;
+      if (current.phase !== "committed") await replaceLockOwner(ownerPath, owner);
+      stage = "release_rename";
+      const published = await readLockOwner(ownerPath);
+      if (!sameLockOwner(published, owner)) return false;
+      const retired = `${lockPath}.retired-${owner.token}`;
+      await rename(lockPath, retired);
+      committedTokens.delete(owner.token);
+      scheduleRetiredCleanup(retired);
+      return true;
+    } catch {
+      if (diagnose && !diagnosed) {
+        releaseDiagnostic(stage);
+        diagnosed = true;
+      }
+      await delay(RELEASE_RETRY_MS);
+    }
+  }
+  if (diagnose && !diagnosed) releaseDiagnostic(stage);
+  return false;
+}
+async function releaseHeldLock(lockPath, ownerPath, owner, deadline) {
+  while (Date.now() <= deadline) {
+    try {
+      const current = await readLockOwner(ownerPath);
+      if (!sameLockOwner(current, owner)) return;
+      const retired = `${lockPath}.retired-${owner.token}`;
+      await rename(lockPath, retired);
+      scheduleRetiredCleanup(retired);
+      return;
+    } catch {
+      await delay(RELEASE_RETRY_MS);
+    }
+  }
+  releaseDiagnostic("release_rename");
+}
+function scheduleCommittedRelease(lockPath, ownerPath, owner, horizon) {
+  const worker = async () => {
+    if (Date.now() > horizon) {
+      committedTokens.delete(owner.token);
+      return;
+    }
+    if (!committedTokens.has(owner.token)) return;
+    const released = await releaseCommittedLock(lockPath, ownerPath, owner, Date.now() + 45, false);
+    if (!released && Date.now() <= horizon) {
+      const timer2 = setTimeout(() => {
+        void worker();
+      }, 50);
+      timer2.unref();
+    } else if (!released) {
+      committedTokens.delete(owner.token);
+    }
+  };
+  const timer = setTimeout(() => {
+    void worker();
+  }, 50);
+  timer.unref();
+}
+function scheduleRetiredCleanup(path) {
+  const timer = setTimeout(async () => {
+    if (!await cleanupLockDirectory(path)) releaseDiagnostic("retired_cleanup");
+  }, 0);
+  timer.unref();
+}
+function releaseDiagnostic(stage) {
+  process.stderr.write(`wisp lock incident ${randomUUID()} stage=${stage}
+`);
 }
 async function recoverStaleLock(lockPath, ownerPath) {
   let info;
@@ -16067,28 +16250,41 @@ async function recoverStaleLock(lockPath, ownerPath) {
     throw new WispError("bus_unwritable", "Write lock is not a directory", { path: lockPath, reason: "path_not_directory" });
   }
   let dead = false;
+  let owner;
   try {
     const ownerInfo = await lstat(ownerPath);
-    if (ownerInfo.isSymbolicLink() || !ownerInfo.isFile()) return;
-    const owner = await readLockOwner(ownerPath);
-    const ownerPid = typeof owner.pid === "number" && Number.isInteger(owner.pid) && owner.pid > 0 ? owner.pid : void 0;
-    if (ownerPid !== void 0) {
-      try {
-        process.kill(ownerPid, 0);
-        return;
-      } catch (error2) {
-        dead = error2 instanceof Error && "code" in error2 && error2.code === "ESRCH";
-        if (!dead) return;
-      }
+    if (ownerInfo.isSymbolicLink()) {
+      throw new WispError("bus_unwritable", "Write-lock owner is a symlink", {
+        path: ownerPath,
+        reason: "path_is_symlink"
+      });
     }
-    if (ownerPid === void 0) {
-      const ageBase = typeof owner.created === "number" ? owner.created : info.mtimeMs;
-      dead = Date.now() - ageBase > LOCK_STALE_MS;
+    if (!ownerInfo.isFile()) {
+      throw new WispError("bus_unwritable", "Write-lock owner is not a regular file", {
+        path: ownerPath,
+        reason: "path_not_regular_file"
+      });
     }
-  } catch {
-    dead = Date.now() - info.mtimeMs > LOCK_STALE_MS;
+    owner = await readLockOwner(ownerPath);
+    const observed = await observeProcess(owner.pid);
+    const gone = processInstanceIsGone(owner.process_identity, observed);
+    if (gone === void 0) return;
+    dead = gone || !gone && owner.phase === "committed";
+  } catch (error2) {
+    if (error2 instanceof WispError) throw error2;
+    const created = await readMalformedOwnerCreated(ownerPath);
+    dead = Date.now() - (created ?? info.mtimeMs) > LOCK_STALE_MS;
   }
   if (!dead) return;
+  if (owner !== void 0) {
+    let current;
+    try {
+      current = await readLockOwner(ownerPath);
+    } catch {
+      return;
+    }
+    if (!sameLockOwner(current, owner)) return;
+  }
   const stale = `${lockPath}.stale-${randomUUID()}`;
   try {
     await rename(lockPath, stale);
@@ -16098,16 +16294,65 @@ async function recoverStaleLock(lockPath, ownerPath) {
   await unlink(join(stale, "owner.json")).catch(() => void 0);
   await rmdir(stale).catch(() => void 0);
 }
+function sameLockOwner(left, right) {
+  return left.token === right.token && left.pid === right.pid && left.process_identity === right.process_identity && left.created === right.created && left.phase === right.phase;
+}
+async function readMalformedOwnerCreated(path) {
+  const flags = fsConstants.O_RDONLY | (typeof fsConstants.O_NOFOLLOW === "number" ? fsConstants.O_NOFOLLOW : 0);
+  try {
+    const handle = await open(path, flags);
+    try {
+      const value = JSON.parse(await handle.readFile("utf8"));
+      return typeof value.created === "number" && Number.isFinite(value.created) && Number.isInteger(value.created) && value.created >= 0 ? value.created : void 0;
+    } finally {
+      await handle.close();
+    }
+  } catch {
+    return void 0;
+  }
+}
 async function readLockOwner(path) {
   const flags = fsConstants.O_RDONLY | (typeof fsConstants.O_NOFOLLOW === "number" ? fsConstants.O_NOFOLLOW : 0);
   const handle = await open(path, flags);
   try {
     const info = await handle.stat();
     if (!info.isFile()) throw new Error("lock owner is not a regular file");
-    return JSON.parse(await handle.readFile("utf8"));
+    const value = JSON.parse(await handle.readFile("utf8"));
+    if (Object.keys(value).sort().join(",") !== "created,phase,pid,process_identity,token" || typeof value.token !== "string" || !/^[0-9a-f-]{36}$/u.test(value.token) || typeof value.pid !== "number" || !Number.isInteger(value.pid) || value.pid <= 0 || typeof value.process_identity !== "string" || value.process_identity.length === 0 || typeof value.created !== "number" || !Number.isInteger(value.created) || value.created < 0 || value.phase !== "held" && value.phase !== "committed") throw new Error("invalid lock owner");
+    return value;
   } finally {
     await handle.close().catch(() => void 0);
   }
+}
+async function replaceLockOwner(path, owner) {
+  const temporary = `${path}.tmp-${randomUUID()}`;
+  const handle = await open(temporary, fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL, 384);
+  try {
+    try {
+      await handle.writeFile(JSON.stringify(owner), "utf8");
+    } finally {
+      await handle.close();
+    }
+    await rename(temporary, path);
+  } catch (error2) {
+    await handle.close().catch(() => void 0);
+    await unlink(temporary).catch(() => void 0);
+    throw error2;
+  }
+}
+async function cleanupLockDirectory(path) {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      await unlink(join(path, "owner.json")).catch(() => void 0);
+      const entries = await readdir(path).catch(() => []);
+      await Promise.all(entries.filter((entry) => entry.startsWith("owner.json.tmp-")).map((entry) => unlink(join(path, entry)).catch(() => void 0)));
+      await rmdir(path);
+      return true;
+    } catch {
+      await delay(50);
+    }
+  }
+  return false;
 }
 function commandStates(events, run) {
   const commands = events.map((event, index) => ({ event, index })).filter(({ event }) => event.kind === "command" && event.run === run);
@@ -16260,6 +16505,68 @@ function createRuntime(project, now = () => /* @__PURE__ */ new Date()) {
         await appendEventUnlocked(projectPath, event);
         return event;
       });
+    },
+    async dashboardEvents() {
+      const parsed = await readBus(await canonicalProject);
+      if (parsed.parse_errors.length > LIMITS.parse_errors) {
+        throw new WispError("bus_limit_exceeded", "Too many parse errors", {
+          subject: "parse_errors",
+          unit: "items",
+          limit: LIMITS.parse_errors,
+          actual: parsed.parse_errors.length
+        });
+      }
+      const runs = [];
+      for (const event of parsed.events) {
+        if (event.kind === "command" && !runs.includes(event.run)) runs.push(event.run);
+      }
+      const command_states = runs.flatMap((run) => commandStates(parsed.events, run).map(({ event, status }) => {
+        const body = event.command;
+        return {
+          run,
+          id: body.id,
+          type: body.type,
+          target: body.target,
+          issued_by: event.agent,
+          issued_at: event.ts,
+          status,
+          ...Object.hasOwn(body, "payload") ? { payload: body.payload } : {}
+        };
+      }));
+      if (command_states.length > LIMITS.commands) {
+        throw new WispError("bus_limit_exceeded", "Too many commands", {
+          subject: "commands",
+          unit: "items",
+          limit: LIMITS.commands,
+          actual: command_states.length
+        });
+      }
+      return { ...parsed, command_states };
+    },
+    async issueCommand(input) {
+      const record2 = ownRecord(input, "");
+      rejectUnknown(record2, ["run", "type", "target", "payload"]);
+      const run = identifier(required2(record2, "run"), "/run");
+      const type = enumValue(required2(record2, "type"), "/type", COMMAND_TYPES);
+      const target = identifier(required2(record2, "target"), "/target");
+      let payload;
+      if (Object.hasOwn(record2, "payload")) {
+        payload = ownRecord(record2.payload, "/payload");
+      }
+      const event = stamp(now, {
+        run,
+        agent: "maintainer",
+        kind: "command",
+        command: {
+          id: `cmd-${randomUUID()}`,
+          type,
+          target,
+          ...payload === void 0 ? {} : { payload }
+        }
+      });
+      const projectPath = await canonicalProject;
+      await withWriteLock(projectPath, () => appendEventUnlocked(projectPath, event));
+      return event;
     }
   };
 }
@@ -16327,6 +16634,586 @@ async function canonicalDirectory(path, reason, source) {
   }
 }
 
+// src/dashboard.ts
+import { createHash, randomBytes, randomUUID as randomUUID2, timingSafeEqual } from "node:crypto";
+import { constants as fsConstants2 } from "node:fs";
+import { lstat as lstat2, mkdir as mkdir2, open as open2, realpath as realpath3, rename as rename2, rmdir as rmdir2, unlink as unlink2 } from "node:fs/promises";
+import { createServer } from "node:http";
+import { homedir } from "node:os";
+import { isAbsolute as isAbsolute3, join as join2, relative as relative2 } from "node:path";
+var DASHBOARD_PROTOCOL_VERSION = 1;
+var HEALTH_TIMEOUT_MS = 500;
+var CONVERGENCE_MS = 2e3;
+var POLL_MS = 50;
+var SHUTDOWN_GRACE_MS = 1e3;
+var BODY_LIMIT = 32768;
+var backpressuredResponses = /* @__PURE__ */ new WeakSet();
+var DashboardCoordinator = class {
+  #project;
+  #runtime;
+  #server;
+  #record;
+  #sockets = /* @__PURE__ */ new Set();
+  #shuttingDown = false;
+  #start;
+  constructor(project, runtime = createRuntime(project)) {
+    this.#project = project;
+    this.#runtime = runtime;
+  }
+  start() {
+    if (this.#shuttingDown) return Promise.reject(unavailable("ownership_contended", true));
+    this.#start ??= this.#startOnce().finally(() => {
+      if (this.#record === void 0) this.#start = void 0;
+    });
+    return this.#start;
+  }
+  async cleanup() {
+    if (this.#shuttingDown) return;
+    this.#shuttingDown = true;
+    await this.#start?.catch(() => void 0);
+    await this.#closeListener();
+    if (this.#record !== void 0) await removeMatchingOwner(this.#record).catch(() => void 0);
+  }
+  async #closeListener() {
+    const server = this.#server;
+    if (server !== void 0) {
+      await new Promise((resolve2) => {
+        const timer = setTimeout(() => {
+          for (const socket of this.#sockets) socket.destroy();
+        }, SHUTDOWN_GRACE_MS);
+        timer.unref();
+        server.close(() => {
+          clearTimeout(timer);
+          resolve2();
+        });
+      });
+      this.#server = void 0;
+    }
+  }
+  async #startOnce() {
+    const identity = await currentProcessIdentity();
+    if (identity === void 0) throw unavailable("process_identity_unavailable", false);
+    const location = await runtimeLocation(this.#project);
+    const deadline = Date.now() + CONVERGENCE_MS;
+    let liveStarting = false;
+    while (Date.now() <= deadline) {
+      const existing = await readOwner(location.ownerDir, location.ownerFile);
+      if (existing !== void 0) {
+        const reused = await inspectExisting(existing, location, this.#project);
+        if (reused !== void 0) return reused;
+        liveStarting = existing.state === "starting" && await pathExists(location.ownerDir);
+        await delay2(POLL_MS);
+        continue;
+      }
+      liveStarting = false;
+      const instance = randomUUID2();
+      const starting = {
+        schema: 1,
+        protocol: 1,
+        state: "starting",
+        project: this.#project,
+        project_key: location.projectKey,
+        instance,
+        pid: process.pid,
+        process_identity: identity,
+        created_at: (/* @__PURE__ */ new Date()).toISOString()
+      };
+      if (this.#shuttingDown) throw unavailable("ownership_contended", true);
+      const candidate = `${location.ownerDir}.candidate-${instance}`;
+      await mkdir2(candidate, { mode: 448 });
+      try {
+        await writeRecord(join2(candidate, "owner.json"), starting);
+        await rename2(candidate, location.ownerDir);
+      } catch (error2) {
+        await cleanupDirectory(candidate);
+        if (isCode(error2, "EEXIST") || isCode(error2, "ENOTEMPTY")) continue;
+        throw unavailable("publish_failed", false);
+      }
+      try {
+        const authoritative = await readOwner(location.ownerDir, location.ownerFile);
+        if (!exactOwner(authoritative, starting)) {
+          if (authoritative === void 0) throw unavailable("ownership_contended", true);
+          const alternative = await inspectExisting(authoritative, location, this.#project);
+          if (alternative !== void 0) return alternative;
+          throw unavailable(authoritative.state === "starting" ? "owner_starting" : "ownership_contended", true);
+        }
+        if (this.#shuttingDown) throw unavailable("ownership_contended", true);
+        const capability = randomBytes(32).toString("base64url");
+        const server = createDashboardServer(this.#runtime, location.projectKey, instance, capability, () => this.#shuttingDown);
+        server.on("connection", (socket) => {
+          this.#sockets.add(socket);
+          socket.setTimeout(5e3, () => socket.destroy());
+          socket.once("close", () => this.#sockets.delete(socket));
+        });
+        await new Promise((resolve2, reject) => {
+          server.once("error", reject);
+          server.listen(0, "127.0.0.1", () => resolve2());
+        }).catch(() => {
+          throw unavailable("bind_failed", false);
+        });
+        server.unref();
+        this.#server = server;
+        const address = server.address();
+        if (address === null || typeof address === "string") throw unavailable("bind_failed", false);
+        const ready = {
+          ...starting,
+          state: "ready",
+          port: address.port,
+          capability,
+          published_at: (/* @__PURE__ */ new Date()).toISOString()
+        };
+        if (this.#shuttingDown) throw unavailable("ownership_contended", true);
+        await writeRecord(location.ownerFile, ready, true).catch(() => {
+          throw unavailable("publish_failed", false);
+        });
+        this.#record = ready;
+        const url = ownerUrl(ready);
+        await healthProof(ready);
+        return { url, reused: false };
+      } catch (error2) {
+        await this.#closeListener();
+        await removeMatchingOwner(this.#record ?? starting).catch(() => void 0);
+        this.#record = void 0;
+        throw error2;
+      }
+    }
+    throw unavailable(liveStarting ? "owner_starting" : "ownership_contended", true);
+  }
+};
+async function runtimeLocation(project) {
+  const home = await realpath3(homedir()).catch(() => {
+    throw unavailable("runtime_unsafe", false);
+  });
+  await assertPrivateDirectory(home);
+  const root = join2(home, ".wisp", "runtime", "dashboard");
+  if (inside(project, root)) throw unavailable("project_contains_runtime", false);
+  await ensurePrivateDirectory(join2(home, ".wisp"));
+  await ensurePrivateDirectory(join2(home, ".wisp", "runtime"));
+  await ensurePrivateDirectory(root);
+  const projectKey = createHash("sha256").update(project, "utf8").digest("hex");
+  const projectDir = join2(root, projectKey);
+  await ensurePrivateDirectory(projectDir);
+  return { projectKey, ownerDir: join2(projectDir, "owner"), ownerFile: join2(projectDir, "owner", "owner.json") };
+}
+async function ensurePrivateDirectory(path) {
+  try {
+    await mkdir2(path, { mode: 448 });
+  } catch (error2) {
+    if (!isCode(error2, "EEXIST")) throw unavailable("runtime_unsafe", false);
+  }
+  await assertPrivateDirectory(path);
+}
+async function assertPrivateDirectory(path) {
+  const info = await lstat2(path).catch(() => {
+    throw unavailable("runtime_unsafe", false);
+  });
+  if (info.isSymbolicLink() || !info.isDirectory()) throw unavailable("runtime_unsafe", false);
+  if (typeof info.uid === "number" && typeof process.getuid === "function" && info.uid !== process.getuid()) {
+    throw unavailable("runtime_unsafe", false);
+  }
+  if ((info.mode & 18) !== 0) throw unavailable("runtime_unsafe", false);
+}
+async function inspectExisting(owner, location, project) {
+  if (owner.project !== project || owner.project_key !== location.projectKey) {
+    throw unavailable("owner_identity_unverifiable", false);
+  }
+  const observed = await observeProcess(owner.pid);
+  const gone = processInstanceIsGone(owner.process_identity, observed);
+  if (gone === void 0) throw unavailable("owner_identity_unverifiable", false);
+  if (gone) {
+    await quarantineOwner(location.ownerDir, owner);
+    return void 0;
+  }
+  if (owner.protocol !== DASHBOARD_PROTOCOL_VERSION) {
+    throw new WispError("dashboard_version_conflict", "Dashboard protocol version conflicts", {
+      expected_protocol: DASHBOARD_PROTOCOL_VERSION,
+      actual_protocol: owner.protocol
+    });
+  }
+  if (owner.state === "starting") return void 0;
+  try {
+    await healthProof(owner);
+    return { url: ownerUrl(owner), reused: true };
+  } catch {
+    throw unavailable("owner_unhealthy", true);
+  }
+}
+function createDashboardServer(runtime, projectKey, instance, capability, shuttingDown) {
+  let boundPort = 0;
+  const acceptedAt = /* @__PURE__ */ new WeakMap();
+  const headerTimers = /* @__PURE__ */ new WeakMap();
+  const server = createServer({ requestTimeout: 1e4, headersTimeout: 5e3, maxHeaderSize: 16384 }, async (request, response) => {
+    const headerTimer = headerTimers.get(request.socket);
+    if (headerTimer !== void 0) clearTimeout(headerTimer);
+    if (boundPort === 0) {
+      const address = server.address();
+      if (address !== null && typeof address !== "string") boundPort = address.port;
+    }
+    const origin = acceptedAt.get(request.socket) ?? performance.now();
+    const remaining = Math.max(1, 1e4 - (performance.now() - origin));
+    const totalTimer = setTimeout(() => {
+      if (!response.headersSent) protocolError(response, 408, "http_request_timeout");
+      else forceDestroySocket(request.socket);
+    }, remaining);
+    totalTimer.unref();
+    response.once("finish", () => {
+      if (!backpressuredResponses.has(response) && request.socket.writableLength === 0) clearTimeout(totalTimer);
+      request.socket.once("data", () => {
+        acceptedAt.set(request.socket, performance.now());
+        armHeaderDeadline(request.socket);
+      });
+    });
+    try {
+      await route(request, response, runtime, projectKey, instance, capability, boundPort, shuttingDown);
+    } catch (error2) {
+      if (!response.headersSent) respondWispError(response, error2);
+      else response.destroy();
+    }
+  });
+  const armHeaderDeadline = (socket) => {
+    const prior = headerTimers.get(socket);
+    if (prior !== void 0) clearTimeout(prior);
+    const timer = setTimeout(() => {
+      writeRawProtocolError(socket, 408, "http_request_timeout");
+    }, 5e3);
+    timer.unref();
+    headerTimers.set(socket, timer);
+  };
+  server.on("connection", (socket) => {
+    acceptedAt.set(socket, performance.now());
+    armHeaderDeadline(socket);
+    socket.once("close", () => {
+      const timer = headerTimers.get(socket);
+      if (timer !== void 0) clearTimeout(timer);
+    });
+  });
+  server.on("clientError", (error2, socket) => {
+    if (!socket.writable) return;
+    const candidate = error2;
+    const status = candidate.code === "HPE_HEADER_OVERFLOW" ? 431 : candidate.code === "ERR_HTTP_REQUEST_TIMEOUT" ? 408 : 400;
+    const code = status === 431 ? "http_headers_too_large" : status === 408 ? "http_request_timeout" : "http_invalid_request";
+    writeRawProtocolError(socket, status, code);
+  });
+  server.keepAliveTimeout = 5e3;
+  return server;
+}
+function writeRawProtocolError(socket, status, code) {
+  if (!socket.writable) return;
+  const body = JSON.stringify({ ok: false, error: { code } });
+  socket.end(
+    `HTTP/1.1 ${status} ${status === 431 ? "Request Header Fields Too Large" : status === 408 ? "Request Timeout" : "Bad Request"}\r
+Content-Type: application/json; charset=utf-8\r
+Cache-Control: no-store\r
+X-Content-Type-Options: nosniff\r
+Referrer-Policy: no-referrer\r
+Connection: close\r
+Content-Length: ${Buffer.byteLength(body)}\r
+\r
+${body}`
+  );
+}
+function forceDestroySocket(socket) {
+  if (typeof socket.resetAndDestroy === "function") socket.resetAndDestroy();
+  else socket.destroy();
+}
+async function route(request, response, runtime, projectKey, instance, capability, port, shuttingDown) {
+  const url = new URL(request.url ?? "/", `http://127.0.0.1:${port}`);
+  const hostValues = headerValues(request, "host");
+  if (hostValues.length !== 1 || hostValues[0] !== `127.0.0.1:${port}`) return protocolError(response, 403, "http_forbidden");
+  if (url.search !== "") return protocolError(response, 400, "http_invalid_request");
+  const methods = { "/": "GET", "/api/health": "GET", "/api/events": "GET", "/api/commands": "POST" };
+  const method = methods[url.pathname];
+  if (method === void 0) return protocolError(response, 404, "http_not_found");
+  if (request.method !== method) return protocolError(response, 405, "http_method_not_allowed");
+  if (url.pathname !== "/") {
+    const auth = headerValues(request, "authorization");
+    if (auth.length !== 1 || !sameSecret(auth[0], `Bearer ${capability}`)) {
+      return protocolError(response, 401, "http_unauthorized");
+    }
+    const origin = headerValues(request, "origin");
+    const expected = `http://127.0.0.1:${port}`;
+    if (origin.length > 1 || origin[0] !== void 0 && origin[0] !== expected || url.pathname === "/api/commands" && origin.length !== 1) {
+      return protocolError(response, 403, "http_forbidden");
+    }
+    if (shuttingDown()) return protocolError(response, 503, "http_shutting_down");
+  }
+  if (request.method === "GET" && hasRequestBody(request)) {
+    return protocolError(response, 400, "http_invalid_request");
+  }
+  if (url.pathname === "/") return htmlResponse(response, dashboardHtml());
+  if (url.pathname === "/api/health") {
+    return jsonResponse(response, 200, { ok: true, data: { protocol: 1, project_key: projectKey, instance } });
+  }
+  if (url.pathname === "/api/events") {
+    return jsonResponse(response, 200, { ok: true, data: await runtime.dashboardEvents() });
+  }
+  const contentType = headerValues(request, "content-type");
+  if (contentType.length !== 1 || contentType[0] !== "application/json") {
+    return protocolError(response, 415, "http_unsupported_media_type");
+  }
+  const contentLength = headerValues(request, "content-length");
+  if (contentLength.length > 1 || contentLength.length === 1 && !/^(0|[1-9][0-9]*)$/u.test(contentLength[0])) return protocolError(response, 400, "http_invalid_request");
+  if (contentLength.length === 1 && Number(contentLength[0]) > BODY_LIMIT) {
+    response.shouldKeepAlive = false;
+    response.setHeader("Connection", "close");
+    return protocolError(response, 413, "http_body_too_large");
+  }
+  const body = await readBody(request);
+  let value;
+  try {
+    value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(body));
+  } catch {
+    return protocolError(response, 400, "http_invalid_request");
+  }
+  const event = await runtime.issueCommand(value);
+  return jsonResponse(response, 201, { ok: true, data: { event } });
+}
+async function readBody(request) {
+  const chunks = [];
+  let total = 0;
+  return new Promise((resolve2, reject) => {
+    const timer = setTimeout(() => reject(new HttpFailure(408, "http_request_timeout")), 5e3);
+    timer.unref();
+    const fail = (error2) => {
+      clearTimeout(timer);
+      reject(error2);
+    };
+    request.on("data", (chunk) => {
+      const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      total += bytes.byteLength;
+      if (total > BODY_LIMIT) {
+        request.pause();
+        fail(new HttpFailure(413, "http_body_too_large"));
+      } else chunks.push(bytes);
+    });
+    request.once("end", () => {
+      clearTimeout(timer);
+      resolve2(Buffer.concat(chunks));
+    });
+    request.once("error", fail);
+    request.once("aborted", () => fail(new HttpFailure(400, "http_invalid_request")));
+  });
+}
+function hasRequestBody(request) {
+  const length = headerValues(request, "content-length");
+  const transfer = headerValues(request, "transfer-encoding");
+  return transfer.length > 0 || length.length > 0 && length[0] !== "0";
+}
+var HttpFailure = class extends Error {
+  constructor(status, code) {
+    super(code);
+    this.status = status;
+    this.code = code;
+  }
+  status;
+  code;
+};
+function respondWispError(response, error2) {
+  if (error2 instanceof HttpFailure) {
+    if (error2.status === 408) {
+      response.shouldKeepAlive = false;
+      response.setHeader("Connection", "close");
+    }
+    protocolError(response, error2.status, error2.code);
+    return;
+  }
+  if (error2 instanceof WispError) {
+    const status = error2.code === "invalid_input" ? 400 : error2.code === "command_conflict" ? 409 : 500;
+    void jsonResponse(response, status, {
+      ok: false,
+      error: { code: error2.code, message: error2.message, details: error2.details }
+    }).catch(() => response.destroy());
+    return;
+  }
+  void jsonResponse(response, 500, {
+    ok: false,
+    error: { code: "internal_error", message: "Unexpected dashboard error", details: { incident_id: randomUUID2() } }
+  }).catch(() => response.destroy());
+}
+function protocolError(response, status, code) {
+  void jsonResponse(response, status, { ok: false, error: { code } }).catch(() => response.destroy());
+}
+function commonHeaders() {
+  return {
+    "Cache-Control": "no-store",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer"
+  };
+}
+async function jsonResponse(response, status, value) {
+  const body = Buffer.from(JSON.stringify(value), "utf8");
+  response.writeHead(status, {
+    ...commonHeaders(),
+    "Content-Type": "application/json; charset=utf-8",
+    "Content-Length": String(body.byteLength)
+  });
+  for (let offset = 0; offset < body.byteLength; offset += 262144) {
+    const chunk = body.subarray(offset, Math.min(offset + 262144, body.byteLength));
+    if (!response.write(chunk)) {
+      backpressuredResponses.add(response);
+      await new Promise((resolve2, reject) => {
+        response.once("drain", resolve2);
+        response.once("error", reject);
+        response.once("close", resolve2);
+      });
+      if (response.destroyed) throw new Error("response closed");
+    }
+  }
+  await new Promise((resolve2) => {
+    response.once("close", resolve2);
+    response.end(resolve2);
+  });
+}
+function htmlResponse(response, html) {
+  const nonce = randomBytes(18).toString("base64url");
+  const body = html.replaceAll("__NONCE__", nonce);
+  response.writeHead(200, {
+    ...commonHeaders(),
+    "Content-Type": "text/html; charset=utf-8",
+    "Content-Security-Policy": `default-src 'none'; connect-src 'self'; img-src 'self' data:; script-src 'nonce-${nonce}'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`
+  });
+  response.end(body);
+}
+function dashboardHtml() {
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="referrer" content="no-referrer"><title>Wisp</title>
+<style>body{font:14px system-ui;margin:2rem;background:#101318;color:#eef}button,input,select,textarea{font:inherit}section{margin:1.5rem 0;padding:1rem;border:1px solid #39404d}article{margin:.5rem 0;padding:.5rem;background:#181d25}pre{white-space:pre-wrap}.error{color:#f88}.label{color:#9fb3ca}</style></head>
+<body><h1>Wisp dashboard</h1><p id="status">Connecting\u2026</p><form id="command"><label>Run <input name="run" required></label><label>Target <input name="target" placeholder="agent or *" required></label><label>Command <select name="type">${["pause", "resume", "abort", "answer", "gate", "steer", "dispatch"].map((x) => `<option>${x}</option>`).join("")}</select></label><label>Payload for answer/gate/steer/dispatch <textarea name="payload" placeholder='JSON object (optional)'></textarea></label><button>Issue command</button></form><main id="view" aria-live="polite"></main>
+<script nonce="__NONCE__">(()=>{const m=/^#capability=([A-Za-z0-9_-]{43})$/.exec(location.hash);history.replaceState(null,"",location.pathname);const cap=m&&m[1],status=document.querySelector("#status"),view=document.querySelector("#view"),form=document.querySelector("#command");let active=false,last=null;
+const node=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=String(text);if(cls)n.className=cls;return n};
+const field=(parent,label,value)=>{if(value===undefined)return;const p=node("p");p.append(node("span",label+": ","label"),document.createTextNode(typeof value==="string"?value:JSON.stringify(value)));parent.append(p)};
+const section=(title)=>{const s=node("section");s.append(node("h2",title));view.append(s);return s};
+const projectAgents=events=>{const runs=[];const byRun=new Map;for(const event of events){let run=byRun.get(event.run);if(!run){run={name:event.run,agents:[],byAgent:new Map};byRun.set(event.run,run);runs.push(run)}let agent=run.byAgent.get(event.agent);if(!agent){agent={name:event.agent};run.byAgent.set(event.agent,agent);run.agents.push(agent)}agent.last_seen=event.ts;if(event.kind==="status"){agent.state=event.state;if(Object.hasOwn(event,"activity"))agent.activity=event.activity;else delete agent.activity}if(event.kind==="verdict")agent.verdict=event.verdict}return runs};
+const show=envelope=>{const data=envelope.data;view.replaceChildren();const life=section("Runs and agents");for(const run of projectAgents(data.events)){const r=node("article");r.append(node("h3","Run "+run.name));for(const agent of run.agents){const a=node("article");a.append(node("h4","Agent "+agent.name));field(a,"Last seen",agent.last_seen);field(a,"State",agent.state);field(a,"Activity",agent.activity);field(a,"Verdict",agent.verdict);r.append(a)}life.append(r)}const timeline=section("Timeline");data.events.forEach((event,index)=>{const row=node("article");field(row,"Position",index+1);field(row,"Timestamp",event.ts);field(row,"Run",event.run);field(row,"Agent",event.agent);field(row,"Kind",event.kind);field(row,"Event",event);timeline.append(row)});const commands=section("Commands");commands.append(node("p","Statuses: pending, accepted, rejected, completed","label"));for(const command of data.command_states){const row=node("article");row.append(node("h3","Run "+command.run+" \u2014 "+command.status));field(row,"ID",command.id);field(row,"Type",command.type);field(row,"Target",command.target);field(row,"Issued by",command.issued_by);field(row,"Issued at",command.issued_at);field(row,"Payload",command.payload);commands.append(row)}const errors=section("Parse errors");for(const error of data.parse_errors){const row=node("article");field(row,"Line",error.line);field(row,"Reason",error.reason);field(row,"Raw evidence",error.raw);errors.append(row)}};
+async function refresh(){if(active||!cap)return;active=true;try{const c=new AbortController(),t=setTimeout(()=>c.abort(),5000),r=await fetch("/api/events",{headers:{Authorization:"Bearer "+cap},signal:c.signal});clearTimeout(t);if(!r.ok)throw Error("refresh failed");const envelope=await r.json();last=envelope;show(envelope);status.textContent="Live";status.className=""}catch{status.textContent="Refresh failed";status.className="error";if(last)show(last)}finally{active=false}}
+form.addEventListener("submit",async e=>{e.preventDefault();if(!cap)return;const b=form.querySelector("button");b.disabled=true;try{const d=new FormData(form),p=d.get("payload"),body={run:d.get("run"),target:d.get("target"),type:d.get("type")};if(p)body.payload=JSON.parse(p);const r=await fetch("/api/commands",{method:"POST",headers:{Authorization:"Bearer "+cap,"Content-Type":"application/json"},body:JSON.stringify(body)});if(!r.ok)throw Error("command failed");status.textContent="Command appended";await refresh()}catch{status.textContent="Command failed";status.className="error"}finally{b.disabled=false}});
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)refresh()});refresh();setInterval(()=>{if(!document.hidden)refresh()},2000)})();</script></body></html>`;
+}
+function headerValues(request, name) {
+  const values = [];
+  for (let index = 0; index < request.rawHeaders.length; index += 2) {
+    if (request.rawHeaders[index].toLowerCase() === name) values.push(request.rawHeaders[index + 1]);
+  }
+  return values;
+}
+function sameSecret(actual, expected) {
+  const left = Buffer.from(actual);
+  const right = Buffer.from(expected);
+  return left.byteLength === right.byteLength && timingSafeEqual(left, right);
+}
+function ownerUrl(owner) {
+  return `http://127.0.0.1:${owner.port}/#capability=${owner.capability}`;
+}
+async function healthProof(owner) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), HEALTH_TIMEOUT_MS);
+  try {
+    const response = await fetch(`http://127.0.0.1:${owner.port}/api/health`, {
+      headers: { Authorization: `Bearer ${owner.capability}`, Host: `127.0.0.1:${owner.port}` },
+      signal: controller.signal
+    });
+    const body = await response.json();
+    if (!response.ok || body.ok !== true || body.data?.protocol !== 1 || body.data?.project_key !== owner.project_key || body.data?.instance !== owner.instance) throw new Error("health mismatch");
+  } finally {
+    clearTimeout(timer);
+  }
+}
+async function writeRecord(path, record2, replace = false) {
+  const temporary = `${path}.tmp-${randomUUID2()}`;
+  const flags = fsConstants2.O_WRONLY | fsConstants2.O_CREAT | fsConstants2.O_EXCL | (typeof fsConstants2.O_NOFOLLOW === "number" ? fsConstants2.O_NOFOLLOW : 0);
+  const handle = await open2(temporary, flags, 384);
+  try {
+    try {
+      await handle.writeFile(JSON.stringify(record2), "utf8");
+    } finally {
+      await handle.close();
+    }
+    if (replace) await rename2(temporary, path);
+    else await rename2(temporary, path);
+  } catch (error2) {
+    await handle.close().catch(() => void 0);
+    await unlink2(temporary).catch(() => void 0);
+    throw error2;
+  }
+}
+async function readOwner(directory, path) {
+  try {
+    await assertPrivateDirectory(directory);
+  } catch (error2) {
+    if (isCode(error2, "ENOENT")) return void 0;
+    try {
+      await lstat2(directory);
+    } catch (statError) {
+      if (isCode(statError, "ENOENT")) return void 0;
+    }
+    throw error2;
+  }
+  let info;
+  try {
+    info = await lstat2(path);
+  } catch (error2) {
+    if (isCode(error2, "ENOENT")) return void 0;
+    throw unavailable("runtime_unsafe", false);
+  }
+  if (info.isSymbolicLink() || !info.isFile() || (info.mode & 63) !== 0 || typeof info.uid === "number" && typeof process.getuid === "function" && info.uid !== process.getuid()) throw unavailable("runtime_unsafe", false);
+  try {
+    const handle = await open2(path, fsConstants2.O_RDONLY | (typeof fsConstants2.O_NOFOLLOW === "number" ? fsConstants2.O_NOFOLLOW : 0));
+    try {
+      const value = JSON.parse(await handle.readFile("utf8"));
+      if (!validOwner(value)) throw new Error("invalid");
+      return value;
+    } finally {
+      await handle.close();
+    }
+  } catch {
+    throw unavailable("owner_identity_unverifiable", false);
+  }
+}
+function validOwner(value) {
+  const base = ["schema", "protocol", "state", "project", "project_key", "instance", "pid", "process_identity", "created_at"];
+  const keys = value.state === "ready" ? [...base, "port", "capability", "published_at"] : base;
+  return Object.keys(value).sort().join(",") === keys.sort().join(",") && value.schema === 1 && typeof value.protocol === "number" && (value.state === "starting" || value.state === "ready") && typeof value.project === "string" && isAbsolute3(value.project) && typeof value.project_key === "string" && /^[0-9a-f]{64}$/u.test(value.project_key) && typeof value.instance === "string" && /^[0-9a-f-]{36}$/u.test(value.instance) && typeof value.pid === "number" && Number.isInteger(value.pid) && value.pid > 0 && typeof value.process_identity === "string" && value.process_identity.length > 0 && typeof value.created_at === "string" && !Number.isNaN(Date.parse(value.created_at)) && (value.state !== "ready" || typeof value.port === "number" && Number.isInteger(value.port) && value.port > 0 && value.port <= 65535 && typeof value.capability === "string" && /^[A-Za-z0-9_-]{43}$/u.test(value.capability) && typeof value.published_at === "string" && !Number.isNaN(Date.parse(value.published_at)));
+}
+function exactOwner(left, right) {
+  return left !== void 0 && JSON.stringify(left) === JSON.stringify(right);
+}
+async function quarantineOwner(path, expected) {
+  const current = await readOwner(path, join2(path, "owner.json"));
+  if (!exactOwner(current, expected)) return;
+  const quarantine = `${path}.quarantine-${randomUUID2()}`;
+  await rename2(path, quarantine).catch(() => void 0);
+  void cleanupDirectory(quarantine);
+}
+async function removeMatchingOwner(expected) {
+  const home = await realpath3(homedir());
+  const path = join2(home, ".wisp", "runtime", "dashboard", expected.project_key, "owner");
+  await quarantineOwner(path, expected);
+}
+async function cleanupDirectory(path) {
+  await unlink2(join2(path, "owner.json")).catch(() => void 0);
+  await rmdir2(path).catch(() => void 0);
+}
+function unavailable(reason, retryable) {
+  return new WispError("dashboard_unavailable", "Wisp dashboard is unavailable", { reason, retryable });
+}
+function isCode(error2, code) {
+  return error2 instanceof Error && "code" in error2 && error2.code === code;
+}
+function inside(parent, child) {
+  const value = relative2(parent, child);
+  return value === "" || !value.startsWith("..") && !isAbsolute3(value);
+}
+function delay2(milliseconds) {
+  return new Promise((resolve2) => setTimeout(resolve2, milliseconds));
+}
+async function pathExists(path) {
+  try {
+    await lstat2(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // src/mcp.ts
 var TOOL_NAMES = [
   "wisp_status",
@@ -16334,7 +17221,8 @@ var TOOL_NAMES = [
   "wisp_verdict",
   "wisp_question",
   "wisp_check",
-  "wisp_ack"
+  "wisp_ack",
+  "wisp_dashboard"
 ];
 var identifier2 = schemaString(LIMITS.identifier, "identifier");
 var activity = schemaString(LIMITS.activity, "activity");
@@ -16457,7 +17345,8 @@ var writableBusReasons = [
   "stat_failed",
   "mkdir_failed",
   "open_failed",
-  "append_failed"
+  "append_failed",
+  "process_identity_unavailable"
 ];
 var detailSchemas = {
   invalid_input: objectSchema(["field", "reason"], {
@@ -16498,6 +17387,24 @@ var detailSchemas = {
     target: identifier2,
     agent: identifier2
   }),
+  dashboard_unavailable: objectSchema(["reason", "retryable"], {
+    reason: { type: "string", enum: [
+      "runtime_unsafe",
+      "project_contains_runtime",
+      "process_identity_unavailable",
+      "owner_identity_unverifiable",
+      "bind_failed",
+      "publish_failed",
+      "owner_starting",
+      "owner_unhealthy",
+      "ownership_contended"
+    ] },
+    retryable: { type: "boolean" }
+  }),
+  dashboard_version_conflict: objectSchema(["expected_protocol", "actual_protocol"], {
+    expected_protocol: { const: 1 },
+    actual_protocol: { type: "integer" }
+  }),
   internal_error: objectSchema(["incident_id"], { incident_id: { type: "string" } })
 };
 var errorSchema = {
@@ -16529,6 +17436,10 @@ var checkDataSchema = objectSchema(["commands", "parse_errors"], {
   parse_errors: { type: "array", maxItems: LIMITS.parse_errors, items: parseErrorSchema }
 });
 var writeDataSchema = objectSchema(["event"], { event: eventSchema });
+var dashboardDataSchema = objectSchema(["url", "reused"], {
+  url: { type: "string", pattern: "^http://127\\.0\\.0\\.1:[1-9][0-9]*/#capability=[A-Za-z0-9_-]{43}$" },
+  reused: { type: "boolean" }
+});
 function envelopeSchema(data) {
   return {
     type: "object",
@@ -16605,13 +17516,19 @@ var definitions = [
       ...addressProperties
     }),
     outputSchema: envelopeSchema(writeDataSchema)
+  },
+  {
+    name: "wisp_dashboard",
+    description: "Start or reuse the authenticated Wisp dashboard for this project.",
+    inputSchema: objectSchema([], {}),
+    outputSchema: envelopeSchema(dashboardDataSchema)
   }
 ];
 function createToolDefinitions() {
   return structuredClone(definitions);
 }
 async function callWispTool(name, args, resolver, runtimeFactory = createRuntime, diagnostic = (message) => process.stderr.write(`${message}
-`)) {
+`), dashboardFactory = (project) => new DashboardCoordinator(project)) {
   try {
     if (!TOOL_NAMES.includes(name)) {
       throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
@@ -16639,6 +17556,9 @@ async function callWispTool(name, args, resolver, runtimeFactory = createRuntime
       case "wisp_ack":
         data = { event: await runtime.ack(args) };
         break;
+      case "wisp_dashboard":
+        data = { ...await dashboardFactory(project).start() };
+        break;
     }
     return toolResult({ ok: true, data }, false);
   } catch (error2) {
@@ -16649,7 +17569,7 @@ async function callWispTool(name, args, resolver, runtimeFactory = createRuntime
         true
       );
     }
-    const incident = randomUUID2();
+    const incident = randomUUID3();
     diagnostic(`wisp internal error (${incident}): ${error2 instanceof Error ? error2.stack ?? error2.message : String(error2)}`);
     return toolResult(
       {
@@ -16671,12 +17591,19 @@ function toolResult(envelope, isError) {
     isError
   };
 }
+var cleanupByServer = /* @__PURE__ */ new WeakMap();
 function createWispServer(environmentRoot = process.env.WISP_PROJECT_ROOT) {
   const server = new Server(
-    { name: "wisp", version: "0.1.0" },
+    { name: "wisp", version: "0.2.0" },
     { capabilities: { tools: {} } }
   );
   let resolver;
+  let dashboard;
+  let resolveCleanup;
+  const cleanupComplete = new Promise((resolve2) => {
+    resolveCleanup = resolve2;
+  });
+  cleanupByServer.set(server, cleanupComplete);
   const getResolver = () => {
     resolver ??= new ProjectResolver(
       environmentRoot,
@@ -16691,13 +17618,39 @@ function createWispServer(environmentRoot = process.env.WISP_PROJECT_ROOT) {
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: createToolDefinitions() }));
   server.setRequestHandler(
     CallToolRequestSchema,
-    async (request) => callWispTool(request.params.name, request.params.arguments ?? {}, getResolver())
+    async (request) => callWispTool(
+      request.params.name,
+      request.params.arguments ?? {},
+      getResolver(),
+      createRuntime,
+      (message) => process.stderr.write(`${message}
+`),
+      (project) => dashboard ??= new DashboardCoordinator(project)
+    )
   );
+  server.onclose = () => {
+    void (dashboard?.cleanup() ?? Promise.resolve()).finally(resolveCleanup);
+  };
   return server;
+}
+function waitForWispCleanup(server) {
+  return cleanupByServer.get(server) ?? Promise.resolve();
 }
 async function startStdioServer() {
   const server = createWispServer();
+  const shutdown = () => {
+    void server.close().then(() => waitForWispCleanup(server));
+  };
+  process.stdin.once("end", shutdown);
+  process.stdin.once("close", shutdown);
+  process.once("SIGINT", shutdown);
+  process.once("SIGTERM", shutdown);
   await server.connect(new StdioServerTransport());
+  await waitForWispCleanup(server);
+  process.stdin.removeListener("end", shutdown);
+  process.stdin.removeListener("close", shutdown);
+  process.removeListener("SIGINT", shutdown);
+  process.removeListener("SIGTERM", shutdown);
 }
 
 // src/entry.ts

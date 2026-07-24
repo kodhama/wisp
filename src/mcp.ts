@@ -10,6 +10,7 @@ import {
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 import { ProjectResolver } from "./project.ts";
+import { DashboardCoordinator, type DashboardResult } from "./dashboard.ts";
 import {
   ACK_RESULTS,
   AGENT_STATES,
@@ -28,6 +29,7 @@ export const TOOL_NAMES = [
   "wisp_question",
   "wisp_check",
   "wisp_ack",
+  "wisp_dashboard",
 ] as const;
 export type ToolName = (typeof TOOL_NAMES)[number];
 
@@ -137,7 +139,7 @@ const readableBusReasons = [
 ];
 const writableBusReasons = [
   "path_is_symlink", "path_not_directory", "path_not_regular_file", "outside_project",
-  "stat_failed", "mkdir_failed", "open_failed", "append_failed",
+  "stat_failed", "mkdir_failed", "open_failed", "append_failed", "process_identity_unavailable",
 ];
 const detailSchemas: Record<string, JsonSchema> = {
   invalid_input: objectSchema(["field", "reason"], {
@@ -178,6 +180,18 @@ const detailSchemas: Record<string, JsonSchema> = {
     target: identifier,
     agent: identifier,
   }),
+  dashboard_unavailable: objectSchema(["reason", "retryable"], {
+    reason: { type: "string", enum: [
+      "runtime_unsafe", "project_contains_runtime", "process_identity_unavailable",
+      "owner_identity_unverifiable", "bind_failed", "publish_failed", "owner_starting",
+      "owner_unhealthy", "ownership_contended",
+    ] },
+    retryable: { type: "boolean" },
+  }),
+  dashboard_version_conflict: objectSchema(["expected_protocol", "actual_protocol"], {
+    expected_protocol: { const: 1 },
+    actual_protocol: { type: "integer" },
+  }),
   internal_error: objectSchema(["incident_id"], { incident_id: { type: "string" } }),
 };
 const errorSchema: JsonSchema = {
@@ -211,6 +225,10 @@ const checkDataSchema = objectSchema(["commands", "parse_errors"], {
   parse_errors: { type: "array", maxItems: LIMITS.parse_errors, items: parseErrorSchema },
 });
 const writeDataSchema = objectSchema(["event"], { event: eventSchema });
+const dashboardDataSchema = objectSchema(["url", "reused"], {
+  url: { type: "string", pattern: "^http://127\\.0\\.0\\.1:[1-9][0-9]*/#capability=[A-Za-z0-9_-]{43}$" },
+  reused: { type: "boolean" },
+});
 
 function envelopeSchema(data: JsonSchema): JsonSchema {
   return {
@@ -290,6 +308,12 @@ const definitions: readonly Tool[] = [
     }) as Tool["inputSchema"],
     outputSchema: envelopeSchema(writeDataSchema) as Tool["outputSchema"],
   },
+  {
+    name: "wisp_dashboard",
+    description: "Start or reuse the authenticated Wisp dashboard for this project.",
+    inputSchema: objectSchema([], {}) as Tool["inputSchema"],
+    outputSchema: envelopeSchema(dashboardDataSchema) as Tool["outputSchema"],
+  },
 ] as const;
 
 export function createToolDefinitions(): readonly Tool[] {
@@ -300,7 +324,9 @@ interface Resolver {
   resolve(): Promise<string>;
 }
 
-type RuntimeFactory = (project: string) => WispRuntime;
+type ToolRuntime = Pick<WispRuntime, "status" | "heartbeat" | "verdict" | "question" | "check" | "ack">;
+type RuntimeFactory = (project: string) => ToolRuntime;
+type DashboardFactory = (project: string) => { start(): Promise<DashboardResult> };
 type Diagnostic = (message: string) => void;
 
 export async function callWispTool(
@@ -309,6 +335,7 @@ export async function callWispTool(
   resolver: Resolver,
   runtimeFactory: RuntimeFactory = createRuntime,
   diagnostic: Diagnostic = (message) => process.stderr.write(`${message}\n`),
+  dashboardFactory: DashboardFactory = (project) => new DashboardCoordinator(project),
 ): Promise<CallToolResult> {
   try {
     if (!TOOL_NAMES.includes(name as ToolName)) {
@@ -336,6 +363,9 @@ export async function callWispTool(
         break;
       case "wisp_ack":
         data = { event: await runtime.ack(args) };
+        break;
+      case "wisp_dashboard":
+        data = { ...await dashboardFactory(project).start() };
         break;
     }
     return toolResult({ ok: true, data }, false);
@@ -371,12 +401,18 @@ function toolResult(envelope: Record<string, unknown>, isError: boolean): CallTo
   };
 }
 
+const cleanupByServer = new WeakMap<Server, Promise<void>>();
+
 export function createWispServer(environmentRoot = process.env.WISP_PROJECT_ROOT): Server {
   const server = new Server(
-    { name: "wisp", version: "0.1.0" },
+    { name: "wisp", version: "0.2.0" },
     { capabilities: { tools: {} } },
   );
   let resolver: ProjectResolver | undefined;
+  let dashboard: DashboardCoordinator | undefined;
+  let resolveCleanup!: () => void;
+  const cleanupComplete = new Promise<void>((resolve) => { resolveCleanup = resolve; });
+  cleanupByServer.set(server, cleanupComplete);
   const getResolver = (): ProjectResolver => {
     resolver ??= new ProjectResolver(
       environmentRoot,
@@ -392,12 +428,38 @@ export function createWispServer(environmentRoot = process.env.WISP_PROJECT_ROOT
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: createToolDefinitions() }));
   server.setRequestHandler(CallToolRequestSchema, async (request) =>
-    callWispTool(request.params.name, request.params.arguments ?? {}, getResolver()),
+    callWispTool(
+      request.params.name,
+      request.params.arguments ?? {},
+      getResolver(),
+      createRuntime,
+      (message) => process.stderr.write(`${message}\n`),
+      (project) => dashboard ??= new DashboardCoordinator(project),
+    ),
   );
+  server.onclose = () => {
+    void (dashboard?.cleanup() ?? Promise.resolve()).finally(resolveCleanup);
+  };
   return server;
+}
+
+export function waitForWispCleanup(server: Server): Promise<void> {
+  return cleanupByServer.get(server) ?? Promise.resolve();
 }
 
 export async function startStdioServer(): Promise<void> {
   const server = createWispServer();
+  const shutdown = (): void => {
+    void server.close().then(() => waitForWispCleanup(server));
+  };
+  process.stdin.once("end", shutdown);
+  process.stdin.once("close", shutdown);
+  process.once("SIGINT", shutdown);
+  process.once("SIGTERM", shutdown);
   await server.connect(new StdioServerTransport());
+  await waitForWispCleanup(server);
+  process.stdin.removeListener("end", shutdown);
+  process.stdin.removeListener("close", shutdown);
+  process.removeListener("SIGINT", shutdown);
+  process.removeListener("SIGTERM", shutdown);
 }
