@@ -13,6 +13,9 @@ updated: 2026-07-24
 
 > **PARTIAL SUPERSESSION:** `adr-0007-codex-canary-evidence` supersedes only
 > this decision's real-Codex canary evidence and headless-approval details.
+> `adr-0009-independent-plugin-package-metadata` supersedes only the exact
+> eight-path staging count by adding `VERSION` and `surfaces.json`; the
+> deterministic installed-plugin boundary remains current.
 
 ## Decision state
 
