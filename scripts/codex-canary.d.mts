@@ -67,3 +67,8 @@ export function workflowContext(env?: NodeJS.ProcessEnv): {
 export function installOutcomeFailed(value: string | undefined): boolean;
 
 export function validCanonicalStatus(line: string, nonce: string): boolean;
+
+export function commandEnvironments(source?: NodeJS.ProcessEnv): {
+  baseEnv: NodeJS.ProcessEnv;
+  execEnv: NodeJS.ProcessEnv;
+};

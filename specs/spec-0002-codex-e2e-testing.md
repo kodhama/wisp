@@ -300,6 +300,10 @@ This repository does not claim automatic enforcement in the external
 Stewards publication repository; a Stewards release operator or workflow
 must invoke this verifier with the candidate evidence before publication.
 Canary credentials SHALL be unavailable to ordinary pull-request jobs.
+The canary wrapper SHALL remove `CODEX_API_KEY`, `OPENAI_API_KEY`, and its
+workflow-only secret alias from every version, marketplace, and plugin-install
+child environment, then expose only `CODEX_API_KEY` to the single
+`codex exec` child.
 
 Linux container and Linux canary evidence exercises the `/proc` identity
 provider only. It SHALL NOT replace the macOS `/bin/ps` qualification required

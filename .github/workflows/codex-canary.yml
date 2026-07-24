@@ -46,7 +46,7 @@ jobs:
         if: github.event_name == 'schedule'
         continue-on-error: true
         env:
-          CODEX_API_KEY: ${{ secrets.CODEX_API_KEY }}
+          CANARY_CODEX_API_KEY: ${{ secrets.CODEX_API_KEY }}
           CODEX_INSTALL_OUTCOME: ${{ steps.install_codex.outcome }}
         run: >-
           node scripts/codex-canary.mjs
@@ -59,7 +59,7 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         continue-on-error: true
         env:
-          CODEX_API_KEY: ${{ secrets.CODEX_API_KEY }}
+          CANARY_CODEX_API_KEY: ${{ secrets.CODEX_API_KEY }}
           CODEX_INSTALL_OUTCOME: ${{ steps.install_codex.outcome }}
           CANARY_MARKETPLACE_SOURCE: ${{ inputs.candidate_marketplace_source }}
           CANARY_MARKETPLACE_REF: ${{ inputs.candidate_marketplace_ref }}

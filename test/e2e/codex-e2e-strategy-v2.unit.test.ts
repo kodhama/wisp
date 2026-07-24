@@ -141,7 +141,7 @@ describe("SPEC-0002 v2 reproducible Codex E2E surfaces", () => {
     }
     const jobPreamble = canary.slice(canary.indexOf("jobs:"), canary.indexOf("    steps:"));
     expect(jobPreamble).not.toMatch(/CODEX_API_KEY|OPENAI_API_KEY/u);
-    expect(canary).toContain("CODEX_API_KEY: ${{ secrets.CODEX_API_KEY }}");
+    expect(canary).toContain("CANARY_CODEX_API_KEY: ${{ secrets.CODEX_API_KEY }}");
     expect(canary).not.toContain("OPENAI_API_KEY");
     expect(canary).toContain("id: install_codex");
     expect(canary).toMatch(/id: install_codex[\s\S]{0,120}continue-on-error: true/u);
@@ -158,6 +158,19 @@ describe("SPEC-0002 v2 reproducible Codex E2E surfaces", () => {
     expect(canaryDriver).toMatch(/timeoutMs/u);
     expect(canaryDriver).toContain("execTimedOut");
     expect(canaryDriver).toContain("invalid GitHub workflow context");
+    expect(canaryDriver).toContain("commandEnvironments");
+    expect(canaryDriver).toMatch(
+      /runCommand\("codex", \["--version"\],[\s\S]{0,120}env: baseEnv/u,
+    );
+    expect(canaryDriver).toMatch(
+      /"plugin", "marketplace", "add"[\s\S]{0,300}env: baseEnv/u,
+    );
+    expect(canaryDriver).toMatch(
+      /\["plugin", "add", "wisp@kodhama", "--json"\][\s\S]{0,120}env: baseEnv/u,
+    );
+    expect(canaryDriver).toMatch(
+      /buildCodexExecArgs\(fixture, prompt\)[\s\S]{0,160}env: execEnv/u,
+    );
     expect(canaryDriver).toContain("let codexVersion = null");
     expect(canaryDriver).toContain("let pluginVersion = null");
     expect(canaryDriver).toContain("let bundleSha256 = null");

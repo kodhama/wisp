@@ -422,6 +422,26 @@ export function installOutcomeFailed(value) {
   throw new Error("invalid Codex install outcome");
 }
 
+export function commandEnvironments(source = process.env) {
+  const {
+    CANARY_CODEX_API_KEY: canaryKey,
+    CODEX_API_KEY: directKey,
+    OPENAI_API_KEY: _openAiKey,
+    ...baseEnv
+  } = source;
+  if (canaryKey !== undefined && directKey !== undefined &&
+    canaryKey !== directKey) {
+    throw new Error("conflicting Codex API keys");
+  }
+  const apiKey = canaryKey ?? directKey;
+  return {
+    baseEnv,
+    execEnv: apiKey === undefined
+      ? { ...baseEnv }
+      : { ...baseEnv, CODEX_API_KEY: apiKey },
+  };
+}
+
 async function requireSuccess(result, proofOnNonzero) {
   if (result.spawnError) return { ok: false, provenAbsence: true };
   if (result.timedOut) {
@@ -450,6 +470,7 @@ async function main() {
   await writeFile(transcriptPath, "", { mode: 0o600 });
   const startedAt = new Date().toISOString();
   const context = workflowContext();
+  const { baseEnv, execEnv } = commandEnvironments();
   let codexVersion = null;
   let pluginVersion = null;
   let bundleSha256 = null;
@@ -470,6 +491,7 @@ async function main() {
       throw new Error("Codex installation failed");
     }
     const versionResult = await runCommand("codex", ["--version"], {
+      env: baseEnv,
       timeoutMs: VERSION_TIMEOUT_MS,
     });
     codexVersion = versionResult.stdout.toString("utf8").trim() || null;
@@ -484,7 +506,7 @@ async function main() {
       args["marketplace-source"],
       "--ref", args["marketplace-ref"],
       "--json",
-    ], { timeoutMs: COMMAND_TIMEOUT_MS });
+    ], { env: baseEnv, timeoutMs: COMMAND_TIMEOUT_MS });
     outcome = await requireSuccess(marketplace, true);
     provenPreToolAbsence ||= outcome.provenAbsence;
     if (!outcome.ok) throw new Error("marketplace install failed");
@@ -492,7 +514,7 @@ async function main() {
     const install = await runCommand(
       "codex",
       ["plugin", "add", "wisp@kodhama", "--json"],
-      { timeoutMs: COMMAND_TIMEOUT_MS },
+      { env: baseEnv, timeoutMs: COMMAND_TIMEOUT_MS },
     );
     outcome = await requireSuccess(install, true);
     provenPreToolAbsence ||= outcome.provenAbsence;
@@ -518,6 +540,7 @@ async function main() {
       buildCodexExecArgs(fixture, prompt),
       {
         cwd: fixture,
+        env: execEnv,
         timeoutMs: EXEC_TIMEOUT_MS,
         onStdoutLine: async (line, state) => {
           if (line.trim() === "") return;

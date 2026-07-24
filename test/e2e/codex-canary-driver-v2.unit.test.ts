@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildCodexExecArgs,
   classifyCanary,
+  commandEnvironments,
   execProvesPreToolAbsence,
   installOutcomeFailed,
   normalizeTranscript,
@@ -310,6 +311,23 @@ describe("SPEC-0002 v2 real Codex canary normalization", () => {
     expect(installOutcomeFailed("success")).toBe(false);
     expect(installOutcomeFailed("failure")).toBe(true);
     expect(() => installOutcomeFailed("skipped")).toThrow("invalid Codex install outcome");
+  });
+
+  it("exposes the release secret only to codex exec children", () => {
+    const environments = commandEnvironments({
+      PATH: "/bin",
+      CANARY_CODEX_API_KEY: "release-secret",
+      OPENAI_API_KEY: "must-not-leak",
+    });
+    expect(environments.baseEnv).toEqual({ PATH: "/bin" });
+    expect(environments.execEnv).toEqual({
+      PATH: "/bin",
+      CODEX_API_KEY: "release-secret",
+    });
+    expect(() => commandEnvironments({
+      CANARY_CODEX_API_KEY: "one",
+      CODEX_API_KEY: "two",
+    })).toThrow("conflicting Codex API keys");
   });
 
   it("accepts only round-trippable canonical bus timestamps", () => {
