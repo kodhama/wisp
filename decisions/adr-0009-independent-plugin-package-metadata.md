@@ -10,9 +10,6 @@ depends_on:
   - adr-0007-codex-canary-evidence
   - adr-0008-retire-family-release-certification
   - stewards/kodhama-spec-0003-marketplace-test-observation@v1
-changes:
-  - spec-0001-plugin-mcp-distribution@v10
-  - spec-0002-codex-e2e-testing@v6
 owner: agent
 updated: 2026-07-24
 ---
