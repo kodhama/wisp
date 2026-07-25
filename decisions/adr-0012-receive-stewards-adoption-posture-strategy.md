@@ -1,7 +1,7 @@
 ---
 id: adr-0012-receive-stewards-adoption-posture-strategy
 type: adr
-status: gated
+status: approved
 depends_on: [stewards/kodhama-0021-separate-adoption-posture-from-support, stewards/kodhama-0022-propagate-collective-strategy]
 owner: agent
 updated: 2026-07-25
@@ -49,6 +49,7 @@ applicability and follow-up are explicit.
 
 ## Lifecycle record
 
-The maintainer authorized the cross-link rollout on 2026-07-25. This artifact
-is self-checked and `gated` for independent soundness review; exact
-ratification remains a later human intent act.
+The maintainer authorized the cross-link rollout on 2026-07-25. An independent
+decision adversary returned `SOUND` for exact commit `5a6bc40`. On 2026-07-25,
+the maintainer explicitly ratified this receipt and authorized its merge;
+`approved` records that human intent act.
