@@ -35,6 +35,8 @@ playwright-report
 !scripts/
 !scripts/build-plugin.mjs
 !scripts/capability-safety.mjs
+!scripts/node24-preflight.mjs
+!scripts/node-support.mjs
 !scripts/playwright-artifact-guard.cjs
 !scripts/run-capability-failure-campaign.mjs
 !scripts/run-capability-safe-playwright.mjs

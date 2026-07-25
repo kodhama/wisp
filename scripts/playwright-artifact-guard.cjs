@@ -1,6 +1,6 @@
 "use strict";
 
-// SPEC-0002@v6 S12/R14: disable Playwright's implicit artifact writers
+// SPEC-0002@v7 S12/R14: disable Playwright's implicit artifact writers
 // before they can reach the configured output directory.
 const fs = require("node:fs");
 const path = require("node:path");

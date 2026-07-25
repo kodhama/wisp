@@ -28,6 +28,9 @@ updated: 2026-07-24
 > supersedes only this ADR's exact payload-count inventory and makes
 > `plugins/wisp/VERSION` authoritative; the dual-host, bundled-MCP, and
 > product-owned qualification decisions remain current.
+>
+> **Forward pointer.** `adr-0011-node-24-only-support` supersedes this ADR's
+> Node.js 20/22/24 compatibility policy with Node.js 24-only support.
 
 ## Decision state
 

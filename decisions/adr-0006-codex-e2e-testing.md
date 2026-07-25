@@ -16,6 +16,8 @@ updated: 2026-07-24
 > `adr-0009-independent-plugin-package-metadata` supersedes only the exact
 > eight-path staging count by adding `VERSION` and `surfaces.json`; the
 > deterministic installed-plugin boundary remains current.
+> `adr-0011-node-24-only-support` supersedes only the Node.js 20/22/24
+> fast-test matrix with one Node.js 24 job.
 
 ## Decision state
 

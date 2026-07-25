@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { build } from "esbuild";
+import { ESBUILD_NODE_TARGET } from "./node-support.mjs";
 
 const outfile = "plugins/wisp/dist/wisp.mjs";
 const result = await build({
@@ -8,7 +9,7 @@ const result = await build({
   bundle: true,
   format: "esm",
   platform: "node",
-  target: "node20",
+  target: ESBUILD_NODE_TARGET,
   outfile,
   metafile: true,
   sourcemap: false,

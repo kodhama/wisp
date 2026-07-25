@@ -1,6 +1,6 @@
 {
   "name": "@kodhama/wisp",
-  "version": "0.2.1-rc.2",
+  "version": "0.2.1-rc.3",
   "private": true,
   "type": "module",
   "description": "Project-scoped runtime observability for agent teams.",
@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "npm run build && node scripts/run-capability-safe-playwright.mjs",
+    "test:e2e:node24": "node scripts/node24-preflight.mjs && npm run test:e2e",
     "test:e2e:container": "node scripts/run-e2e-container.mjs",
     "validate:plugin": "vitest run test/wisp-plugin-v5.test.ts",
     "verify": "npm run typecheck && npm test && npm run build && npm run validate:plugin",

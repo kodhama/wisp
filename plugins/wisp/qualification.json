@@ -1,18 +1,10 @@
 {
-  "plugin_version": "0.2.1-rc.2",
-  "artifact_sha256": "01f09a3a6b3ad41750d5666f664b4c51be3e8b1a331acddd1372a8992a1e2f94",
+  "plugin_version": "0.2.1-rc.3",
+  "artifact_sha256": "b6405297bbfb261ecdd22a1c42b4267b33d88015d3fabe81cb94269422ef8338",
   "date": "2026-07-25",
   "platform": "darwin",
   "architecture": "arm64",
   "node_versions": {
-    "20": {
-      "version": "pending",
-      "result": "pending"
-    },
-    "22": {
-      "version": "pending",
-      "result": "pending"
-    },
     "24": {
       "version": "pending",
       "result": "pending"

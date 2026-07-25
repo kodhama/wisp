@@ -1,4 +1,4 @@
-// SPEC-0002 v6: S1-S6 / R1-R6, R15.
+// SPEC-0002@v7: S1-S6, S13-S14 / R1-R6, R15-R17.
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
@@ -6,7 +6,7 @@ async function text(path: string): Promise<string> {
   return readFile(new URL(`../../${path}`, import.meta.url), "utf8");
 }
 
-describe("SPEC-0002 v6 reproducible Codex E2E surfaces", () => {
+describe("SPEC-0002@v7 reproducible Codex E2E surfaces", () => {
   it("pins Playwright and exposes one direct and one container entrypoint", async () => {
     const packageJson = JSON.parse(await text("package.json"));
     expect(packageJson.devDependencies["@playwright/test"]).toBe("1.61.0");
@@ -15,6 +15,9 @@ describe("SPEC-0002 v6 reproducible Codex E2E surfaces", () => {
     );
     expect(packageJson.scripts["test:e2e:container"]).toBe(
       "node scripts/run-e2e-container.mjs",
+    );
+    expect(packageJson.scripts["test:e2e:node24"]).toBe(
+      "node scripts/node24-preflight.mjs && npm run test:e2e",
     );
   });
 
@@ -25,7 +28,7 @@ describe("SPEC-0002 v6 reproducible Codex E2E surfaces", () => {
     );
     expect(dockerfile).toMatch(/^USER pwuser$/mu);
     expect(dockerfile).toContain("RUN chown pwuser:pwuser /work");
-    expect(dockerfile).toContain('CMD ["npm", "run", "test:e2e"]');
+    expect(dockerfile).toContain('CMD ["npm", "run", "test:e2e:node24"]');
 
     const driver = await text("scripts/run-e2e-container.mjs");
     expect(driver).toContain('"--network"');
@@ -62,6 +65,8 @@ describe("SPEC-0002 v6 reproducible Codex E2E surfaces", () => {
       "!plugins/wisp/surfaces.json",
       "!scripts/build-plugin.mjs",
       "!scripts/capability-safety.mjs",
+      "!scripts/node24-preflight.mjs",
+      "!scripts/node-support.mjs",
       "!scripts/playwright-artifact-guard.cjs",
       "!scripts/run-capability-failure-campaign.mjs",
       "!scripts/run-capability-safe-playwright.mjs",
@@ -111,13 +116,13 @@ describe("SPEC-0002 v6 reproducible Codex E2E surfaces", () => {
         "",
         "[packages.unit]",
         'paths = ["test/*.test.ts"]',
-        'specs = ["spec-0001-plugin-mcp-distribution@v10"]',
+        'specs = ["spec-0001-plugin-mcp-distribution@v11"]',
         "decisions = []",
         "",
         "[packages.e2e]",
         'paths = ["test/e2e/**"]',
-        'specs = ["spec-0001-plugin-mcp-distribution@v10", "spec-0002-codex-e2e-testing@v6"]',
-        'decisions = ["adr-0006-codex-e2e-testing", "adr-0007-codex-canary-evidence"]',
+        'specs = ["spec-0001-plugin-mcp-distribution@v11", "spec-0002-codex-e2e-testing@v7"]',
+        'decisions = ["adr-0006-codex-e2e-testing", "adr-0007-codex-canary-evidence", "adr-0011-node-24-only-support"]',
         "",
       ].join("\n"),
     );
@@ -144,15 +149,21 @@ describe("SPEC-0002 v6 reproducible Codex E2E surfaces", () => {
     expect(dashboard).not.toContain("innerHTML");
   });
 
-  it("defines the matrix gate, isolated browser gate, and only the two canary triggers", async () => {
+  it("defines one explicit Node 24 fast gate, isolated browser gate, and only the two canary triggers", async () => {
     const ci = await text(".github/workflows/ci.yml");
-    expect(ci).toMatch(/node-version:\s*\[20,\s*22,\s*24\]/u);
-    expect(ci).toContain("npm run typecheck");
-    expect(ci).toContain("npm test");
-    expect(ci).toContain("npm run build");
-    expect(ci).toContain("npm run validate:plugin");
-    expect(ci).toMatch(/codex-e2e:[\s\S]*needs:\s*node/u);
-    expect(ci).toContain("npm run test:e2e:container");
+    expect(ci).toMatch(/fast:[\s\S]*node-version:\s*24/u);
+    expect(ci).not.toMatch(/\bmatrix\b|node-version:\s*(?:20|22)\b/u);
+    for (const command of [
+      "npm run typecheck",
+      "npm test",
+      "npm run build",
+      "npm run validate:plugin",
+    ]) {
+      const escaped = command.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+      expect(ci.match(new RegExp(escaped, "gu"))).toHaveLength(1);
+    }
+    expect(ci).toMatch(/codex-e2e:[\s\S]*needs:\s*fast/u);
+    expect(ci.match(/npm run test:e2e:container/gu)).toHaveLength(1);
 
     const canary = await text(".github/workflows/codex-canary.yml");
     expect(canary).toMatch(/^on:\n  schedule:/mu);
@@ -174,6 +185,14 @@ describe("SPEC-0002 v6 reproducible Codex E2E surfaces", () => {
     expect(canary).toMatch(/id: install_codex[\s\S]{0,120}continue-on-error: true/u);
     expect(canary).toContain("CODEX_INSTALL_OUTCOME: ${{ steps.install_codex.outcome }}");
     expect(canary).toContain("timeout-minutes: 20");
+    const nodePreflight = "node scripts/node24-preflight.mjs";
+    const escapedNodePreflight = nodePreflight.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+    expect(canary.match(/\bnode --version\b/gu)).toHaveLength(1);
+    expect(canary.match(new RegExp(escapedNodePreflight, "gu"))).toHaveLength(1);
+    expect(canary.indexOf("node --version")).toBeLessThan(canary.indexOf(nodePreflight));
+    expect(canary.indexOf(nodePreflight)).toBeLessThan(canary.indexOf("id: install_codex"));
+    expect(canary.indexOf(nodePreflight)).toBeLessThan(canary.indexOf("Run weekly canary"));
+    expect(canary.indexOf(nodePreflight)).toBeLessThan(canary.indexOf("Run candidate canary"));
     const canaryJobPreamble = canary.slice(
       canary.indexOf("jobs:"),
       canary.indexOf("    steps:"),

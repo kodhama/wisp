@@ -1,4 +1,4 @@
-// SPEC-0001 v10: S2, S20, S23, S28, S65-S68 / R1-R3, R24-R26,
+// SPEC-0001@v11: S2, S20, S23, S28, S65-S69 / R1-R3, R24-R28,
 // R34, R37, R55, R57, R73-R77.
 import { createHash } from "node:crypto";
 import { lstat, readFile, readdir, realpath } from "node:fs/promises";
@@ -8,6 +8,8 @@ import { describe, expect, it } from "vitest";
 const plugin = join(process.cwd(), "plugins/wisp");
 const UNVERIFIED_SUFFIX =
   "Marketplace observation provenance is unverified; structural validation does not authenticate the named run.";
+const CATALOG_NON_EVIDENCE = (version: string): string =>
+  `Stewards catalog admission and marketplace registration for ${version} are not evidenced.`;
 
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -140,8 +142,18 @@ function validSurfaces(
           candidate.surface_id,
         )) return false;
     }
-    if (candidate.marketplace_test_observations.length > 0 &&
-      !candidate.disclosure.endsWith(UNVERIFIED_SUFFIX)) return false;
+    const qualificationResult =
+      (qualification[String(candidate.qualification_key)] as Record<string, unknown>).result;
+    if (!["pending", "pass", "fail"].includes(String(qualificationResult))) return false;
+    const prefix = qualificationResult === "pending"
+      ? "Qualification is pending;"
+      : qualificationResult === "pass"
+      ? "Qualification passed;"
+      : "Qualification failed;";
+    const expectedDisclosure = `${prefix} ${CATALOG_NON_EVIDENCE(version)}${
+      candidate.marketplace_test_observations.length > 0 ? ` ${UNVERIFIED_SUFFIX}` : ""
+    }`;
+    if (candidate.disclosure !== expectedDisclosure) return false;
   }
   return true;
 }
@@ -159,7 +171,7 @@ async function inventory(path = plugin): Promise<string[]> {
   return result.sort();
 }
 
-describe("SPEC-0001 v10 S20/S23/S28/S65-S68 — exact dual-host MCP-only payload", () => {
+describe("SPEC-0001@v11 S20/S23/S28/S65-S69 — exact dual-host MCP-only payload", () => {
   it("contains exactly the ten candidate files", async () => {
     expect(await inventory()).toEqual([
       ".claude-plugin/plugin.json",
@@ -177,7 +189,7 @@ describe("SPEC-0001 v10 S20/S23/S28/S65-S68 — exact dual-host MCP-only payload
 
   it("derives every package carrier from strict canonical VERSION semantics", async () => {
     const versionBytes = await readFile(join(plugin, "VERSION"), "utf8");
-    expect(versionBytes).toBe("0.2.1-rc.2\n");
+    expect(versionBytes).toBe("0.2.1-rc.3\n");
     const version = versionBytes.slice(0, -1);
     expect(validSemver(version)).toBe(true);
     for (const valid of ["0.0.0", "1.2.3-0", "1.2.3-01a", "1.2.3-a.01b", "1.2.3+01"]) {
@@ -206,6 +218,12 @@ describe("SPEC-0001 v10 S20/S23/S28/S65-S68 — exact dual-host MCP-only payload
     ]).toEqual(Array(7).fill(version));
     expect(source).toContain(`{ name: "wisp", version: "${version}" }`);
     expect(bundle).toContain(`{ name: "wisp", version: "${version}" }`);
+    const buildScript = await readFile(join(process.cwd(), "scripts/build-plugin.mjs"), "utf8");
+    expect(buildScript).toContain(
+      'import { ESBUILD_NODE_TARGET } from "./node-support.mjs";',
+    );
+    expect(buildScript).toMatch(/\btarget:\s*ESBUILD_NODE_TARGET/u);
+    expect(buildScript).not.toMatch(/\btarget:\s*"node(?:20|22|24)"/u);
   });
 
   it("has exact host launch definitions with no CLI/bin", async () => {
@@ -286,14 +304,14 @@ describe("SPEC-0001 v10 S20/S23/S28/S65-S68 — exact dual-host MCP-only payload
     if (qualification.dashboard.process_identity_passed) {
       expect(["darwin", "linux"]).toContain(qualification.platform);
     }
-    expect(Object.keys(qualification.node_versions).sort()).toEqual(["20", "22", "24"]);
-    for (const major of ["20", "22", "24"] as const) {
-      const evidence = qualification.node_versions[major];
-      expect(Object.keys(evidence).sort()).toEqual(["result", "version"]);
-      expect(evidence.version).toMatch(new RegExp(`^(?:pending|${major}\\.\\d+\\.\\d+)$`, "u"));
-      expect(["pending", "pass", "fail"]).toContain(evidence.result);
-      if (evidence.result === "pass") expect(evidence.version).not.toBe("pending");
-    }
+    expect(Object.keys(qualification.node_versions)).toEqual(["24"]);
+    expect(qualification.node_versions).not.toHaveProperty("20");
+    expect(qualification.node_versions).not.toHaveProperty("22");
+    const nodeEvidence = qualification.node_versions["24"];
+    expect(Object.keys(nodeEvidence).sort()).toEqual(["result", "version"]);
+    expect(nodeEvidence.version).toMatch(/^(?:pending|24\.\d+\.\d+)$/u);
+    expect(["pending", "pass", "fail"]).toContain(nodeEvidence.result);
+    if (nodeEvidence.result === "pass") expect(nodeEvidence.version).not.toBe("pending");
     expect(Object.keys(qualification.dashboard).sort()).toEqual([
       "claude_open_passed",
       "cleanup_recovery_passed",
@@ -373,7 +391,7 @@ describe("SPEC-0001 v10 S20/S23/S28/S65-S68 — exact dual-host MCP-only payload
         qualification.claude.result,
         qualification.codex.result,
         qualification.dashboard.result,
-      ]).toEqual(["pass", "pass", "pass", "pass", "pass", "pass"]);
+      ]).toEqual(["pass", "pass", "pass", "pass"]);
     }
   });
 
@@ -406,6 +424,9 @@ describe("SPEC-0001 v10 S20/S23/S28/S65-S68 — exact dual-host MCP-only payload
     ]);
     expect(qualification.claude.result).toBe("pending");
     expect(qualification.codex.result).toBe("pending");
+    expect(qualification.node_versions["24"].result).toBe("pending");
+    expect(qualification.dashboard.result).toBe("pending");
+    expect(qualification.result).toBe("pending");
     const pluginRoot = await realpath(plugin);
     for (const row of surfaces.rows) {
       const qualificationFile = join(plugin, row.qualification_path);
@@ -446,6 +467,40 @@ describe("SPEC-0001 v10 S20/S23/S28/S65-S68 — exact dual-host MCP-only payload
       qualification,
       { [observationPath]: observation },
     )).toBe(true);
+
+    for (const result of ["pending", "pass", "fail"] as const) {
+      for (const hasObservation of [false, true]) {
+        const transitionedQualification = structuredClone(qualification);
+        transitionedQualification.codex.result = result;
+        const transitionedSurfaces = structuredClone(surfaces);
+        const codexRow = transitionedSurfaces.rows[1];
+        codexRow.marketplace_test_observations = hasObservation ? [observationPath] : [];
+        const resultPrefix = result === "pending"
+          ? "Qualification is pending;"
+          : result === "pass"
+          ? "Qualification passed;"
+          : "Qualification failed;";
+        codexRow.disclosure = `${resultPrefix} ${CATALOG_NON_EVIDENCE(version)}${
+          hasObservation ? ` ${UNVERIFIED_SUFFIX}` : ""
+        }`;
+        expect(
+          validSurfaces(
+            transitionedSurfaces,
+            version,
+            transitionedQualification,
+            hasObservation ? { [observationPath]: observation } : {},
+          ),
+          `${result}/${hasObservation ? "observation" : "no-observation"}`,
+        ).toBe(true);
+        codexRow.disclosure = `${codexRow.disclosure} `;
+        expect(validSurfaces(
+          transitionedSurfaces,
+          version,
+          transitionedQualification,
+          hasObservation ? { [observationPath]: observation } : {},
+        )).toBe(false);
+      }
+    }
 
     const invalidMutations: unknown[] = [];
     const absentArray = structuredClone(surfaces);

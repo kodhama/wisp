@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// SPEC-0002@v6 S6/S11 / R5-R6/R13.
+// SPEC-0002@v7 S6/S11/S14 / R5-R6/R13/R17.
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import {

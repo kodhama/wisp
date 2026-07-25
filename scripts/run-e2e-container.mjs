@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// SPEC-0002@v6 S1/S12 / R1-R2/R14.
+// SPEC-0002@v7 S1/S12/S14 / R1-R2/R14/R17.
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { runSanitizedCommand } from "./capability-safety.mjs";
