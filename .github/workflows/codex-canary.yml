@@ -91,7 +91,10 @@ jobs:
         if: github.event_name == 'schedule' && steps.weekly.outcome == 'failure'
         run: exit 1
       - name: Upload private canary evidence
-        if: always()
+        if: >-
+          always() &&
+          (steps.weekly.outputs.artifact_ready == 'true' ||
+          steps.candidate.outputs.artifact_ready == 'true')
         env:
           EVIDENCE_DIR: ${{ runner.temp }}/wisp-codex-evidence
         uses: actions/upload-artifact@v4

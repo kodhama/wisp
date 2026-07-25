@@ -9,7 +9,7 @@
     "build": "node scripts/build-plugin.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:e2e": "npm run build && playwright test --config test/e2e/playwright.config.ts",
+    "test:e2e": "npm run build && node scripts/run-capability-safe-playwright.mjs",
     "test:e2e:container": "node scripts/run-e2e-container.mjs",
     "validate:plugin": "vitest run test/wisp-plugin-v5.test.ts",
     "verify": "npm run typecheck && npm test && npm run build && npm run validate:plugin",

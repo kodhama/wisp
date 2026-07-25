@@ -1,5 +1,6 @@
-// SPEC-0002 v5 (restored v2 behavior): S1-S5 / R1-R4.
+// SPEC-0002 v6: S1-S5, S12 / R1-R4, R14.
 import { defineConfig, devices } from "@playwright/test";
+import { resolve } from "node:path";
 
 export default defineConfig({
   testDir: ".",
@@ -10,9 +11,11 @@ export default defineConfig({
   timeout: 45_000,
   expect: { timeout: 5_000 },
   reporter: [["line"]],
+  outputDir: resolve("test-results/playwright"),
   use: {
-    trace: "retain-on-failure",
-    screenshot: "only-on-failure",
+    trace: "off",
+    video: "off",
+    screenshot: "off",
   },
   projects: [
     {

@@ -1,4 +1,4 @@
-// SPEC-0002 v6: S1-S5 / R1-R4, R15.
+// SPEC-0002@v6 S1-S5/S12 / R1-R4/R14-R15.
 import { createHash, randomUUID } from "node:crypto";
 import {
   appendFile,
@@ -16,7 +16,17 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { expect, test, type Browser } from "@playwright/test";
+import {
+  expect,
+  test,
+  type Browser,
+  type Page,
+  type Request,
+} from "@playwright/test";
+import {
+  directoryIsAbsentOrEmpty,
+  writeBrowserEvidence,
+} from "../../scripts/capability-safety.mjs";
 
 const RELEASE_PATHS = [
   ".claude-plugin/plugin.json",
@@ -210,12 +220,30 @@ async function health(browser: Browser, urlText: string): Promise<number> {
   }
 }
 
-test("staged Codex adapter, MCP, project singleton, dashboard UI, security, and recovery", async ({
-  browser,
-}) => {
+async function runCapabilityInterval(
+  browser: Browser,
+): Promise<Record<string, unknown>> {
   const root = await mkdtemp(join(tmpdir(), "wisp-codex-e2e-"));
   const connections: Connected[] = [];
   const contexts: Awaited<ReturnType<Browser["newContext"]>>[] = [];
+  const requestObservers: Array<{
+    page: Page;
+    handler: (request: Request) => void;
+  }> = [];
+  const observedCapabilities: string[] = [];
+  let browserEvidence: Record<string, unknown> | undefined;
+  let completed = false;
+  const registerCapability = (urlText: string): string | undefined => {
+    const capability = /#capability=([A-Za-z0-9_-]{43})(?:$|&)/u
+      .exec(urlText)?.[1];
+    if (capability !== undefined) {
+      observedCapabilities.push(capability);
+      process.stdout.write(
+        `\x1eWISP_CAPABILITY:${process.env.WISP_E2E_CONTROL_NONCE}:${capability}\x1f`,
+      );
+    }
+    return capability;
+  };
 
   try {
     const home = await mkdtemp(join(root, "home-"));
@@ -271,30 +299,61 @@ test("staged Codex adapter, MCP, project singleton, dashboard UI, security, and 
       callDashboard(second),
       callDashboard(isolated),
     ]);
+    for (const dashboard of [
+      firstDashboard,
+      secondDashboard,
+      isolatedDashboard,
+    ]) {
+      registerCapability(dashboard.url);
+    }
     expect(firstDashboard.url).toBe(secondDashboard.url);
     expect([firstDashboard.reused, secondDashboard.reused].sort()).toEqual([false, true]);
     expect(isolatedDashboard.reused).toBe(false);
     expect(isolatedDashboard.url).not.toBe(firstDashboard.url);
+    for (const urlText of [
+      firstDashboard.url,
+      secondDashboard.url,
+      isolatedDashboard.url,
+    ]) {
+      const observed = new URLSearchParams(
+        new URL(urlText).hash.slice(1),
+      ).get("capability");
+      expect(observed).toMatch(/^[A-Za-z0-9_-]{43}$/u);
+    }
     expect(await readFile(join(projectOne, ".wisp/events.ndjson"), "utf8"))
       .not.toContain(`${sentinel}-isolated`);
     expect(await readFile(join(projectTwo, ".wisp/events.ndjson"), "utf8"))
       .not.toContain(`"run":"${sentinel}"`);
-    expect(await health(browser, firstDashboard.url)).toBe(200);
+    const authenticatedHealthStatus = await health(
+      browser,
+      firstDashboard.url,
+    );
+    expect(authenticatedHealthStatus).toBe(200);
     expect(await health(browser, isolatedDashboard.url)).toBe(200);
 
     const context = await browser.newContext();
     contexts.push(context);
     const page = await context.newPage();
-    const requested: string[] = [];
-    page.on("request", (request) => requested.push(request.url()));
+    let externalRequestCount = 0;
+    let requestsHaveSafeShape = true;
+    const onRequest = (request: Request): void => {
+      const requestUrl = new URL(request.url());
+      if (requestUrl.origin !== new URL(firstDashboard.url).origin) {
+        externalRequestCount += 1;
+      }
+      if (requestUrl.search !== "" || requestUrl.hash !== "") {
+        requestsHaveSafeShape = false;
+      }
+    };
+    page.on("request", onRequest);
+    requestObservers.push({ page, handler: onRequest });
     await page.goto(firstDashboard.url);
     await expect(page.locator("#status")).toHaveText("Live");
     const dashboardUrl = new URL(firstDashboard.url);
     const capability = new URLSearchParams(dashboardUrl.hash.slice(1)).get("capability");
     const assertRequestsStayOnOrigin = (): void => {
-      expect(requested.every((urlText) => new URL(urlText).origin === dashboardUrl.origin)).toBe(true);
-      expect(requested.every((urlText) => new URL(urlText).search === "")).toBe(true);
-      expect(requested.every((urlText) => new URL(urlText).hash === "")).toBe(true);
+      expect(externalRequestCount).toBe(0);
+      expect(requestsHaveSafeShape).toBe(true);
     };
     expect(page.url()).toBe(`${dashboardUrl.origin}/`);
     assertRequestsStayOnOrigin();
@@ -365,10 +424,27 @@ test("staged Codex adapter, MCP, project singleton, dashboard UI, security, and 
         .toHaveCount(1);
     }
     assertRequestsStayOnOrigin();
+    browserEvidence = {
+      schema: 1,
+      result: "pass",
+      failure_stage: null,
+      loopback_origin: dashboardUrl.origin,
+      dashboard_url_shape:
+        `${dashboardUrl.origin}/#capability=<redacted>`,
+      authorization_shape: "Bearer <redacted>",
+      fragment_removed: page.url() === `${dashboardUrl.origin}/`,
+      authenticated_health_status: authenticatedHealthStatus,
+      external_request_count: externalRequestCount,
+    };
 
     const publisher = firstDashboard.reused ? second : first;
     const contender = publisher === first ? second : first;
     const isolatedOwnerBefore = await readFile(ownerFile(home, projectTwo), "utf8");
+    page.off("request", onRequest);
+    const observerIndex = requestObservers.findIndex(
+      (observer) => observer.page === page,
+    );
+    if (observerIndex >= 0) requestObservers.splice(observerIndex, 1);
     await context.close();
     contexts.splice(contexts.indexOf(context), 1);
     await publisher.close();
@@ -387,6 +463,7 @@ test("staged Codex adapter, MCP, project singleton, dashboard UI, security, and 
     connections.push(replacement);
     expect((await replacement.client.listTools()).tools.map(({ name }) => name)).toEqual(TOOL_NAMES);
     const replacementDashboard = await callDashboard(replacement);
+    registerCapability(replacementDashboard.url);
     expect(replacementDashboard.reused).toBe(false);
     expect(replacementDashboard.url).not.toBe(firstDashboard.url);
     expect(await health(browser, replacementDashboard.url)).toBe(200);
@@ -394,9 +471,43 @@ test("staged Codex adapter, MCP, project singleton, dashboard UI, security, and 
       name: "wisp_check",
       arguments: { run: sentinel, agent },
     }))).toMatchObject({ parse_errors: [{ line: 5, reason: "invalid_json", raw: malformed }] });
+    completed = true;
   } finally {
-    await Promise.allSettled(contexts.map((context) => context.close()));
-    await Promise.allSettled(connections.map((connection) => connection.close()));
-    await rm(root, { recursive: true, force: true });
+    for (const observer of requestObservers) {
+      observer.page.off("request", observer.handler);
+    }
+    requestObservers.splice(0);
+    const closeResults = await Promise.allSettled([
+      ...contexts.map((context) => context.close()),
+      ...connections.map((connection) => connection.close()),
+    ]);
+    const removal = await rm(root, { recursive: true, force: true })
+      .then(() => true)
+      .catch(() => false);
+    const cleanupSafe =
+      closeResults.every((result) => result.status === "fulfilled") &&
+      removal;
+    const outputSafe = await directoryIsAbsentOrEmpty(
+      resolve("test-results/playwright"),
+    );
+    observedCapabilities.splice(0);
+    if (!cleanupSafe) throw new Error("browser cleanup failed");
+    if (!outputSafe) throw new Error("browser artifact writer was not disabled");
   }
+  if (!completed || browserEvidence === undefined) {
+    throw new Error("browser evidence is incomplete");
+  }
+  return browserEvidence;
+}
+
+test("staged Codex adapter, MCP, project singleton, dashboard UI, security, and recovery", async ({
+  browser,
+}) => {
+  const browserEvidence = await runCapabilityInterval(browser);
+  await mkdir(resolve("test-results"), { recursive: true, mode: 0o700 });
+  await writeBrowserEvidence(
+    resolve("test-results/browser-evidence.json"),
+    browserEvidence,
+    [],
+  );
 });

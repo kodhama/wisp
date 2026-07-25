@@ -2,6 +2,7 @@ export interface CommandResult {
   status: number | null;
   signal: NodeJS.Signals | null;
   timedOut: boolean;
+  outputExceeded: boolean;
   spawnError: Error | undefined;
   stdout: Buffer;
   stderr: Buffer;
@@ -26,6 +27,7 @@ export function runCommand(
     env?: NodeJS.ProcessEnv;
     timeoutMs?: number;
     killGraceMs?: number;
+    maxOutputBytes?: number;
     onStdoutLine?: (
       line: string,
       state: { childIsLive(): boolean; signal: AbortSignal },

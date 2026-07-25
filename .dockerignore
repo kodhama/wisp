@@ -34,8 +34,15 @@ playwright-report
 !plugins/wisp/surfaces.json
 !scripts/
 !scripts/build-plugin.mjs
+!scripts/capability-safety.mjs
+!scripts/playwright-artifact-guard.cjs
+!scripts/run-capability-failure-campaign.mjs
+!scripts/run-capability-safe-playwright.mjs
 !test/
 !test/e2e/
 !test/e2e/Dockerfile
 !test/e2e/playwright.config.ts
 !test/e2e/codex-plugin.e2e.ts
+!test/e2e/fixtures/
+!test/e2e/fixtures/playwright-browser-failure.config.ts
+!test/e2e/fixtures/playwright-browser-failure.fixture.ts

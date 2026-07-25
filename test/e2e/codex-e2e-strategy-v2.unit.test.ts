@@ -11,7 +11,7 @@ describe("SPEC-0002 v6 reproducible Codex E2E surfaces", () => {
     const packageJson = JSON.parse(await text("package.json"));
     expect(packageJson.devDependencies["@playwright/test"]).toBe("1.61.0");
     expect(packageJson.scripts["test:e2e"]).toBe(
-      "npm run build && playwright test --config test/e2e/playwright.config.ts",
+      "npm run build && node scripts/run-capability-safe-playwright.mjs",
     );
     expect(packageJson.scripts["test:e2e:container"]).toBe(
       "node scripts/run-e2e-container.mjs",
@@ -61,7 +61,13 @@ describe("SPEC-0002 v6 reproducible Codex E2E surfaces", () => {
       "!plugins/wisp/skills/wisp/SKILL.md",
       "!plugins/wisp/surfaces.json",
       "!scripts/build-plugin.mjs",
+      "!scripts/capability-safety.mjs",
+      "!scripts/playwright-artifact-guard.cjs",
+      "!scripts/run-capability-failure-campaign.mjs",
+      "!scripts/run-capability-safe-playwright.mjs",
       "!test/e2e/codex-plugin.e2e.ts",
+      "!test/e2e/fixtures/playwright-browser-failure.config.ts",
+      "!test/e2e/fixtures/playwright-browser-failure.fixture.ts",
       "!test/e2e/playwright.config.ts",
     ]) {
       expect(dockerignore).toContain(included);
@@ -70,13 +76,32 @@ describe("SPEC-0002 v6 reproducible Codex E2E surfaces", () => {
     expect(dockerignore).not.toContain("!plugins/wisp/**");
   });
 
-  it("keeps the browser suite deterministic and failure-diagnostic", async () => {
+  it("keeps the browser suite deterministic with raw artifact writers disabled", async () => {
     const config = await text("test/e2e/playwright.config.ts");
     expect(config).toMatch(/projects:\s*\[\s*\{\s*name:\s*"chromium"/u);
     expect(config).toContain("workers: 1");
     expect(config).toContain("retries: 0");
-    expect(config).toContain('trace: "retain-on-failure"');
-    expect(config).toContain('screenshot: "only-on-failure"');
+    expect(config).toContain('trace: "off"');
+    expect(config).toContain('video: "off"');
+    expect(config).toContain('screenshot: "off"');
+    expect(config).toContain('reporter: [["line"]]');
+    expect(config).toContain('outputDir: resolve("test-results/playwright")');
+    expect(config).not.toMatch(/html|json|junit|blob|attachment|retain-on-failure/u);
+
+    const wrapper = await text("scripts/run-capability-safe-playwright.mjs");
+    expect(wrapper).toContain("runSanitizedCommand");
+    expect(wrapper).toContain("test-results/playwright");
+    expect(wrapper).toContain("browser-evidence.json");
+    expect(wrapper).toContain("playwright-artifact-guard.cjs");
+    expect(wrapper).toContain("runCapabilityFailureCampaign");
+    expect(wrapper).toContain("PLAYWRIGHT_LAST_RUN_OUTPUT_FILE");
+    expect(wrapper).toContain("PLAYWRIGHT_NO_COPY_PROMPT");
+    expect(wrapper).toContain("controlNonce");
+    expect(wrapper).toContain("emit: false");
+
+    const container = await text("scripts/run-e2e-container.mjs");
+    expect(container).toContain("runSanitizedCommand");
+    expect(container).not.toContain('stdio: "inherit"');
   });
 
   it("records the exact unit and e2e dependency graph and Grove token", async () => {
@@ -184,6 +209,20 @@ describe("SPEC-0002 v6 reproducible Codex E2E surfaces", () => {
     expect(canaryDriver).toContain("let pluginVersion = null");
     expect(canaryDriver).toContain("let bundleSha256 = null");
     expect(canaryDriver).not.toContain('"unavailable"');
+    expect(canaryDriver).toContain("writeSafeCanaryArtifacts");
+    expect(canaryDriver).not.toContain(
+      "await writeFile(transcriptPath, execution.stdout",
+    );
+
+    expect(canary).toContain(
+      "steps.weekly.outputs.artifact_ready == 'true'",
+    );
+    expect(canary).toContain(
+      "steps.candidate.outputs.artifact_ready == 'true'",
+    );
+    expect(canary).not.toMatch(
+      /name: Upload private canary evidence[\s\S]{0,100}if: always\(\)\s*$/mu,
+    );
   });
 
   it("ignores browser artifacts and cleans its fixture root", async () => {
@@ -191,7 +230,7 @@ describe("SPEC-0002 v6 reproducible Codex E2E surfaces", () => {
     expect(ignore).toContain("test-results/");
     expect(ignore).toContain("playwright-report/");
     const e2e = await text("test/e2e/codex-plugin.e2e.ts");
-    expect(e2e).toContain("await rm(root, { recursive: true, force: true })");
+    expect(e2e).toContain("rm(root, { recursive: true, force: true })");
     expect(e2e).toContain("assertRequestsStayOnOrigin()");
   });
 });
