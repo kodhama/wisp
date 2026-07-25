@@ -372,7 +372,7 @@ describe("SPEC-0002 v6 capability-safe evidence boundary", () => {
           '{stdio:"ignore"});console.log(c.pid);setInterval(()=>{},1000);',
         ].join(""),
       ],
-      { emit: false, timeoutMs: 50, killGraceMs: 30 },
+      { emit: false, timeoutMs: 1_000, killGraceMs: 30 },
     );
     const descendantPid = Number(result.stdout?.toString().trim());
     expect(result.timedOut).toBe(true);
