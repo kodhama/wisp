@@ -1,4 +1,4 @@
-// SPEC-0002 v5 (restored v2 behavior): S1-S6 / R1-R6.
+// SPEC-0002 v6: S1-S6 / R1-R6, R15.
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
@@ -6,7 +6,7 @@ async function text(path: string): Promise<string> {
   return readFile(new URL(`../../${path}`, import.meta.url), "utf8");
 }
 
-describe("SPEC-0002 v5 reproducible Codex E2E surfaces", () => {
+describe("SPEC-0002 v6 reproducible Codex E2E surfaces", () => {
   it("pins Playwright and exposes one direct and one container entrypoint", async () => {
     const packageJson = JSON.parse(await text("package.json"));
     expect(packageJson.devDependencies["@playwright/test"]).toBe("1.61.0");
@@ -54,10 +54,12 @@ describe("SPEC-0002 v5 reproducible Codex E2E surfaces", () => {
       "!plugins/wisp/.codex-plugin/plugin.json",
       "!plugins/wisp/.mcp.json",
       "!plugins/wisp/README.md",
+      "!plugins/wisp/VERSION",
       "!plugins/wisp/dist/wisp.mjs",
       "!plugins/wisp/qualification.json",
       "!plugins/wisp/skills/dashboard/SKILL.md",
       "!plugins/wisp/skills/wisp/SKILL.md",
+      "!plugins/wisp/surfaces.json",
       "!scripts/build-plugin.mjs",
       "!test/e2e/codex-plugin.e2e.ts",
       "!test/e2e/playwright.config.ts",
@@ -84,12 +86,12 @@ describe("SPEC-0002 v5 reproducible Codex E2E surfaces", () => {
         "",
         "[packages.unit]",
         'paths = ["test/*.test.ts"]',
-        'specs = ["spec-0001-plugin-mcp-distribution@v9"]',
+        'specs = ["spec-0001-plugin-mcp-distribution@v10"]',
         "decisions = []",
         "",
         "[packages.e2e]",
         'paths = ["test/e2e/**"]',
-        'specs = ["spec-0001-plugin-mcp-distribution@v9", "spec-0002-codex-e2e-testing@v5"]',
+        'specs = ["spec-0001-plugin-mcp-distribution@v10", "spec-0002-codex-e2e-testing@v6"]',
         'decisions = ["adr-0006-codex-e2e-testing", "adr-0007-codex-canary-evidence"]',
         "",
       ].join("\n"),
