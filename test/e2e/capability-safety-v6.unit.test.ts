@@ -1,4 +1,4 @@
-// SPEC-0001@v10 S64/R87; SPEC-0002@v6 S11-S12/R13-R14.
+// SPEC-0001@v11 S64/R87; SPEC-0002@v7 S11-S12/R13-R14.
 import { spawnSync } from "node:child_process";
 import {
   mkdir,
@@ -27,7 +27,7 @@ import {
 const capability = "A".repeat(43);
 const secondCapability = "B".repeat(43);
 
-describe("SPEC-0002 v6 capability-safe evidence boundary", () => {
+describe("SPEC-0002@v7 capability-safe evidence boundary", () => {
   it("replaces only fragment and bearer forms byte-exactly", () => {
     const raw = Buffer.from([
       '{"url":"http://127.0.0.1:43123/#capability=',

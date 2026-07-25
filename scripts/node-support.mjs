@@ -1,0 +1,2 @@
+export const SUPPORTED_NODE_MAJOR = 24;
+export const ESBUILD_NODE_TARGET = `node${SUPPORTED_NODE_MAJOR}`;

@@ -6,14 +6,33 @@ depends_on:
   - adr-0007-codex-canary-evidence
   - adr-0008-retire-family-release-certification
   - adr-0009-independent-plugin-package-metadata
-  - spec-0001-plugin-mcp-distribution@v10
+  - adr-0011-node-24-only-support
+  - spec-0001-plugin-mcp-distribution@v11
 implements: adr-0007-codex-canary-evidence
 owner: agent
 updated: 2026-07-25
-version: 6
+version: 7
 ---
 
 # SPEC-0002 — Reproducible Codex adapter and dashboard E2E
+
+> **AMENDED 2026-07-25**
+> **WHAT:** Replaced the Node.js 20/22/24 fast-test matrix with one explicit
+> Node.js 24 job, required the pinned Playwright container and both real Codex
+> canary modes to record and assert a Node 24 runtime, and advanced all
+> current dependency pins to SPEC-0001@v11/SPEC-0002@v7.
+> **WHY:** ADR-0011 makes Node.js 24 Wisp's sole supported and qualified
+> runtime and rejects retaining even a one-entry matrix abstraction.
+> **SCOPE:** Pull-request workflow topology, test-dependency identities,
+> installed-candidate source pin, container/canary runtime preflights,
+> acceptance criteria, and verification evidence; version advanced from 6 to
+> 7. Browser and real-Codex test behavior beyond the runtime assertion,
+> capability-safety boundaries, and all tested product behavior remain
+> unchanged.
+> **POINTER:** ADR-0011 and SPEC-0001@v11.
+> **VALUE:** A Wisp contributor gets one fast, explicit compatibility gate
+> that tests exactly the runtime the product supports.
+> **CONFIDENCE:** verified.
 
 > **AMENDED 2026-07-24**
 > **WHAT:** Advanced deterministic installed-plugin staging from the prior
@@ -68,7 +87,7 @@ Claude remains outside scope and tracked by issue #25.
 
 All Wisp behavior under test, including the exact ten-path plugin payload,
 seven MCP tools, canonical bus, dashboard security, and ownership lifecycle,
-is inherited from `spec-0001-plugin-mcp-distribution@v10` and is not redefined
+is inherited from `spec-0001-plugin-mcp-distribution@v11` and is not redefined
 here.
 
 ## Required repository surfaces
@@ -82,13 +101,19 @@ here.
 | `scripts/run-e2e-container.mjs` | Shell-free Docker build/run driver; runs the image with `--network none`, an ephemeral home, and no host credential mounts |
 | `scripts/codex-canary.mjs` | Real-host canary driver and evidence writer |
 | `scripts/verify-codex-canary.mjs` | Deterministic candidate-evidence verifier used by the dispatched canary job and release operator |
-| `.github/workflows/ci.yml` | Existing Node 20/22/24 checks plus one required `codex-e2e` job |
+| `.github/workflows/ci.yml` | One explicit Node 24 fast job with no strategy matrix, plus one required `codex-e2e` job |
 | `.github/workflows/codex-canary.yml` | Weekly schedule and candidate `workflow_dispatch` |
 | `package.json` | Exact scripts `test:e2e` and `test:e2e:container`, plus an exact Playwright development version |
 
 `@playwright/test` SHALL be exactly `1.61.0`. The container base SHALL be
 exactly
 `mcr.microsoft.com/playwright:v1.61.0-noble@sha256:57b65fdc9ceabe0ef613124c7bbe2babcf9362c4d85e382fe3b03604e84b428a`.
+At this pinned digest, the observed runtime is exactly Node `v24.16.0`.
+Before the Playwright suite starts, the container command SHALL record the
+exact runtime version in its non-secret run output and SHALL fail unless its
+parsed SemVer major is exactly `24`. A future image-pin update SHALL repeat
+the observation and retain the major-24 assertion; `v24.16.0` describes the
+current immutable image rather than promising that patch for a future pin.
 Any dependency update SHALL change the exact package version, matching image
 tag, verified immutable digest, lockfile, and their assertions atomically.
 The copied working directory SHALL be writable by the unprivileged runtime
@@ -104,18 +129,18 @@ delegate to this command without changing the test architecture.
 
 `test/test-deps.toml` SHALL have schema `1` and exactly two package tables.
 `packages.unit` covers `test/*.test.ts` and names
-`spec-0001-plugin-mcp-distribution@v10`. `packages.e2e` covers
-`test/e2e/**`, names `spec-0001-plugin-mcp-distribution@v10`,
-`spec-0002-codex-e2e-testing@v6`, and the unversioned decisions
-`adr-0006-codex-e2e-testing` and `adr-0007-codex-canary-evidence`. The
-implementation SHALL update
+`spec-0001-plugin-mcp-distribution@v11`. `packages.e2e` covers
+`test/e2e/**`, names `spec-0001-plugin-mcp-distribution@v11`,
+`spec-0002-codex-e2e-testing@v7`, and the unversioned decisions
+`adr-0006-codex-e2e-testing`, `adr-0007-codex-canary-evidence`, and
+`adr-0011-node-24-only-support`. The implementation SHALL update
 `.grove/config.toml`'s `TEST_DEPS_LEDGER` token to this path.
 
 ## Deterministic pull-request gate
 
 Each run SHALL create fresh fixture projects, `HOME`, and `CODEX_HOME`. It
 SHALL build the candidate once, verify the source plugin has exactly the ten
-candidate paths defined by SPEC-0001@v10, and byte-copy all ten paths,
+candidate paths defined by SPEC-0001@v11, and byte-copy all ten paths,
 including `VERSION` and `surfaces.json`, to:
 
 ```text
@@ -241,10 +266,12 @@ The DOM evidence mapping is exact:
   parse-error reason and raw malformed line in children whose `data-field`
   values are exactly `parse-reason` and `parse-raw`.
 
-The Node `20`, `22`, and `24` matrix entries in `.github/workflows/ci.yml`
-SHALL each independently run typecheck, unit tests, build, and plugin
-validation. The separate `codex-e2e` job SHALL depend on a successful matrix
-and run the container command once.
+The fast pull-request job in `.github/workflows/ci.yml` SHALL set up Node 24
+explicitly, with no strategy matrix, and run typecheck, unit tests, bundle
+build, and plugin validation exactly once. The separate `codex-e2e` job SHALL
+depend on that successful fast job and run the container command once. The
+workflow SHALL reject Node 20 or 22 fast-job entries and any matrix
+abstraction for Node compatibility.
 
 ## Real Codex canary
 
@@ -255,6 +282,11 @@ and run the container command once.
 - `workflow_dispatch`: require candidate version, candidate bundle SHA-256,
   and candidate marketplace source/ref, then install current stable Codex CLI
   and that exact candidate.
+
+Both modes SHALL use an explicit Node 24 setup. Before canary installation or
+driver execution, the workflow SHALL record the exact `node --version` output
+as non-secret job evidence and SHALL fail unless the parsed SemVer major is
+exactly `24`.
 
 Both modes SHALL use a fresh `CODEX_HOME` and fixture project. The driver
 SHALL record `codex --version`, resolved plugin version, bundle SHA-256, and
@@ -527,6 +559,23 @@ support it but cannot silently set or substitute it.
   and only the post-interval typed redacted evidence record may persist after
   its absence scans pass.
 
+**S13 — One Node 24 fast gate**
+
+- **Given** the pull-request CI workflow,
+- **When** the fast repository gate runs,
+- **Then** it sets up Node 24 explicitly and runs typecheck, unit tests,
+  bundle build, and plugin validation exactly once without a strategy matrix,
+  and the separate `codex-e2e` job depends on that success and runs its
+  container command once.
+
+**S14 — Node 24 container and canary execution**
+
+- **Given** the pinned Playwright image or either real Codex canary mode,
+- **When** its runtime preflight executes before the test or canary driver,
+- **Then** the exact Node version is recorded in non-secret run evidence, its
+  parsed major is asserted as `24`, and a mismatch prevents Playwright or
+  canary execution; the current pinned container observation is `v24.16.0`.
+
 ### Requirements (EARS)
 
 - **R1 (ubiquitous):** The pull-request E2E gate shall require no Codex
@@ -557,8 +606,16 @@ support it but cannot silently set or substitute it.
   whose safety cannot be proved, leave no browser artifact file, and persist
   only the scanned typed redacted record after the capability-bearing interval.
 - **R15 (ubiquitous):** The deterministic installed-plugin fixture shall
-  verify and byte-stage exactly SPEC-0001@v10's ten candidate paths, including
+  verify and byte-stage exactly SPEC-0001@v11's ten candidate paths, including
   `VERSION` and `surfaces.json`, into the manifest-version cache directory.
+- **R16 (ubiquitous):** The fast pull-request job shall use exactly Node 24
+  without a strategy matrix and shall run typecheck, unit tests, bundle build,
+  and plugin validation once; it shall contain no Node 20 or 22 compatibility
+  entry.
+- **R17 (event-driven):** Before the pinned Playwright container suite or
+  either real Codex canary mode executes, its runtime preflight shall record
+  the exact Node version, assert parsed major `24`, and fail closed on a
+  missing, malformed, or non-24 observation.
 
 ## Verification matrix
 
@@ -566,6 +623,8 @@ support it but cannot silently set or substitute it.
 |---|---|
 | Capability-safe artifacts | Positive fixtures cover one and multiple fragment/bearer occurrences in top-level and nested JSON strings for pass, fail, and inconclusive runs; byte comparisons prove exact sentinel replacement and otherwise-identical retained JSONL, scans cover transcript/evidence/logs, raw-output spies prove no tee or write, and injected transform/scan failures prove no artifact upload |
 | Capability-safe browser failures | Playwright configuration inspection proves trace/video/screenshot/retry/file reporters and attachments are disabled; injected assertion, timeout, crash, signal, and cleanup failures at every browser stage place the observed capability in page URL, bearer, console, network, exception, and reporter inputs; sink spies prove interception precedes writes/logs, unsafe messages reduce only to the fixed error, the output directory receives no interval file, and the only allowed post-interval file has the exact scanned typed schema |
+| Fast Node gate | Workflow inspection proves one explicit Node 24 setup, no strategy matrix or Node 20/22 entry, one execution of typecheck/unit/build/plugin-validation, and `codex-e2e` dependency on that successful job |
+| Node runtime preflights | The pinned Playwright image reports `v24.16.0`; container and weekly/candidate canary fixtures record exact runtime output, accept major 24, and fail before test or canary execution for missing, malformed, Node 20, or Node 22 observations |
 
 ## Open questions
 
@@ -573,12 +632,13 @@ None.
 
 ## Rubric check
 
-**PASS.** Frontmatter is complete; ADR-0009 and SPEC-0001@v10 are approved or
-gated consumable upstreams with exact pins; scope is bounded; repository,
-execution, evidence, and cadence contracts are implementable; GWT scenarios
-cover the end-to-end outcomes; EARS requirements state the invariants; and no
-unresolved question is hidden. Per the Grove lifecycle companion, this
-self-check promotes version 6 from `draft` to `gated`.
+**PASS.** Frontmatter is complete; ADR-0009, ADR-0011, and SPEC-0001@v11 are
+approved or gated consumable upstreams with exact pins; scope is bounded;
+repository, execution, evidence, and cadence contracts are implementable;
+GWT scenarios cover the end-to-end outcomes, including the single Node 24
+fast gate and Node 24 container/canary execution; EARS requirements state the
+invariants; and no unresolved question is hidden. Per the Grove lifecycle
+companion, this self-check retains version 7 as `gated`.
 
 ## Gate record
 

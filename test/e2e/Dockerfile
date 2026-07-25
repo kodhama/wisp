@@ -9,4 +9,4 @@ RUN chown pwuser:pwuser /work
 USER pwuser
 ENV HOME=/home/pwuser
 ENV CODEX_HOME=/home/pwuser/.codex
-CMD ["npm", "run", "test:e2e"]
+CMD ["npm", "run", "test:e2e:node24"]

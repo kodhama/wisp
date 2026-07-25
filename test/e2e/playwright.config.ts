@@ -1,4 +1,4 @@
-// SPEC-0002 v6: S1-S5, S12 / R1-R4, R14.
+// SPEC-0002@v7: S1-S5, S12 / R1-R4, R14.
 import { defineConfig, devices } from "@playwright/test";
 import { resolve } from "node:path";
 

@@ -1,4 +1,4 @@
-// SPEC-0002@v6 S6/S11 / R6/R13 — exact candidate evidence verifier.
+// SPEC-0002@v7 S6/S11 / R6/R13 — exact candidate evidence verifier.
 import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -74,7 +74,7 @@ function run(
   );
 }
 
-describe("SPEC-0002 v6 candidate verifier", () => {
+describe("SPEC-0002@v7 candidate verifier", () => {
   it("accepts only exact passing candidate evidence and bundle bytes", async () => {
     const value = await fixture();
     const result = run(value);

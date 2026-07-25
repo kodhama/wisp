@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "0.2.1-rc.2",
+  "version": "0.2.1-rc.3",
   "rows": [
     {
       "surface_id": "claude-interactive",
@@ -8,7 +8,7 @@
       "qualification_path": "qualification.json",
       "qualification_key": "claude",
       "marketplace_test_observations": [],
-      "disclosure": "Qualification is pending; Stewards catalog admission and marketplace registration for 0.2.1-rc.2 are not evidenced."
+      "disclosure": "Qualification is pending; Stewards catalog admission and marketplace registration for 0.2.1-rc.3 are not evidenced."
     },
     {
       "surface_id": "codex-cli-local-session",
@@ -16,7 +16,7 @@
       "qualification_path": "qualification.json",
       "qualification_key": "codex",
       "marketplace_test_observations": [],
-      "disclosure": "Qualification is pending; Stewards catalog admission and marketplace registration for 0.2.1-rc.2 are not evidenced."
+      "disclosure": "Qualification is pending; Stewards catalog admission and marketplace registration for 0.2.1-rc.3 are not evidenced."
     }
   ]
 }

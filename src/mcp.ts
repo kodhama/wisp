@@ -405,7 +405,7 @@ const cleanupByServer = new WeakMap<Server, Promise<void>>();
 
 export function createWispServer(environmentRoot = process.env.WISP_PROJECT_ROOT): Server {
   const server = new Server(
-    { name: "wisp", version: "0.2.1-rc.2" },
+    { name: "wisp", version: "0.2.1-rc.3" },
     { capabilities: { tools: {} } },
   );
   let resolver: ProjectResolver | undefined;

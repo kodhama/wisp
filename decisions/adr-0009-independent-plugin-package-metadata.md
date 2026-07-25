@@ -18,6 +18,10 @@ updated: 2026-07-24
 
 > Observation-provenance semantics in §2 are amended by
 > `adr-0010-preserve-marketplace-observation-provenance`.
+>
+> `adr-0011-node-24-only-support` supersedes only this ADR's initial
+> `0.2.1-rc.2` candidate value; the independent version authority and carrier
+> rules remain current.
 
 ## Decision state
 

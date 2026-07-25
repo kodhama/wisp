@@ -34,6 +34,10 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 24
+      - name: Record and assert Node 24 runtime
+        run: |
+          node --version
+          node scripts/node24-preflight.mjs
       - name: Install current stable Codex CLI
         id: install_codex
         continue-on-error: true

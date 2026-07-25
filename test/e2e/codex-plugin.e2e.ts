@@ -1,4 +1,4 @@
-// SPEC-0002@v6 S1-S5/S12 / R1-R4/R14-R15.
+// SPEC-0002@v7 S1-S5/S12/S14 / R1-R4/R14-R17.
 import { createHash, randomUUID } from "node:crypto";
 import {
   appendFile,

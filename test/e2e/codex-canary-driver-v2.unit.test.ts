@@ -1,4 +1,4 @@
-// SPEC-0002@v6 S6/S11 / R5-R6/R13 — Codex JSONL and pre-sink safety.
+// SPEC-0002@v7 S6/S11/S14 / R5-R6/R13/R17 — Codex JSONL and pre-sink safety.
 import { describe, expect, it, vi } from "vitest";
 import {
   buildCodexExecArgs,
@@ -69,7 +69,7 @@ function successLines() {
   ];
 }
 
-describe("SPEC-0002 v6 real Codex canary normalization", () => {
+describe("SPEC-0002@v7 real Codex canary normalization", () => {
   it("normalizes only exact top-level successful Wisp calls and proves each boolean independently", () => {
     const normalized = normalizeTranscript(successLines(), {
       nonce,
