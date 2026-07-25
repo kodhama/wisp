@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// SPEC-0002 v2: S1 / R1-R2.
-import { spawnSync } from "node:child_process";
+// SPEC-0002@v6 S1/S12 / R1-R2/R14.
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { runSanitizedCommand } from "./capability-safety.mjs";
 
 const dockerfile = "test/e2e/Dockerfile";
 const image = `wisp-codex-e2e:${createHash("sha256")
@@ -11,17 +11,18 @@ const image = `wisp-codex-e2e:${createHash("sha256")
   .digest("hex")
   .slice(0, 16)}`;
 
-function docker(args) {
-  const result = spawnSync("docker", args, { stdio: "inherit", shell: false });
-  if (result.error) {
-    process.stderr.write(`docker unavailable: ${result.error.message}\n`);
-    process.exit(1);
-  }
+async function docker(args) {
+  const result = await runSanitizedCommand("docker", args, {
+    maxOutputBytes: 16 * 1024 * 1024,
+    timeoutMs: 15 * 60_000,
+    killGraceMs: 10_000,
+    redactStandaloneCapabilities: true,
+  });
   if (result.status !== 0) process.exit(result.status ?? 1);
 }
 
-docker(["build", "--file", dockerfile, "--tag", image, "."]);
-docker([
+await docker(["build", "--file", dockerfile, "--tag", image, "."]);
+await docker([
   "run",
   "--rm",
   "--init",

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// SPEC-0002 v2: S6 / R5-R6.
+// SPEC-0002@v6 S6/S11 / R5-R6/R13.
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import {
@@ -15,6 +15,12 @@ import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { StringDecoder } from "node:string_decoder";
+import {
+  CAPABILITY_REDACTION_ERROR,
+  DEFAULT_OUTPUT_LIMIT_BYTES,
+  extractCapabilities,
+  writeSafeCanaryArtifacts,
+} from "./capability-safety.mjs";
 
 const REPRESENTATIVE_TOOLS = ["wisp_check", "wisp_status", "wisp_dashboard"];
 const EXTERNAL_ABSENCE =
@@ -76,11 +82,15 @@ function parseArguments(argv) {
 export async function runCommand(command, args, options = {}) {
   const timeoutMs = options.timeoutMs ?? COMMAND_TIMEOUT_MS;
   const killGraceMs = options.killGraceMs ?? KILL_GRACE_MS;
+  const maxOutputBytes =
+    options.maxOutputBytes ?? DEFAULT_OUTPUT_LIMIT_BYTES;
   return new Promise((resolveRun) => {
     let finishing = false;
     let resolved = false;
     let timedOut = false;
     let spawnError;
+    let outputExceeded = false;
+    let outputBytes = 0;
     let pendingLine = "";
     let callbacks = Promise.resolve();
     const stdout = [];
@@ -113,6 +123,21 @@ export async function runCommand(command, args, options = {}) {
       } catch {
         // The process may have exited between the liveness check and signal.
       }
+    };
+    const append = (target, chunk) => {
+      if (outputExceeded) return;
+      const bytes = Buffer.from(chunk);
+      outputBytes += bytes.byteLength;
+      if (outputBytes > maxOutputBytes) {
+        outputExceeded = true;
+        callbackAbort.abort();
+        terminate("SIGKILL");
+        resolveDeadline();
+        resolveTermination();
+        void finish(child.exitCode, child.signalCode);
+        return;
+      }
+      target.push(bytes);
     };
     let resolveDeadline;
     const deadlineReached = new Promise((resolve) => {
@@ -159,12 +184,14 @@ export async function runCommand(command, args, options = {}) {
         await terminationFinished;
         void callbacks.catch(() => undefined);
       }
+      if (!timedOut) clearTimeout(deadline);
       if (killTimer !== undefined && !timedOut) clearTimeout(killTimer);
       resolved = true;
       resolveRun({
         status: child.exitCode ?? status,
         signal: child.signalCode ?? signal,
         timedOut,
+        outputExceeded,
         spawnError,
         stdout: Buffer.concat(stdout),
         stderr: Buffer.concat(stderr),
@@ -172,7 +199,8 @@ export async function runCommand(command, args, options = {}) {
     };
     child.stdout.on("data", (chunk) => {
       const bytes = Buffer.from(chunk);
-      stdout.push(bytes);
+      append(stdout, bytes);
+      if (outputExceeded) return;
       if (!options.onStdoutLine) return;
       pendingLine += decoder.write(bytes);
       const lines = pendingLine.split("\n");
@@ -181,10 +209,10 @@ export async function runCommand(command, args, options = {}) {
         queueCallback(line);
       }
     });
-    child.stderr.on("data", (chunk) => stderr.push(Buffer.from(chunk)));
+    child.stderr.on("data", (chunk) => append(stderr, chunk));
     child.once("error", (error) => {
       spawnError = error;
-      stderr.push(Buffer.from(error.message));
+      append(stderr, Buffer.from(error.message));
       void finish(null, null);
     });
     child.once("close", (status, signal) => {
@@ -444,6 +472,9 @@ export function commandEnvironments(source = process.env) {
 
 async function requireSuccess(result, proofOnNonzero) {
   if (result.spawnError) return { ok: false, provenAbsence: true };
+  if (result.outputExceeded) {
+    return { ok: false, provenAbsence: false };
+  }
   if (result.timedOut) {
     return { ok: false, provenAbsence: proofOnNonzero === true };
   }
@@ -465,9 +496,6 @@ async function main() {
   }
   await mkdir(codexHome, { recursive: true, mode: 0o700 });
   await mkdir(args.output, { recursive: true, mode: 0o700 });
-  const transcriptPath = join(args.output, "codex.jsonl");
-  const evidencePath = join(args.output, "evidence.json");
-  await writeFile(transcriptPath, "", { mode: 0o600 });
   const startedAt = new Date().toISOString();
   const context = workflowContext();
   const { baseEnv, execEnv } = commandEnvironments();
@@ -484,6 +512,7 @@ async function main() {
   let busPathVerified = false;
   let provenPreToolAbsence = false;
   let result = "fail";
+  let rawTranscript = Buffer.alloc(0);
 
   try {
     if (installOutcomeFailed(process.env.CODEX_INSTALL_OUTCOME)) {
@@ -567,7 +596,7 @@ async function main() {
         },
       },
     );
-    await writeFile(transcriptPath, execution.stdout, { mode: 0o600 });
+    rawTranscript = execution.stdout;
     execStatus = execution.status;
     execTimedOut = execution.timedOut;
     provenPreToolAbsence ||= execProvesPreToolAbsence(execution);
@@ -617,8 +646,13 @@ async function main() {
     dashboard_health_passed: dashboardHealthPassed,
     transcript_verified: normalized.transcript_verified,
   };
-  await writeFile(evidencePath, `${JSON.stringify(evidence, null, 2)}\n`, {
-    mode: 0o600,
+  const observedCapabilities = extractCapabilities(rawTranscript);
+  await writeSafeCanaryArtifacts({
+    outputDirectory: args.output,
+    rawTranscript,
+    evidence,
+    observedCapabilities,
+    readyOutputPath: process.env.GITHUB_OUTPUT,
   });
   process.exitCode = result === "fail" ? 1 : 0;
 }
@@ -627,7 +661,10 @@ const invokedPath = process.argv[1] === undefined
   ? undefined
   : pathToFileURL(resolve(process.argv[1])).href;
 if (invokedPath === import.meta.url) {
-  await main().catch(() => {
+  await main().catch((error) => {
+    if (error?.message === CAPABILITY_REDACTION_ERROR.trim()) {
+      process.stderr.write(CAPABILITY_REDACTION_ERROR);
+    }
     process.exitCode = 2;
   });
 }

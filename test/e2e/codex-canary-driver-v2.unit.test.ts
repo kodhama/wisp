@@ -1,5 +1,5 @@
-// SPEC-0002 v5 (restored v2 behavior): S6 / R5-R6 — codex-cli 0.145.0 JSONL normalization and result precedence.
-import { describe, expect, it } from "vitest";
+// SPEC-0002@v6 S6/S11 / R5-R6/R13 — Codex JSONL and pre-sink safety.
+import { describe, expect, it, vi } from "vitest";
 import {
   buildCodexExecArgs,
   classifyCanary,
@@ -69,7 +69,7 @@ function successLines() {
   ];
 }
 
-describe("SPEC-0002 v5 real Codex canary normalization", () => {
+describe("SPEC-0002 v6 real Codex canary normalization", () => {
   it("normalizes only exact top-level successful Wisp calls and proves each boolean independently", () => {
     const normalized = normalizeTranscript(successLines(), {
       nonce,
@@ -235,6 +235,28 @@ describe("SPEC-0002 v5 real Codex canary normalization", () => {
     expect(result.status).not.toBe(0);
   });
 
+  it("keeps raw subprocess output off stdout and stderr sinks", async () => {
+    const capability = "A".repeat(43);
+    const stdout = vi.spyOn(process.stdout, "write");
+    const stderr = vi.spyOn(process.stderr, "write");
+    try {
+      const captured = await runCommand(
+        process.execPath,
+        [
+          "-e",
+          `process.stdout.write("#capability=${capability}");process.stderr.write("Bearer ${capability}")`,
+        ],
+      );
+      expect(captured.stdout.toString()).toBe(`#capability=${capability}`);
+      expect(captured.stderr.toString()).toBe(`Bearer ${capability}`);
+      expect(stdout).not.toHaveBeenCalled();
+      expect(stderr).not.toHaveBeenCalled();
+    } finally {
+      stdout.mockRestore();
+      stderr.mockRestore();
+    }
+  });
+
   it("bounds a stalled callback and kills the complete POSIX process group", async () => {
     const started = Date.now();
     const stalled = await runCommand(
@@ -275,6 +297,18 @@ describe("SPEC-0002 v5 real Codex canary normalization", () => {
         return false;
       }
     }).toBe(false);
+  });
+
+  it("fails a bounded-output overflow without waiting for the command deadline", async () => {
+    const started = Date.now();
+    const overflow = await runCommand(
+      process.execPath,
+      ["-e", 'process.stdout.write("x".repeat(1024));setInterval(()=>{},1000)'],
+      { timeoutMs: 10_000, maxOutputBytes: 10 },
+    );
+    expect(overflow.outputExceeded).toBe(true);
+    expect(overflow.status).not.toBe(0);
+    expect(Date.now() - started).toBeLessThan(1_000);
   });
 
   it("requires real workflow provenance and honors the Codex installation outcome", () => {

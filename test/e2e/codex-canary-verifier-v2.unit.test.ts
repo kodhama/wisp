@@ -1,4 +1,4 @@
-// SPEC-0002 v5 (restored v2 behavior): S6 / R6 — exact candidate evidence verifier.
+// SPEC-0002@v6 S6/S11 / R6/R13 — exact candidate evidence verifier.
 import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -74,7 +74,7 @@ function run(
   );
 }
 
-describe("SPEC-0002 v5 candidate verifier", () => {
+describe("SPEC-0002 v6 candidate verifier", () => {
   it("accepts only exact passing candidate evidence and bundle bytes", async () => {
     const value = await fixture();
     const result = run(value);
@@ -155,5 +155,16 @@ describe("SPEC-0002 v5 candidate verifier", () => {
     expect(result.status).toBe(2);
     expect(`${result.stdout}${result.stderr}`).not.toContain(value.root);
     expect(`${result.stdout}${result.stderr}`).not.toContain("candidate bytes");
+  });
+
+  it("rejects capability-shaped evidence before accepting a candidate", async () => {
+    const capability = "A".repeat(43);
+    for (const codexVersion of [
+      `codex-cli 1.2.3 #capability=${capability}`,
+      `codex-cli 1.2.3 Bearer ${capability}`,
+    ]) {
+      const value = await fixture({ codex_version: codexVersion });
+      expect(run(value).status).toBe(2);
+    }
   });
 });

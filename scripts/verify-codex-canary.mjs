@@ -2,6 +2,7 @@
 import { createHash } from "node:crypto";
 import { lstat, readFile, realpath } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
+import { assertCapabilityAbsent } from "./capability-safety.mjs";
 
 const COMPLETED_TOOLS = [
   "wisp_check",
@@ -126,7 +127,9 @@ async function main() {
 
   let evidence;
   try {
-    evidence = JSON.parse(await readFile(evidenceReal, "utf8"));
+    const evidenceBytes = await readFile(evidenceReal);
+    assertCapabilityAbsent(evidenceBytes);
+    evidence = JSON.parse(evidenceBytes.toString("utf8"));
   } catch {
     invalid();
   }
