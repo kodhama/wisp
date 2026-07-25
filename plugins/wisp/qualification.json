@@ -1,7 +1,7 @@
 {
-  "plugin_version": "0.2.1-rc.1",
-  "artifact_sha256": "64d32363604a51be5c7d7c3fdb2ebe99dbd61e35640ebfcaa3d13f19027d6cc6",
-  "date": "2026-07-24",
+  "plugin_version": "0.2.1-rc.2",
+  "artifact_sha256": "01f09a3a6b3ad41750d5666f664b4c51be3e8b1a331acddd1372a8992a1e2f94",
+  "date": "2026-07-25",
   "platform": "darwin",
   "architecture": "arm64",
   "node_versions": {

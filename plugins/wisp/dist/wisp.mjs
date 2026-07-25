@@ -17623,7 +17623,7 @@ function toolResult(envelope, isError) {
 var cleanupByServer = /* @__PURE__ */ new WeakMap();
 function createWispServer(environmentRoot = process.env.WISP_PROJECT_ROOT) {
   const server = new Server(
-    { name: "wisp", version: "0.2.1-rc.1" },
+    { name: "wisp", version: "0.2.1-rc.2" },
     { capabilities: { tools: {} } }
   );
   let resolver;

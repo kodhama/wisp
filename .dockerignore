@@ -22,6 +22,7 @@ playwright-report
 !plugins/wisp/.codex-plugin/plugin.json
 !plugins/wisp/.mcp.json
 !plugins/wisp/README.md
+!plugins/wisp/VERSION
 !plugins/wisp/dist/
 !plugins/wisp/dist/wisp.mjs
 !plugins/wisp/qualification.json
@@ -30,6 +31,7 @@ playwright-report
 !plugins/wisp/skills/dashboard/SKILL.md
 !plugins/wisp/skills/wisp/
 !plugins/wisp/skills/wisp/SKILL.md
+!plugins/wisp/surfaces.json
 !scripts/
 !scripts/build-plugin.mjs
 !test/

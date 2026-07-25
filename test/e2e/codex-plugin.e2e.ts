@@ -1,4 +1,4 @@
-// SPEC-0002 v5 (restored v2 behavior): S1-S5 / R1-R4.
+// SPEC-0002 v6: S1-S5 / R1-R4, R15.
 import { createHash, randomUUID } from "node:crypto";
 import {
   appendFile,
@@ -23,10 +23,12 @@ const RELEASE_PATHS = [
   ".codex-plugin/plugin.json",
   ".mcp.json",
   "README.md",
+  "VERSION",
   "dist/wisp.mjs",
   "qualification.json",
   "skills/dashboard/SKILL.md",
   "skills/wisp/SKILL.md",
+  "surfaces.json",
 ];
 const TOOL_NAMES = [
   "wisp_status",
