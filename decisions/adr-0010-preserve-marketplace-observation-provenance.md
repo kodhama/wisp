@@ -1,12 +1,12 @@
 ---
 id: adr-0010-preserve-marketplace-observation-provenance
 type: adr
-status: gated
+status: approved
 depends_on:
   - adr-0009-independent-plugin-package-metadata
   - stewards/kodhama-spec-0003-marketplace-test-observation@v1
 owner: agent
-updated: 2026-07-24
+updated: 2026-07-25
 ---
 
 # ADR-0010 — Preserve marketplace-observation provenance
@@ -111,5 +111,7 @@ The contract author drafted this narrow repair after the conformance review
 of pending SPEC-0001 v10 returned `UPSTREAM-INDICTED`. The self-check found
 the structural/runtime boundary, unverified state, downstream propagation,
 and no-behavior-change limit explicit and testable, with no remaining open
-intent item; it moved the record to `gated`. Human intent ratification and
-independent decision/corpus review remain owed.
+intent item; it moved the record to `gated`. The independent decision
+adversary returned `SOUND` and the corpus review returned `PASS`. The
+maintainer explicitly approved this decision on 2026-07-25; this `approved`
+status records that human intent act.
