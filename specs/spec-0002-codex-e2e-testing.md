@@ -7,14 +7,33 @@ depends_on:
   - adr-0008-retire-family-release-certification
   - adr-0009-independent-plugin-package-metadata
   - adr-0011-node-24-only-support
-  - spec-0001-plugin-mcp-distribution@v11
-implements: adr-0007-codex-canary-evidence
+  - adr-0014-retire-preview-qualification-machinery
+  - spec-0001-plugin-mcp-distribution@v12
+implements: adr-0014-retire-preview-qualification-machinery
 owner: agent
-updated: 2026-07-25
-version: 7
+updated: 2026-07-26
+version: 8
 ---
 
 # SPEC-0002 — Reproducible Codex adapter and dashboard E2E
+
+> **AMENDED 2026-07-26**
+> **WHAT:** Stages SPEC-0001@v12's eight-path Preview payload, retires the
+> exact-candidate verifier and its version/SHA inputs, and reframes scheduled
+> and manual Codex runs as live marketplace-drift smoke with no qualification
+> or release-proof semantics.
+> **WHY:** ADR-0014 preserves deterministic installed-plugin E2E and useful
+> real-host drift detection while retiring aggregate qualification machinery.
+> **SCOPE:** Upstream and test-ledger pins, staged inventory, canary modes and
+> evidence schema, result precedence, acceptance criteria, verification
+> matrix, and verifier removal; version advanced from 7 to 8. The pinned
+> Playwright supply-chain digest, Node 24 execution target, runtime/dashboard
+> assertions, process cleanup, and capability-safe evidence boundaries remain
+> unchanged.
+> **POINTER:** ADR-0014 and SPEC-0001@v12.
+> **VALUE:** A contributor gets deterministic regression coverage and a live
+> Preview drift signal without representing either as support certification.
+> **CONFIDENCE:** verified.
 
 > **AMENDED 2026-07-25**
 > **WHAT:** Replaced the Node.js 20/22/24 fast-test matrix with one explicit
@@ -71,11 +90,12 @@ version: 7
 
 This specification defines two complementary Codex test layers:
 
-1. one deterministic Linux pull-request gate that stages the candidate as an
+1. one deterministic Linux pull-request gate that stages the package as an
    installed Codex plugin, drives its stdio MCP directly, and renders its
    authenticated dashboard with Playwright Chromium; and
-2. one real-Codex canary that runs weekly against the marketplace release and
-   by explicit dispatch against every marketplace release candidate.
+2. one real-Codex canary that runs weekly against the marketplace package and
+   by explicit dispatch as a manual Preview smoke against a declared
+   marketplace source.
 
 The deterministic gate proves the published adapter, MCP, project binding,
 bus, dashboard, and browser surface without credentials, model calls, or
@@ -85,9 +105,9 @@ lifecycle. The deterministic gate owns the exact seven-tool inventory because
 `codex exec --json` emits individual MCP calls but no startup inventory event.
 Claude remains outside scope and tracked by issue #25.
 
-All Wisp behavior under test, including the exact ten-path plugin payload,
+All Wisp behavior under test, including the exact eight-path plugin payload,
 seven MCP tools, canonical bus, dashboard security, and ownership lifecycle,
-is inherited from `spec-0001-plugin-mcp-distribution@v11` and is not redefined
+is inherited from `spec-0001-plugin-mcp-distribution@v12` and is not redefined
 here.
 
 ## Required repository surfaces
@@ -96,13 +116,12 @@ here.
 |---|---|
 | `test/e2e/codex-plugin.e2e.ts` | The single deterministic Playwright suite described below |
 | `test/e2e/playwright.config.ts` | Chromium only; one worker; no retries; trace, video, screenshot, attachment, file reporter, console artifact, and network artifact persistence disabled |
-| `test/e2e/Dockerfile` | Pinned official Playwright image by tag and digest; installs with `npm ci`, copies the candidate, and runs unprivileged |
+| `test/e2e/Dockerfile` | Pinned official Playwright image by tag and digest; installs with `npm ci`, copies the package, and runs unprivileged |
 | `test/test-deps.toml` | Repo test-dependency ledger with `unit` and `e2e` package entries |
 | `scripts/run-e2e-container.mjs` | Shell-free Docker build/run driver; runs the image with `--network none`, an ephemeral home, and no host credential mounts |
 | `scripts/codex-canary.mjs` | Real-host canary driver and evidence writer |
-| `scripts/verify-codex-canary.mjs` | Deterministic candidate-evidence verifier used by the dispatched canary job and release operator |
 | `.github/workflows/ci.yml` | One explicit Node 24 fast job with no strategy matrix, plus one required `codex-e2e` job |
-| `.github/workflows/codex-canary.yml` | Weekly schedule and candidate `workflow_dispatch` |
+| `.github/workflows/codex-canary.yml` | Weekly schedule and manual Preview-smoke `workflow_dispatch` |
 | `package.json` | Exact scripts `test:e2e` and `test:e2e:container`, plus an exact Playwright development version |
 
 `@playwright/test` SHALL be exactly `1.61.0`. The container base SHALL be
@@ -129,9 +148,9 @@ delegate to this command without changing the test architecture.
 
 `test/test-deps.toml` SHALL have schema `1` and exactly two package tables.
 `packages.unit` covers `test/*.test.ts` and names
-`spec-0001-plugin-mcp-distribution@v11`. `packages.e2e` covers
-`test/e2e/**`, names `spec-0001-plugin-mcp-distribution@v11`,
-`spec-0002-codex-e2e-testing@v7`, and the unversioned decisions
+`spec-0001-plugin-mcp-distribution@v12`. `packages.e2e` covers
+`test/e2e/**`, names `spec-0001-plugin-mcp-distribution@v12`,
+`spec-0002-codex-e2e-testing@v8`, and the unversioned decisions
 `adr-0006-codex-e2e-testing`, `adr-0007-codex-canary-evidence`, and
 `adr-0011-node-24-only-support`. The implementation SHALL update
 `.grove/config.toml`'s `TEST_DEPS_LEDGER` token to this path.
@@ -139,9 +158,8 @@ delegate to this command without changing the test architecture.
 ## Deterministic pull-request gate
 
 Each run SHALL create fresh fixture projects, `HOME`, and `CODEX_HOME`. It
-SHALL build the candidate once, verify the source plugin has exactly the ten
-candidate paths defined by SPEC-0001@v11, and byte-copy all ten paths,
-including `VERSION` and `surfaces.json`, to:
+SHALL build the package once, verify the source plugin has exactly the eight
+distributed paths defined by SPEC-0001@v12, and byte-copy all eight paths to:
 
 ```text
 <CODEX_HOME>/plugins/cache/kodhama/wisp/<manifest-version>/
@@ -278,10 +296,14 @@ abstraction for Node compatibility.
 `.github/workflows/codex-canary.yml` SHALL have exactly these modes:
 
 - `schedule`: once per week, install current stable Codex CLI and the current
-  `wisp@kodhama` marketplace release;
-- `workflow_dispatch`: require candidate version, candidate bundle SHA-256,
-  and candidate marketplace source/ref, then install current stable Codex CLI
-  and that exact candidate.
+  `wisp@kodhama` marketplace package;
+- `workflow_dispatch`: require only a declared marketplace source/ref, then
+  install current stable Codex CLI and Wisp from that source as manual Preview
+  smoke.
+
+Neither mode SHALL accept a candidate version or bundle SHA-256 input, invoke
+an exact-candidate verifier, mutate checked-in evidence, or describe its
+result as qualification, release proof, or support proof.
 
 Both modes SHALL use an explicit Node 24 setup. Before canary installation or
 driver execution, the workflow SHALL record the exact `node --version` output
@@ -289,8 +311,8 @@ as non-secret job evidence and SHALL fail unless the parsed SemVer major is
 exactly `24`.
 
 Both modes SHALL use a fresh `CODEX_HOME` and fixture project. The driver
-SHALL record `codex --version`, resolved plugin version, bundle SHA-256, and
-the `codex exec --json` transcript. It SHALL invoke Codex with
+SHALL record the declared marketplace source, `codex --version`, resolved
+plugin version, and the `codex exec --json` transcript. It SHALL invoke Codex with
 `approval_policy="on-request"` and `approvals_reviewer="auto_review"` so
 headless MCP approvals retain risk review; it SHALL NOT use an approval or
 sandbox bypass. A nonce-bearing prompt SHALL require, in order, `wisp_check`,
@@ -389,9 +411,9 @@ and has exactly this schema:
   "workflow_id": 123,
   "workflow_run_url": "https://github.com/<owner>/<repo>/actions/runs/<id>",
   "git_sha": "<40 lowercase hexadecimal characters>",
+  "marketplace_source": "<declared nonblank source/ref>",
   "codex_version": "<nonblank exact version or null when unobserved>",
   "plugin_version": "<SemVer or null when unobserved>",
-  "bundle_sha256": "<64 lowercase hexadecimal characters or null when unobserved>",
   "completed_tools": [
     "wisp_check",
     "wisp_status",
@@ -406,18 +428,18 @@ and has exactly this schema:
 }
 ```
 
-Every shown key is required. `mode` is exactly `weekly` or `candidate`;
+Every shown key is required. `mode` is exactly `weekly` or `manual`;
 `result` is exactly `pass`, `fail`, or `inconclusive`. Timestamps are real UTC instants in the shown
 millisecond-precision ISO form and `finished_at` is not earlier than
 `started_at`. `workflow_id` is a positive safe integer; the run URL is an
 HTTPS GitHub Actions run URL ending in that decimal id; `git_sha` matches
-`^[0-9a-f]{40}$`; each of `codex_version`, `plugin_version`, and
-`bundle_sha256` is either its observed value or `null` when execution did not
-reach that observation. An observed Codex version is nonblank, an observed
-plugin version is SemVer, and an observed bundle hash matches
-`^[0-9a-f]{64}$`. Sentinel substitutes for unobserved values are forbidden.
-All six named evidence fields are booleans. On `pass`, all three identity
-fields SHALL be non-null and `completed_tools` SHALL equal the three-name list
+`^[0-9a-f]{40}$`; `marketplace_source` is the nonblank declared source/ref;
+and each of `codex_version` and `plugin_version` is either its observed value
+or `null` when execution did not reach that observation. An observed Codex
+version is nonblank and an observed plugin version is SemVer. Sentinel
+substitutes for unobserved values are forbidden. All six named evidence fields
+are booleans. On `pass`, both observed version fields SHALL be non-null and
+`completed_tools` SHALL equal the three-name list
 above exactly, without omissions, additions, duplicates, or reordering.
 `workflow_id`, `workflow_run_url`, and `git_sha` SHALL come from valid
 `GITHUB_RUN_ID`, `GITHUB_REPOSITORY`, and `GITHUB_SHA` values; the driver
@@ -429,9 +451,10 @@ marketplace, or service absence proven before a Codex host emits any Wisp
 `mcp_tool_call` item is `inconclusive`. Once the host emits a Wisp tool-call
 item, any incomplete call, missing required completed call, wrong order, or
 later behavioral failure is `fail`; model prose is not a call. A weekly run
-with no Wisp tool call and no proven pre-tool absence is also `fail`. Candidate
+with no Wisp tool call and no proven pre-tool absence is also `fail`. Manual
 mode never records `inconclusive`: every pre-tool absence or behavioral
-failure is `fail`. Neither weekly result affects pull-request gates.
+failure is `fail`. Neither smoke mode affects pull-request gates, package
+identity, release, or support posture.
 
 For this precedence, a pre-tool external absence is proven only when spawning
 Codex fails, the workflow's Codex installation step fails, a marketplace or
@@ -440,51 +463,23 @@ exits nonzero and its stderr matches this case-insensitive expression:
 `auth(?:entication|orization)?|credential|marketplace|network|service|rate.?limit|timed? out|unavailable|not found|ENOTFOUND|ECONN`.
 An exception or nonzero command is still `fail` when that proof is absent.
 The workflow SHALL allow the Codex installation step to complete as a failed
-step outcome and pass that outcome to the driver so both canary modes still
+step outcome and pass that outcome to the driver so both smoke modes still
 write their evidence artifacts.
 
-The candidate workflow SHALL invoke:
+The exact-candidate verifier and verifier-only tests SHALL be absent. Smoke
+success means only that the declared marketplace source worked with the
+observed Codex host for this run; it SHALL NOT be joined to checked-in
+metadata or treated as a release or support gate.
 
-```text
-node scripts/verify-codex-canary.mjs \
-  --evidence <evidence.json> \
-  --bundle <installed-dist/wisp.mjs> \
-  --version <requested-version> \
-  --sha256 <requested-bundle-sha256>
-```
-
-The verifier SHALL accept no unknown or duplicate arguments. It exits `0`
-only when the evidence is schema-valid, mode `candidate`, overall `pass`, all
-three completed tool names match exactly, all six behavioral booleans are
-true, and its requested version and hash exactly match the evidence. The
-`--bundle` value SHALL be an absolute path whose canonical value is exactly
-`<real-CODEX_HOME>/plugins/cache/kodhama/wisp/<requested-version>/dist/wisp.mjs`;
-it SHALL be a real regular file, not a symbolic link. The verifier hashes
-those exact file bytes with SHA-256 and requires equality with both
-`--sha256` and `evidence.bundle_sha256`. It exits `1` for valid negative or
-mismatched evidence and `2` for invalid/duplicate arguments, absent
-`CODEX_HOME`, an unsafe or unreadable bundle/input, or invalid evidence
-schema. Candidate evidence carrying `inconclusive` is schema-valid but exits
-`1`. The verifier emits no transcript, credential, capability, or absolute
-fixture path.
-
-The workflow's candidate job SHALL fail on either nonzero result and expose
-the successful workflow URL as its Codex qualification evidence. An exit-`0`
-verifier result is necessary to accept the candidate canary as Wisp-owned
-Codex evidence, but is not sufficient for a Wisp release claim:
-SPEC-0001's Node, Claude, dashboard, overall, and qualification-record gates
-remain independently required.
 Canary credentials SHALL be unavailable to ordinary pull-request jobs.
 The canary wrapper SHALL remove `CODEX_API_KEY`, `OPENAI_API_KEY`, and its
 workflow-only secret alias from every version, marketplace, and plugin-install
 child environment, then expose only `CODEX_API_KEY` to the single
 `codex exec` child.
 
-Linux container and Linux canary evidence exercises the `/proc` identity
-provider only. It SHALL NOT replace the macOS `/bin/ps` qualification required
-by SPEC-0001. A release's checked-in `plugins/wisp/qualification.json` is the
-required record boundary for that macOS result; Codex canary artifacts may
-support it but cannot silently set or substitute it.
+Linux container and Linux smoke evidence exercises the `/proc` identity
+provider only. It does not exercise or replace SPEC-0001's macOS `/bin/ps`
+provider tests.
 
 ## Acceptance criteria
 
@@ -499,11 +494,11 @@ support it but cannot silently set or substitute it.
 
 **S2 — Installed adapter boundary**
 
-- **Given** the staged ten-path candidate and an empty fixture project,
+- **Given** the staged eight-path Preview package and an empty fixture project,
 - **When** the literal manifest bootstrap is launched from that project,
 - **Then** the client lists seven tools and writes only to that project's
-  canonical bus, while the staged `VERSION` and `surfaces.json` remain
-  byte-identical to the source candidate.
+  canonical bus, while all eight staged paths remain byte-identical and
+  `qualification.json` and `surfaces.json` are absent.
 
 **S3 — Explicit singleton dashboard**
 
@@ -528,14 +523,15 @@ support it but cannot silently set or substitute it.
 - **Then** the second project remains unchanged and a fresh first-project
   child publishes a healthy replacement.
 
-**S6 — Canary cadence and release identity**
+**S6 — Canary cadence and Preview drift**
 
-- **Given** a weekly trigger or candidate dispatch,
+- **Given** a weekly trigger or manual Preview-smoke dispatch with a declared
+  marketplace source,
 - **When** the real Codex canary completes,
 - **Then** it stores exact-schema structured-call/bus/dashboard evidence under
-  automatic approval review, and only a verifier exit `0` after hashing the
-  exact installed candidate bundle qualifies that Codex evidence as one
-  necessary, not sufficient, Wisp release input.
+  automatic approval review, uses no candidate version or SHA input and no
+  exact-candidate verifier, and represents the result only as marketplace and
+  host drift smoke.
 
 **S11 — Retained canary transcript is capability-safe**
 
@@ -566,11 +562,11 @@ support it but cannot silently set or substitute it.
 - **Then** it sets up Node 24 explicitly and runs typecheck, unit tests,
   bundle build, and plugin validation exactly once without a strategy matrix,
   and the separate `codex-e2e` job depends on that success and runs its
-  container command once.
+  container command once, without creating a Supported claim.
 
-**S14 — Node 24 container and canary execution**
+**S14 — Node 24 container and smoke execution**
 
-- **Given** the pinned Playwright image or either real Codex canary mode,
+- **Given** the pinned Playwright image or either real Codex smoke mode,
 - **When** its runtime preflight executes before the test or canary driver,
 - **Then** the exact Node version is recorded in non-secret run evidence, its
   parsed major is asserted as `24`, and a mismatch prevents Playwright or
@@ -591,10 +587,10 @@ support it but cannot silently set or substitute it.
 - **R5 (event-driven):** When the scheduled canary proves an external
   dependency absence before any structured Wisp tool-call item, it shall record
   `inconclusive` without affecting pull requests.
-- **R6 (state-driven):** While a candidate lacks verifier exit `0` for its
-  exact version and SHA-256, Wisp shall not accept its Codex canary as
-  qualified product evidence; even exit `0` shall not replace SPEC-0001's
-  remaining Wisp-owned release gates.
+- **R6 (ubiquitous):** Weekly and manual Codex runs shall remain Preview drift
+  smoke, accept no candidate version or bundle-SHA input, invoke no
+  exact-candidate verifier, mutate no checked-in evidence, and create no
+  qualification, release, or support result.
 - **R13 (event-driven):** When a Codex canary transcript or evidence is
   retained, the workflow shall keep raw capability-bearing bytes volatile,
   apply the exact fragment and bearer replacements before the first
@@ -606,14 +602,15 @@ support it but cannot silently set or substitute it.
   whose safety cannot be proved, leave no browser artifact file, and persist
   only the scanned typed redacted record after the capability-bearing interval.
 - **R15 (ubiquitous):** The deterministic installed-plugin fixture shall
-  verify and byte-stage exactly SPEC-0001@v11's ten candidate paths, including
-  `VERSION` and `surfaces.json`, into the manifest-version cache directory.
+  verify and byte-stage exactly SPEC-0001@v12's eight distributed paths into
+  the manifest-version cache directory and shall reject either retired
+  metadata file.
 - **R16 (ubiquitous):** The fast pull-request job shall use exactly Node 24
   without a strategy matrix and shall run typecheck, unit tests, bundle build,
   and plugin validation once; it shall contain no Node 20 or 22 compatibility
-  entry.
+  entry and shall not describe technical compatibility as a Supported claim.
 - **R17 (event-driven):** Before the pinned Playwright container suite or
-  either real Codex canary mode executes, its runtime preflight shall record
+  either real Codex smoke mode executes, its runtime preflight shall record
   the exact Node version, assert parsed major `24`, and fail closed on a
   missing, malformed, or non-24 observation.
 
@@ -621,10 +618,12 @@ support it but cannot silently set or substitute it.
 
 | Contract area | Minimum evidence |
 |---|---|
+| Installed Preview payload | Fixture staging proves byte-for-byte copying of exactly SPEC-0001@v12's eight paths into the manifest-version cache, rejects `qualification.json` and `surfaces.json`, launches the literal manifest bootstrap, lists seven tools, and confines bus writes to the fixture project |
 | Capability-safe artifacts | Positive fixtures cover one and multiple fragment/bearer occurrences in top-level and nested JSON strings for pass, fail, and inconclusive runs; byte comparisons prove exact sentinel replacement and otherwise-identical retained JSONL, scans cover transcript/evidence/logs, raw-output spies prove no tee or write, and injected transform/scan failures prove no artifact upload |
 | Capability-safe browser failures | Playwright configuration inspection proves trace/video/screenshot/retry/file reporters and attachments are disabled; injected assertion, timeout, crash, signal, and cleanup failures at every browser stage place the observed capability in page URL, bearer, console, network, exception, and reporter inputs; sink spies prove interception precedes writes/logs, unsafe messages reduce only to the fixed error, the output directory receives no interval file, and the only allowed post-interval file has the exact scanned typed schema |
-| Fast Node gate | Workflow inspection proves one explicit Node 24 setup, no strategy matrix or Node 20/22 entry, one execution of typecheck/unit/build/plugin-validation, and `codex-e2e` dependency on that successful job |
-| Node runtime preflights | The pinned Playwright image reports `v24.16.0`; container and weekly/candidate canary fixtures record exact runtime output, accept major 24, and fail before test or canary execution for missing, malformed, Node 20, or Node 22 observations |
+| Live Preview smoke | Workflow and driver fixtures prove weekly/current-source and manual/declared-source modes; representative read, write, dashboard, health, bus-path, and model-mediated host behavior; no candidate version or SHA input; no exact-candidate verifier or checked-in evidence mutation; weekly-only inconclusive handling; and no qualification, release, or support result |
+| Fast Node gate | Workflow inspection proves one explicit Node 24 setup, no strategy matrix or Node 20/22 entry, one execution of typecheck/unit/build/plugin-validation, and `codex-e2e` dependency on that successful job; documentation treats Node 24 as a technical target, not support |
+| Node runtime preflights | The pinned Playwright image reports `v24.16.0`; container and weekly/manual smoke fixtures record exact runtime output, accept major 24, and fail before test or smoke execution for missing, malformed, Node 20, or Node 22 observations |
 
 ## Open questions
 
@@ -632,13 +631,14 @@ None.
 
 ## Rubric check
 
-**PASS.** Frontmatter is complete; ADR-0009, ADR-0011, and SPEC-0001@v11 are
-approved or gated consumable upstreams with exact pins; scope is bounded;
-repository, execution, evidence, and cadence contracts are implementable;
-GWT scenarios cover the end-to-end outcomes, including the single Node 24
-fast gate and Node 24 container/canary execution; EARS requirements state the
-invariants; and no unresolved question is hidden. Per the Grove lifecycle
-companion, this self-check retains version 7 as `gated`.
+**PASS.** Frontmatter is complete; ADR-0014 and SPEC-0001@v12 are consumable
+upstreams with the exact behavioral pin; scope is bounded; repository,
+execution, evidence, cadence, retired-verifier, and eight-path staging
+contracts are implementable; GWT scenarios cover deterministic E2E, weekly
+and manual Preview smoke, Node 24 execution, and capability safety; EARS
+requirements state the invariants; every amended contract maps to executable
+evidence; and no unresolved question is hidden. The Grove lifecycle companion
+therefore retains version 8 as `gated` after this self-check.
 
 ## Gate record
 
@@ -662,3 +662,10 @@ returned `APPROVE-READY`, which is the agent-owned spec-gate ratification
 under the steward profile; the independent conformance review returned
 `PASS`, and the corpus review returned `PASS`. The version remains `gated`,
 the consumable state recorded by that agent-owned gate.
+
+Version 8 records ADR-0014's eight-path installed Preview package, retired
+exact-candidate verifier and version/SHA inputs, and weekly/manual live drift
+smoke semantics while preserving deterministic E2E, Node 24 execution, and
+capability-safe evidence handling. The configured rubric self-check above
+passed, so this amendment is `gated`; no independent spec-adversary or
+conformance verdict is claimed here.
