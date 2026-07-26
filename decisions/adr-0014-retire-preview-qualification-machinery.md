@@ -32,6 +32,8 @@ changes:
   ledger, and its checked-in exact-surface registry.
 - Ordinary product quality, runtime safety, deterministic end-to-end tests,
   and live host-drift smoke remain.
+- Node.js 24 remains Wisp's sole runtime requirement, CI line, and bundle
+  target; that technical compatibility boundary is not a Supported claim.
 - Any future Supported claim requires a new Wisp-local decision for the exact
   host and surface promise.
 - The next changed package identity is `0.2.1-rc.4`.
@@ -45,8 +47,8 @@ implementation on 2026-07-26.
 
 ### Parked
 
-- Any Supported claim for Claude Code, Codex, Node.js, Windows, or another
-  exact surface.
+- Any Supported claim for Claude Code, Codex, Windows, or another exact
+  surface.
 - A shared qualification schema, registry, validator, or release service.
 - Generic CLI distribution and Windows support.
 
@@ -81,6 +83,11 @@ an affirmative Supported claim. Marketplace presence, successful
 installation, ordinary CI, deterministic E2E, or a live smoke run do not by
 themselves create support.
 
+The Stewards marketplace listing or its linked Wisp product documentation
+SHALL state explicitly that support is not claimed. Wisp's distributed README
+SHALL carry that disclosure so it remains true even when the package is
+viewed outside the marketplace.
+
 Wisp SHALL remove `plugins/wisp/qualification.json` and
 `plugins/wisp/surfaces.json` from the distributed payload. No build, test,
 workflow, release, or documentation path SHALL require or mutate an aggregate
@@ -91,7 +98,8 @@ marketplace-observation join, or a support-like surface row.
 
 This retirement does not weaken the plugin contract. Wisp SHALL retain:
 
-- Node.js 24 as its one current runtime line and bundle target;
+- Node.js 24 as its one runtime requirement, CI line, and bundle target,
+  without interpreting technical compatibility as a Supported claim;
 - one self-contained dual-host plugin with equal Claude and Codex package
   versions and `plugins/wisp/VERSION` as version authority;
 - normal typecheck, unit, build, plugin-validation, and deterministic
@@ -162,8 +170,9 @@ This decision supersedes only:
   validation of marketplace observations through the retired surface
   metadata; the distinction between an observation and a support claim
   remains a governing Stewards boundary; and
-- ADR-0011's qualification-ledger and aggregate release-qualification clauses,
-  while preserving Node.js 24-only support, testing, and bundle targeting; and
+- ADR-0011's affirmative support claim, qualification-ledger, and aggregate
+  release-qualification clauses, while preserving Node.js 24 as the sole
+  runtime requirement, CI line, and bundle target; and
 - ADR-0013's statement that current qualification metadata remains unchanged,
   while preserving its constraint on any future exact-surface metadata.
 
@@ -186,9 +195,12 @@ Node.js decisions remain current.
 
 ### Keep empty qualification and surface files for future compatibility
 
-Rejected because no approved shared decision or current consumer requires
-either carrier. Empty records preserve maintenance cost and invite readers to
-infer a certification contract that Preview Wisp does not make.
+Rejected because no retained runtime or external consumer requires either
+carrier after this decision's authorized cleanup. The current build, static
+tests, E2E staging, and canary do consume them, but only to enforce the
+qualification machinery this decision retires. Empty records would preserve
+that maintenance cost and invite readers to infer a certification contract
+that Preview Wisp does not make.
 
 ### Delete the live marketplace canary
 
@@ -215,8 +227,10 @@ certification paperwork.
 - The live Codex workflow exposes weekly and manual Preview smoke without
   candidate version/digest inputs or qualification language.
 - All package-version carriers identify `0.2.1-rc.4`.
-- Future-surface documentation retains the Stewards 0023 grammar constraint
-  and Wisp makes no Supported claim.
+- The distributed Wisp README explicitly identifies the package as Preview
+  and states that support is not claimed; the Stewards listing either carries
+  the same disclosure or links to it.
+- Future-surface documentation retains the Stewards 0023 grammar constraint.
 
 ## Self-check
 
@@ -237,3 +251,11 @@ Stewards conformance preflight returned `PASS`. The self-check found no open
 intent item, preserved every runtime and security stop condition, and made the
 partial-supersession boundary explicit; the record therefore moved to
 `gated` for independent decision-adversary review.
+
+The first decision-adversary pass returned `NEEDS-REVISION` at commit
+`346bb8a`: Node.js support was both prohibited and preserved, explicit Preview
+non-support disclosure was not required, and one rationale denied the current
+local consumers being retired. This revision supersedes the affirmative Node
+support claim while preserving its technical runtime boundary, makes the
+disclosure testable, and distinguishes current qualification-only consumers
+from retained runtime or external consumers.
