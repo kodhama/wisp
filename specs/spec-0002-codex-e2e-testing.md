@@ -793,3 +793,10 @@ freeze→validate→serialize-once→scan→discard→same-buffer persistence or
 prose, GWT, EARS, and the verification matrix while preserving v8 and
 ADR-0014 scope; the rubric self-check remains `PASS`. No second adversary
 verdict is claimed here.
+
+Final intrinsic review returned `APPROVE-READY` for exact commit `9845475`
+([durable PR record](https://github.com/kodhama/wisp/pull/49#issuecomment-5082399326)),
+and final fidelity review returned `PASS`
+([durable PR record](https://github.com/kodhama/wisp/pull/49#issuecomment-5082399253)).
+Under the steward profile's `spec=agent` gate, those durable records ratify
+gated SPEC-0002 v8 for downstream consumption. Its status remains `gated`.

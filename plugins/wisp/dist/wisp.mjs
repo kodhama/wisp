@@ -16247,7 +16247,7 @@ function releaseDiagnostic(stage) {
   process.stderr.write(`wisp lock incident ${randomUUID()} stage=${stage}
 `);
 }
-async function recoverStaleLock(lockPath, ownerPath) {
+async function recoverStaleLock(lockPath, ownerPath, options = {}) {
   let info;
   try {
     info = await lstat(lockPath);
@@ -16281,6 +16281,7 @@ async function recoverStaleLock(lockPath, ownerPath) {
     dead = Date.now() - (created ?? info.mtimeMs) > LOCK_STALE_MS;
   }
   if (!dead) return;
+  await options.beforeReread?.();
   const current = await readLockSnapshot(ownerPath).catch(() => void 0);
   if (current === void 0 || !sameLockSnapshot(snapshot, current)) return;
   const stale = `${lockPath}.stale-${randomUUID()}`;
@@ -16312,7 +16313,7 @@ function decodeLockOwner(value) {
     return void 0;
   }
   const record2 = value;
-  if (Object.keys(record2).sort().join(",") !== "created,phase,pid,process_identity,token" || typeof record2.token !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u.test(record2.token) || !validPlatformPid(record2.pid) || typeof record2.process_identity !== "string" || record2.process_identity.length === 0 || Buffer.byteLength(record2.process_identity, "utf8") > 512 || !Number.isSafeInteger(record2.created) || Number(record2.created) < 0 || record2.phase !== "held" && record2.phase !== "committed") return void 0;
+  if (Object.keys(record2).sort().join(",") !== "created,phase,pid,process_identity,token" || typeof record2.token !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u.test(record2.token) || !validPlatformPid(record2.pid) || !qualifiedIdentity(record2.process_identity) || typeof record2.created !== "number" || !Number.isFinite(record2.created) || !Number.isInteger(record2.created) || record2.created < 0 || record2.phase !== "held" && record2.phase !== "committed") return void 0;
   return record2;
 }
 async function readLockSnapshot(path) {
@@ -16360,7 +16361,7 @@ async function readLockSnapshot(path) {
     const owner = decodeLockOwner(value);
     if (owner !== void 0) return { kind: "valid", owner };
     const record2 = value !== null && typeof value === "object" && !Array.isArray(value) ? value : void 0;
-    const created = record2 !== void 0 && Number.isSafeInteger(record2.created) && Number(record2.created) >= 0 ? Number(record2.created) : void 0;
+    const created = record2 !== void 0 && typeof record2.created === "number" && Number.isFinite(record2.created) && Number.isInteger(record2.created) && record2.created >= 0 ? Number(record2.created) : void 0;
     const salvaged = record2 !== void 0 && validPlatformPid(record2.pid) && qualifiedIdentity(record2.process_identity) ? {
       pid: record2.pid,
       process_identity: record2.process_identity

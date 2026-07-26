@@ -1,4 +1,7 @@
 // SPEC-0002@v8 S6/S11/S14-S16 / R5-R6/R13/R17-R19 — Codex JSONL and pre-sink safety.
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
   buildCodexExecArgs,
@@ -16,6 +19,64 @@ import {
 } from "../../scripts/codex-canary.mjs";
 
 const nonce = "wisp-canary-test-nonce";
+const exactOutputLimit = 4 * 1024 * 1024;
+
+async function retainedStdioRun(
+  trigger: "deadline" | "overflow" | "callback",
+) {
+  const root = await mkdtemp(join(tmpdir(), "wisp-canary-retained-stdio-"));
+  const pidPath = join(root, "descendant.pid");
+  const triggerSource = trigger === "overflow"
+    ? 'process.stdout.write("x".repeat(11));'
+    : trigger === "callback"
+      ? 'process.stdout.write("line\\n");'
+      : "";
+  const script = [
+    'const{spawn}=require("node:child_process");',
+    'const{writeFileSync}=require("node:fs");',
+    "const child=spawn(process.execPath,",
+    '["-e","setTimeout(()=>{},3000)"],',
+    "{detached:true,stdio:['ignore',process.stdout,process.stderr]});",
+    "writeFileSync(process.argv[1],String(child.pid));",
+    triggerSource,
+    "setInterval(()=>{},1000);",
+  ].join("");
+  const started = Date.now();
+  try {
+    const result = await runCommand(
+      process.execPath,
+      ["-e", script, pidPath],
+      {
+        timeoutMs: trigger === "deadline" ? 60 : 10_000,
+        killGraceMs: 40,
+        maxOutputBytes: trigger === "overflow" ? 10 : exactOutputLimit,
+        ...(trigger === "callback"
+          ? {
+            onStdoutLine: () =>
+              Promise.reject(new Error("callback rejected")),
+          }
+          : {}),
+      },
+    );
+    return { result, elapsed: Date.now() - started };
+  } finally {
+    const descendantPid = Number(
+      await readFile(pidPath, "utf8").catch(() => "0"),
+    );
+    if (descendantPid > 0) {
+      try {
+        process.kill(-descendantPid, "SIGKILL");
+      } catch {
+        try {
+          process.kill(descendantPid, "SIGKILL");
+        } catch {
+          // The bounded descendant may already have exited.
+        }
+      }
+    }
+    await rm(root, { recursive: true, force: true });
+  }
+}
 
 function item(
   topType: "item.started" | "item.completed",
@@ -209,6 +270,33 @@ describe("SPEC-0002@v8 real Codex Preview-smoke normalization", () => {
     }).transcript_verified).toBe(false);
   });
 
+  it("cancels the grace kill after a terminating child closes", async () => {
+    if (process.platform === "win32") return;
+    const kill = vi.spyOn(process, "kill");
+    try {
+      const result = await runCommand(
+        process.execPath,
+        [
+          "-e",
+          "process.on('SIGTERM',()=>process.exit(0));setInterval(()=>{},1000)",
+        ],
+        { timeoutMs: 40, killGraceMs: 200 },
+      );
+      expect(result.timedOut).toBe(true);
+      expect(
+        kill.mock.calls.filter((call) => call[1] === "SIGTERM"),
+      ).toHaveLength(1);
+
+      await new Promise((resolveWait) => setTimeout(resolveWait, 300));
+
+      expect(
+        kill.mock.calls.filter((call) => call[1] === "SIGKILL"),
+      ).toHaveLength(0);
+    } finally {
+      kill.mockRestore();
+    }
+  });
+
   it("passes risk-reviewed config and terminates subprocesses at a deadline", async () => {
     const args = buildCodexExecArgs("/tmp/project", "prompt");
     expect(args).toContain('approval_policy="on-request"');
@@ -314,48 +402,78 @@ describe("SPEC-0002@v8 real Codex Preview-smoke normalization", () => {
     expect(Date.now() - started).toBeLessThan(1_000);
   });
 
-  it("accepts the exact combined output limit and rejects the whole crossing chunk and all later output", () => {
+  it.each(["deadline", "overflow", "callback"] as const)(
+    "settles %s termination within its grace bound when a detached descendant retains stdio",
+    async (trigger) => {
+      if (process.platform === "win32") return;
+      const { result, elapsed } = await retainedStdioRun(trigger);
+      expect(elapsed).toBeLessThan(1_000);
+      expect(result.status).not.toBe(0);
+      expect(result.timedOut).toBe(trigger === "deadline");
+      expect(result.outputExceeded).toBe(trigger === "overflow");
+      expect(result.callbackFailed).toBe(trigger === "callback");
+    },
+    10_000,
+  );
+
+  it("accepts exactly 4,194,304 mixed stdout/stderr bytes and rejects the whole crossing chunk and all later output", () => {
     const aborted: string[] = [];
-    const collector = createOutputCollector(10, () => aborted.push("abort"));
-    expect(collector.accept("stdout", Buffer.from("1234"))).toBe(true);
-    expect(collector.accept("stderr", Buffer.from("567890"))).toBe(true);
+    const collector = createOutputCollector(
+      exactOutputLimit,
+      () => aborted.push("abort"),
+    );
+    const stdout = Buffer.alloc(2 * 1024 * 1024, 0x61);
+    const stderr = Buffer.alloc(2 * 1024 * 1024, 0x62);
+    expect(collector.accept("stdout", stdout)).toBe(true);
+    expect(collector.accept("stderr", stderr)).toBe(true);
     expect(collector.accept("stdout", Buffer.from("x"))).toBe(false);
     expect(collector.accept("stderr", Buffer.from("later"))).toBe(false);
-    expect(collector.result()).toMatchObject({
-      outputExceeded: true,
-      acceptedBytes: 10,
-      stdout: Buffer.from("1234"),
-      stderr: Buffer.from("567890"),
-    });
+    const result = collector.result();
+    expect(result.outputExceeded).toBe(true);
+    expect(result.acceptedBytes).toBe(exactOutputLimit);
+    expect(result.stdout.equals(stdout)).toBe(true);
+    expect(result.stderr.equals(stderr)).toBe(true);
     expect(aborted).toEqual(["abort"]);
   });
 
-  it("turns streamed callback failures into typed failure and aborts the child", async () => {
-    const secret = `Bearer ${"Z".repeat(43)}`;
-    const stdout = vi.spyOn(process.stdout, "write");
-    const stderr = vi.spyOn(process.stderr, "write");
-    try {
-      const result = await runCommand(
-        process.execPath,
-        ["-e", "console.log('line');setInterval(()=>{},1000)"],
-        {
-          timeoutMs: 2_000,
-          killGraceMs: 20,
-          onStdoutLine: async () => {
-            throw new Error(secret);
+  it.each(["synchronous throw", "rejection"] as const)(
+    "turns a streamed callback %s into typed failure and aborts the child",
+    async (failure) => {
+      const secret = `Bearer ${"Z".repeat(43)}`;
+      const stdout = vi.spyOn(process.stdout, "write");
+      const stderr = vi.spyOn(process.stderr, "write");
+      const unhandled = vi.fn();
+      process.on("unhandledRejection", unhandled);
+      try {
+        const result = await runCommand(
+          process.execPath,
+          ["-e", "console.log('line');setInterval(()=>{},1000)"],
+          {
+            timeoutMs: 2_000,
+            killGraceMs: 20,
+            onStdoutLine: failure === "synchronous throw"
+              ? () => {
+                throw new Error(secret);
+              }
+              : () => Promise.reject(new Error(secret)),
           },
-        },
-      );
-      expect(result.callbackFailed).toBe(true);
-      expect(result.status).not.toBe(0);
-      expect(stdout).not.toHaveBeenCalled();
-      expect(stderr).not.toHaveBeenCalled();
-      expect(result.stderr.toString()).not.toContain(secret);
-    } finally {
-      stdout.mockRestore();
-      stderr.mockRestore();
-    }
-  });
+        );
+        expect(result.callbackFailed).toBe(true);
+        expect(result.status).not.toBe(0);
+        expect(stdout).not.toHaveBeenCalled();
+        expect(stderr).not.toHaveBeenCalled();
+        expect(result.stderr.toString()).not.toContain(secret);
+        await new Promise<void>((resolveImmediate) =>
+          setImmediate(resolveImmediate)
+        );
+        expect(unhandled).not.toHaveBeenCalled();
+      } finally {
+        process.off("unhandledRejection", unhandled);
+        stdout.mockRestore();
+        stderr.mockRestore();
+      }
+    },
+  );
 
   it("reduces every health exception path to false without emitting thrown values", async () => {
     const url =
@@ -366,19 +484,55 @@ describe("SPEC-0002@v8 real Codex Preview-smoke normalization", () => {
         throw new Error(secret);
       },
     };
-    for (const fetchImpl of [
-      () => {
-        throw new Error(secret);
-      },
-      () => Promise.reject(new Error(secret)),
-      () => Promise.resolve(throwingStatus),
-    ]) {
-      await expect(dashboardHealth(
-        url,
-        undefined,
-        fetchImpl as unknown as typeof fetch,
-      )).resolves.toBe(false);
+    const stdout = vi.spyOn(process.stdout, "write");
+    const stderr = vi.spyOn(process.stderr, "write");
+    try {
+      for (const fetchImpl of [
+        () => {
+          throw new Error(secret);
+        },
+        () => Promise.reject(new Error(secret)),
+        () => Promise.resolve(throwingStatus),
+      ]) {
+        await expect(dashboardHealth(
+          url,
+          undefined,
+          fetchImpl as unknown as typeof fetch,
+        )).resolves.toBe(false);
+      }
+      expect(stdout).not.toHaveBeenCalled();
+      expect(stderr).not.toHaveBeenCalled();
+    } finally {
+      stdout.mockRestore();
+      stderr.mockRestore();
     }
+  });
+
+  it("reduces the exact health timeout and parent abort to false", async () => {
+    const url =
+      `http://127.0.0.1:43123/#capability=${"A".repeat(43)}`;
+    const secret = `Bearer ${"Z".repeat(43)}`;
+    const pendingFetch = ((_input: unknown, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        const signal = init?.signal;
+        const rejectAbort = () => reject(new Error(secret));
+        if (signal?.aborted) rejectAbort();
+        else signal?.addEventListener("abort", rejectAbort, { once: true });
+      })) as unknown as typeof fetch;
+
+    vi.useFakeTimers();
+    try {
+      const timedOut = dashboardHealth(url, undefined, pendingFetch);
+      await vi.advanceTimersByTimeAsync(5_000);
+      await expect(timedOut).resolves.toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+
+    const parent = new AbortController();
+    const aborted = dashboardHealth(url, parent.signal, pendingFetch);
+    parent.abort();
+    await expect(aborted).resolves.toBe(false);
   });
 
   it("requires real workflow provenance and honors the Codex installation outcome", () => {

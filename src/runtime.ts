@@ -867,7 +867,13 @@ function releaseDiagnostic(stage: "phase_publish" | "release_rename" | "retired_
   process.stderr.write(`wisp lock incident ${randomUUID()} stage=${stage}\n`);
 }
 
-export async function recoverStaleLock(lockPath: string, ownerPath: string): Promise<void> {
+export async function recoverStaleLock(
+  lockPath: string,
+  ownerPath: string,
+  options: {
+    beforeReread?: () => void | Promise<void>;
+  } = {},
+): Promise<void> {
   let info;
   try {
     info = await lstat(lockPath);
@@ -903,6 +909,7 @@ export async function recoverStaleLock(lockPath: string, ownerPath: string): Pro
     dead = Date.now() - (created ?? info.mtimeMs) > LOCK_STALE_MS;
   }
   if (!dead) return;
+  await options.beforeReread?.();
   const current = await readLockSnapshot(ownerPath).catch(() => undefined);
   if (current === undefined || !sameLockSnapshot(snapshot, current)) return;
   const stale = `${lockPath}.stale-${randomUUID()}`;
@@ -963,10 +970,11 @@ function decodeLockOwner(value: unknown): LockOwner | undefined {
     typeof record.token !== "string" ||
     !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u.test(record.token) ||
     !validPlatformPid(record.pid) ||
-    typeof record.process_identity !== "string" ||
-    record.process_identity.length === 0 ||
-    Buffer.byteLength(record.process_identity, "utf8") > 512 ||
-    !Number.isSafeInteger(record.created) || Number(record.created) < 0 ||
+    !qualifiedIdentity(record.process_identity) ||
+    typeof record.created !== "number" ||
+    !Number.isFinite(record.created) ||
+    !Number.isInteger(record.created) ||
+    record.created < 0 ||
     (record.phase !== "held" && record.phase !== "committed")
   ) return undefined;
   return record as unknown as LockOwner;
@@ -1022,7 +1030,10 @@ async function readLockSnapshot(
     const record = value !== null && typeof value === "object" &&
       !Array.isArray(value) ? value as Record<string, unknown> : undefined;
     const created = record !== undefined &&
-      Number.isSafeInteger(record.created) && Number(record.created) >= 0
+      typeof record.created === "number" &&
+      Number.isFinite(record.created) &&
+      Number.isInteger(record.created) &&
+      record.created >= 0
       ? Number(record.created)
       : undefined;
     const salvaged = record !== undefined &&

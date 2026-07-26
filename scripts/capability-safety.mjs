@@ -207,8 +207,13 @@ export async function writeBrowserEvidence(
   path,
   evidence,
   observedCapabilities,
+  hooks = {},
 ) {
-  const prepared = prepareBrowserEvidence(evidence, observedCapabilities);
+  const prepared = prepareBrowserEvidence(
+    evidence,
+    observedCapabilities,
+    hooks,
+  );
   await persistPreparedBrowserEvidence(path, prepared.bytes);
 }
 

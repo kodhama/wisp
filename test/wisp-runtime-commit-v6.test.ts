@@ -1,4 +1,4 @@
-// SPEC-0001 v6: S51 / R66-R67 — post-commit success, bounded release retry, and redacted diagnostics.
+// SPEC-0001@v12: S51/S70 / R66-R67/R88 — post-commit success and exact owner identity.
 import { join } from "node:path";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -48,7 +48,7 @@ vi.mock("../src/process-identity.ts", async () => {
   const actual = await vi.importActual<typeof import("../src/process-identity.ts")>(
     "../src/process-identity.ts",
   );
-  const token = "test-qualified-process:2026-07-24T12:00:00";
+  const token = "linux:00000000-0000-4000-8000-000000000001:1";
   return {
     ...actual,
     currentProcessIdentity: async () => token,

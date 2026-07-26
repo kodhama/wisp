@@ -120,6 +120,7 @@ export async function runCommand(command, args, options = {}) {
       shell: false,
       stdio: ["ignore", "pipe", "pipe"],
     });
+    const deadlineAt = Date.now() + timeoutMs;
     const callbackAbort = new AbortController();
     const callbackState = {
       childIsLive: () =>
@@ -146,17 +147,25 @@ export async function runCommand(command, args, options = {}) {
       stopCallbacks = resolve;
     });
     let killTimer;
+    let terminating = false;
     const terminateWithGrace = () => {
+      if (terminating) return;
+      terminating = true;
       callbackAbort.abort();
       stopCallbacks();
       terminate("SIGTERM");
-      killTimer ??= setTimeout(() => terminate("SIGKILL"), killGraceMs);
+      killTimer = setTimeout(() => {
+        terminate("SIGKILL");
+        child.stdout.destroy();
+        child.stderr.destroy();
+        void finish(child.exitCode, child.signalCode);
+      }, killGraceMs);
     };
     const collector = createOutputCollector(maxOutputBytes, terminateWithGrace);
     const deadline = setTimeout(() => {
       timedOut = true;
       terminateWithGrace();
-    }, timeoutMs);
+    }, Math.max(0, deadlineAt - Date.now()));
     const queueCallback = (line) => {
       if (!options.onStdoutLine || callbackAbort.signal.aborted) return;
       callbacks = callbacks

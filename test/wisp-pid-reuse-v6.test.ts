@@ -7,6 +7,8 @@ import {
   readFile,
   realpath,
   stat,
+  unlink,
+  utimes,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -20,6 +22,7 @@ const identity = vi.hoisted(() => ({
     { state: "inconclusive" },
   gate: undefined as undefined | (() => void),
   waiting: undefined as undefined | Promise<void>,
+  observeCalls: 0,
 }));
 
 vi.mock("../src/process-identity.ts", async () => {
@@ -30,6 +33,7 @@ vi.mock("../src/process-identity.ts", async () => {
     ...actual,
     currentProcessIdentity: async () => identity.current,
     observeProcess: async () => {
+      identity.observeCalls += 1;
       if (identity.waiting !== undefined) await identity.waiting;
       return identity.observation ??
         { state: "present" as const, token: identity.current };
@@ -47,6 +51,7 @@ afterEach(() => {
   identity.observation = undefined;
   identity.gate = undefined;
   identity.waiting = undefined;
+  identity.observeCalls = 0;
   if (originalHome === undefined) delete process.env.HOME;
   else process.env.HOME = originalHome;
 });
@@ -59,6 +64,11 @@ function lockOwner(processIdentity: string, token: string): Record<string, unkno
     created: Date.now(),
     phase: "held",
   };
+}
+
+async function makeLockOld(lock: string): Promise<void> {
+  const old = new Date(Date.now() - 180_000);
+  await utimes(lock, old, old);
 }
 
 describe("SPEC-0001@v12 deterministic PID-reuse recovery", () => {
@@ -104,7 +114,10 @@ describe("SPEC-0001@v12 deterministic PID-reuse recovery", () => {
     await mkdir(lock, { recursive: true, mode: 0o700 });
     await writeFile(
       join(lock, "owner.json"),
-      JSON.stringify(lockOwner("test-qualified:birth-A", "00000000-0000-4000-8000-000000000001")),
+      JSON.stringify(lockOwner(
+        "linux:00000000-0000-4000-8000-000000000001:1",
+        "00000000-0000-4000-8000-000000000001",
+      )),
       { mode: 0o600 },
     );
 
@@ -119,18 +132,87 @@ describe("SPEC-0001@v12 deterministic PID-reuse recovery", () => {
     await mkdir(lock, { recursive: true, mode: 0o700 });
     await writeFile(
       ownerPath,
-      JSON.stringify(lockOwner("test-qualified:birth-A", "00000000-0000-4000-8000-000000000001")),
+      JSON.stringify(lockOwner(
+        "linux:00000000-0000-4000-8000-000000000001:1",
+        "00000000-0000-4000-8000-000000000001",
+      )),
       { mode: 0o600 },
     );
     identity.waiting = new Promise<void>((resolveGate) => { identity.gate = resolveGate; });
     const recovery = recoverStaleLock(lock, ownerPath);
     await new Promise((resolveWait) => setTimeout(resolveWait, 10));
-    const replacement = lockOwner("test-qualified:birth-C", "00000000-0000-4000-8000-000000000002");
+    const replacement = lockOwner(
+      "linux:00000000-0000-4000-8000-000000000001:3",
+      "00000000-0000-4000-8000-000000000002",
+    );
     await writeFile(ownerPath, JSON.stringify(replacement), { mode: 0o600 });
     identity.gate?.();
     await recovery;
 
     expect(JSON.parse(await readFile(ownerPath, "utf8"))).toEqual(replacement);
+  });
+
+  it("treats a non-qualified identity as malformed and never retires it by committed phase while fresh", async () => {
+    const root = await mkdtemp(join(tmpdir(), "wisp-nonqualified-fresh-"));
+    const lock = join(root, ".wisp/write.lock");
+    const ownerPath = join(lock, "owner.json");
+    await mkdir(lock, { recursive: true, mode: 0o700 });
+    const owner = {
+      ...lockOwner(
+        "test-qualified:birth-B",
+        "00000000-0000-4000-8000-000000000001",
+      ),
+      phase: "committed",
+    };
+    await writeFile(ownerPath, JSON.stringify(owner), { mode: 0o600 });
+    identity.current = "test-qualified:birth-B";
+
+    await recoverStaleLock(lock, ownerPath);
+
+    expect(JSON.parse(await readFile(ownerPath, "utf8"))).toEqual(owner);
+    expect(identity.observeCalls).toBe(0);
+  });
+
+  it("recovers an aged non-qualified identity only through ownerless age", async () => {
+    const root = await mkdtemp(join(tmpdir(), "wisp-nonqualified-aged-"));
+    const lock = join(root, ".wisp/write.lock");
+    const ownerPath = join(lock, "owner.json");
+    await mkdir(lock, { recursive: true, mode: 0o700 });
+    await writeFile(ownerPath, JSON.stringify({
+      ...lockOwner(
+        "test-qualified:birth-B",
+        "00000000-0000-4000-8000-000000000001",
+      ),
+      created: 0,
+      phase: "committed",
+    }), { mode: 0o600 });
+
+    await recoverStaleLock(lock, ownerPath);
+
+    await expect(stat(lock)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(identity.observeCalls).toBe(0);
+  });
+
+  it("accepts a finite non-negative integer created value beyond the safe-integer range", async () => {
+    const root = await mkdtemp(join(tmpdir(), "wisp-created-integer-"));
+    const lock = join(root, ".wisp/write.lock");
+    const ownerPath = join(lock, "owner.json");
+    const processIdentity =
+      "linux:00000000-0000-4000-8000-000000000001:1";
+    await mkdir(lock, { recursive: true, mode: 0o700 });
+    await writeFile(ownerPath, JSON.stringify({
+      ...lockOwner(
+        processIdentity,
+        "00000000-0000-4000-8000-000000000001",
+      ),
+      created: 9_007_199_254_740_992,
+      phase: "committed",
+    }), { mode: 0o600 });
+    identity.observation = { state: "present", token: processIdentity };
+
+    await recoverStaleLock(lock, ownerPath);
+
+    await expect(stat(lock)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it.each([
@@ -213,5 +295,68 @@ describe("SPEC-0001@v12 deterministic PID-reuse recovery", () => {
     await recovery;
 
     expect(await readFile(ownerPath, "utf8")).toBe(replacement);
+  });
+
+  it("recovers unchanged syntactically invalid raw owner bytes only after ownerless age", async () => {
+    const root = await mkdtemp(join(tmpdir(), "wisp-invalid-raw-"));
+    const lock = join(root, ".wisp/write.lock");
+    const ownerPath = join(lock, "owner.json");
+    await mkdir(lock, { recursive: true, mode: 0o700 });
+    await writeFile(ownerPath, Buffer.from([0xff, 0xfe]), { mode: 0o600 });
+    await makeLockOld(lock);
+
+    await recoverStaleLock(lock, ownerPath);
+
+    await expect(stat(lock)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("fails closed when an owner appears after an owner-missing snapshot", async () => {
+    const root = await mkdtemp(join(tmpdir(), "wisp-missing-present-"));
+    const lock = join(root, ".wisp/write.lock");
+    const ownerPath = join(lock, "owner.json");
+    const appeared = Buffer.from("{invalid");
+    await mkdir(lock, { recursive: true, mode: 0o700 });
+    await makeLockOld(lock);
+    await recoverStaleLock(lock, ownerPath, {
+      beforeReread: async () => {
+        await writeFile(ownerPath, appeared, { mode: 0o600 });
+      },
+    });
+
+    expect(await readFile(ownerPath)).toEqual(appeared);
+  });
+
+  it("fails closed when a present malformed owner disappears before reread", async () => {
+    const root = await mkdtemp(join(tmpdir(), "wisp-present-missing-"));
+    const lock = join(root, ".wisp/write.lock");
+    const ownerPath = join(lock, "owner.json");
+    await mkdir(lock, { recursive: true, mode: 0o700 });
+    await writeFile(ownerPath, Buffer.from([0xff, 0xfe]), { mode: 0o600 });
+    await makeLockOld(lock);
+    await recoverStaleLock(lock, ownerPath, {
+      beforeReread: async () => {
+        await unlink(ownerPath);
+      },
+    });
+
+    expect((await stat(lock)).isDirectory()).toBe(true);
+    await expect(readFile(ownerPath)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("fails closed when syntactically invalid owner bytes change before reread", async () => {
+    const root = await mkdtemp(join(tmpdir(), "wisp-invalid-byte-race-"));
+    const lock = join(root, ".wisp/write.lock");
+    const ownerPath = join(lock, "owner.json");
+    const replacement = Buffer.from([0xff, 0xfd]);
+    await mkdir(lock, { recursive: true, mode: 0o700 });
+    await writeFile(ownerPath, Buffer.from([0xff, 0xfe]), { mode: 0o600 });
+    await makeLockOld(lock);
+    await recoverStaleLock(lock, ownerPath, {
+      beforeReread: async () => {
+        await writeFile(ownerPath, replacement, { mode: 0o600 });
+      },
+    });
+
+    expect(await readFile(ownerPath)).toEqual(replacement);
   });
 });

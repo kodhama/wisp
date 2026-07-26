@@ -2236,3 +2236,10 @@ raw-byte equality for present malformed owners, and exempts only the exact MCP
 response and loopback request/response transport from the otherwise
 fail-closed Wisp-controlled output-sink prohibition. Version 12 and ADR-0014
 scope remain unchanged; no fresh adversary verdict is claimed here.
+
+Final intrinsic review returned `APPROVE-READY` for exact commit `8dffff1`
+([durable PR record](https://github.com/kodhama/wisp/pull/49#issuecomment-5082408652)),
+and final fidelity review returned `PASS`
+([durable PR record](https://github.com/kodhama/wisp/pull/49#issuecomment-5082408751)).
+Under the steward profile's `spec=agent` gate, those durable records ratify
+gated SPEC-0001 v12 for downstream consumption. Its status remains `gated`.
