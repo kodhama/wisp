@@ -1,7 +1,7 @@
 ---
 id: adr-0014-retire-preview-qualification-machinery
 type: adr
-status: gated
+status: approved
 depends_on:
   - adr-0002-plugin-mcp-distribution
   - adr-0004-codex-session-bootstrap
@@ -259,3 +259,7 @@ local consumers being retired. This revision supersedes the affirmative Node
 support claim while preserving its technical runtime boundary, makes the
 disclosure testable, and distinguishes current qualification-only consumers
 from retained runtime or external consumers.
+
+The independent decision adversary returned `SOUND` for exact commit
+`e00a286`. The maintainer explicitly ratified this converged decision
+in-session on 2026-07-26; `approved` records that human intent act.
