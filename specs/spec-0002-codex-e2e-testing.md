@@ -867,5 +867,10 @@ project-bus `.wisp/write.lock` mutual-exclusion and append-ordering boundary
 changes no E2E behavior in this specification and preserves ADR-0005's
 separate user-runtime dashboard ownership/coordinator contract. This pin-only
 re-derivation therefore leaves SPEC-0002 at version 8 and `gated`; the rubric
-self-check remains `PASS`, and no new adversary or conformance verdict is
-claimed here.
+self-check remains `PASS`. Joint final intrinsic review returned
+`APPROVE-READY`
+([durable PR record](https://github.com/kodhama/wisp/pull/49#issuecomment-5083038130)),
+and final fidelity review returned `PASS`
+([durable PR record](https://github.com/kodhama/wisp/pull/49#issuecomment-5083038079)).
+Those records confirm the pin-only re-derivation and preserve SPEC-0002 v8's
+existing gated state.

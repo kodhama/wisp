@@ -132,4 +132,5 @@ The maintainer's explicit in-session selection is the human intent act;
 then scoped the boundary to the project-bus `.wisp/write.lock` protocol,
 preserved ADR-0005's separate dashboard contract, and distinguished “no
 redesign or correctness claim” from PR #49's retained bounded repairs without
-changing the ratified direction.
+changing the ratified direction. The targeted re-review returned `SOUND`
+([durable PR record](https://github.com/kodhama/wisp/pull/49#issuecomment-5083016108)).

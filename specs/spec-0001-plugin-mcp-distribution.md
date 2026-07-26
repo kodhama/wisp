@@ -2378,4 +2378,9 @@ HTTP, MCP-envelope, unexpected-exception, and stdio-diagnostic clauses still
 promised behavior for project-bus-lock-origin failures. This repair excludes
 only those failures while preserving stable validation, non-lock MCP/HTTP,
 dashboard, stdout-framing, capability-safety, and unrelated diagnostic
-contracts; v15 remains `gated`, and no fresh verdict is claimed.
+contracts. Final intrinsic review returned `APPROVE-READY`
+([durable PR record](https://github.com/kodhama/wisp/pull/49#issuecomment-5083038130)),
+and final fidelity review returned `PASS`
+([durable PR record](https://github.com/kodhama/wisp/pull/49#issuecomment-5083038079)).
+Under the steward profile's `spec=agent` gate, those records ratify gated
+SPEC-0001 v15 for downstream consumption; its status remains `gated`.
