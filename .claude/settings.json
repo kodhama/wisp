@@ -1,0 +1,14 @@
+{
+  "enabledPlugins": {
+    "grove@kodhama": true,
+    "trellis@kodhama": true
+  },
+  "extraKnownMarketplaces": {
+    "kodhama": {
+      "source": {
+        "source": "github",
+        "repo": "kodhama/stewards"
+      }
+    }
+  }
+}
