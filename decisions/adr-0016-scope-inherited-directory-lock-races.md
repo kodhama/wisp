@@ -25,6 +25,11 @@ changes:
 - Derived guarantees that depend on uninterrupted exclusive ownership are
   limited by the same race: rollback can remove a later committed append and
   concurrent projected-size checks can exceed the nominal bus maximum.
+- Failed acquisition cleanup on a non-`EEXIST` error is another inherited
+  pathname exposure: it unconditionally addresses the canonical owner and
+  lock paths without verifying the owner token.
+- The current committed-release horizon and scheduler are documented as
+  implemented, not represented as a stronger unref-only background boundary.
 - Issue #50 owns research, decision, implementation, and migration of a
   crash-safe replacement lock.
 - The bounded final-line callback cleanup fix remains in PR #49.
@@ -58,6 +63,24 @@ normal held-lock and committed-lock release. A release path can match owner A,
 pause, and later rename a newly acquired owner B's directory after another
 actor retired A. The different pathname occupant is not distinguishable by
 the earlier record match.
+
+Source conformance at head `3ed816e` established further exact current
+behavior. The 5,000 ms acquisition deadline is computed immediately before
+owner construction and the first `mkdir`, rather than at that first
+filesystem call. On any non-`EEXIST` acquisition error, cleanup
+unconditionally attempts `unlink(ownerPath)` and then `rmdir(lockPath)`
+without owner-token verification, so replacement or substitution can direct
+cleanup at another pathname occupant. Committed release computes its
+5,000 ms horizon after the protected `operation()` returns, at the start of
+committed release. Its
+background scheduler uses an unref'd outer 50 ms timer, but each worker invokes
+`releaseCommittedLock` with a 45 ms deadline whose repeated 10 ms delays are
+ordinary referenced waits. The 250 ms and 45 ms deadlines admit attempts
+while `Date.now()` is at or before the deadline; an admitted filesystem
+operation or final 10 ms wait can finish after its local deadline. The
+5,000 ms horizon likewise governs background-worker admission and
+rescheduling rather than imposing a hard completion cutoff: a worker admitted
+at or before the horizon can finish, including successfully, after it.
 
 Once that interleaving permits two operations to believe they acquired the
 lock, two further guarantees no longer hold absolutely:
@@ -95,11 +118,21 @@ SPEC-0001 SHALL describe the current directory-lock implementation exactly:
   the later pathname mutation by inode identity; and
 - replacements, disappearance, symlink/type substitution, or rename failure
   in that final gap follow the observed filesystem operation and error, not
-  an inode-conditional guarantee.
+  an inode-conditional guarantee;
+- on every non-`EEXIST` acquisition error, cleanup unconditionally attempts
+  `unlink(ownerPath)` followed by `rmdir(lockPath)` without owner verification,
+  and replacement or substitution follows those pathname operations; and
+- committed release starts its 5,000 ms horizon after `operation()` returns;
+  background retries use unref'd outer 50 ms timers, each invoking a 45 ms
+  release attempt whose internal 10 ms delays remain referenced; the 250 ms
+  synchronous and 45 ms worker deadlines admit attempts rather than bounding
+  their completion, and a worker admitted at or before the horizon can finish
+  after it.
 
 The limitation applies to stale recovery, held release, committed release,
-and any cleanup path that matches state before mutating the canonical
-pathname.
+any cleanup path that matches state before mutating the canonical pathname,
+and acquisition-failure cleanup that mutates the canonical owner and lock
+paths without first matching state.
 
 SPEC-0001 SHALL also state that, under an overlap caused by this final-gap
 race, the current implementation cannot guarantee:
@@ -119,8 +152,8 @@ and fail-closed observed-mismatch rules remain the current contract.
 Issue #50 SHALL require a crash-releasing serialization primitive that makes
 lock ownership and the protected append interval one enforceable
 cross-process boundary. Its acceptance SHALL include stale recovery, normal
-release, rollback-versus-later-commit, and near-limit concurrent append
-interleavings.
+release, acquisition-failure cleanup replacement,
+rollback-versus-later-commit, and near-limit concurrent append interleavings.
 
 The future decision SHALL compare Node 24 built-in `node:sqlite` transaction
 locking with any portable alternative that preserves self-contained plugin
@@ -175,7 +208,13 @@ failure semantics, and migration behavior and deserves issue #50's own ADR.
 
 - ADR-0015 points forward and is marked superseded.
 - SPEC-0001 advances to v14 and names the limitation across stale recovery,
-  held release, committed release, rollback, and concurrent size accounting.
+  held release, committed release, acquisition-failure cleanup, rollback, and
+  concurrent size accounting.
+- SPEC-0001 states the post-operation horizon start and distinguishes the
+  unref'd outer 50 ms scheduler from each 45 ms release attempt's referenced
+  10 ms delays.
+- SPEC-0001 states that the acquisition deadline is computed immediately
+  before owner construction and the first `mkdir`.
 - No text claims inode-conditional mutation, uninterrupted exclusivity, later
   commit preservation during overlapping rollback, or exact concurrent bus
   bounds under the known final-gap interleaving.
@@ -190,7 +229,9 @@ failure semantics, and migration behavior and deserves issue #50's own ADR.
 - **Internal coherence:** every guarantee derived from lock exclusivity carries
   the same explicit final-gap limitation.
 - **Evidence:** exact source contains separate match and pathname mutation in
-  recovery and release; the derived rollback and size interleavings follow.
+  recovery and release, unconditional acquisition-failure pathname cleanup,
+  and the nested committed-release scheduler; the derived rollback and size
+  interleavings follow.
 - **Scope:** the decision documents inherited behavior and defers replacement.
 - **Risk honesty:** possible concurrent writers, lost committed bytes, and
   over-limit buses are named explicitly.
@@ -214,3 +255,11 @@ ADR-0016 and records the ADR-0015 lineage. The targeted re-review returned
 The maintainer's explicit selection of the scoped document-and-park direction
 is the human intent act; `approved` records that ratification. The expanded
 release, rollback, and size text corrects evidence within that direction.
+
+Targeted source-conformance review at exact head `3ed816e` then found that the
+ratified limitation omitted unconditional acquisition-failure cleanup and
+described committed background release too abstractly. This amendment records
+the acquisition deadline's pre-owner-construction start, existing unlink/rmdir
+exposure, post-operation horizon start, and outer-unref/inner-referenced
+scheduler without selecting a fix or changing the approved document-and-park
+direction. Status remains `approved`; issue #50 still owns redesign.
