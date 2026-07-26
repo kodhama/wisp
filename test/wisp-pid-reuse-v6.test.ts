@@ -15,7 +15,7 @@ import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const identity = vi.hoisted(() => ({
-  current: "test-qualified:birth-B",
+  current: "linux:00000000-0000-4000-8000-000000000001:2",
   observation: undefined as undefined |
     { state: "present"; token: string } |
     { state: "absent" } |
@@ -47,7 +47,7 @@ import { recoverStaleLock } from "../src/runtime.ts";
 const originalHome = process.env.HOME;
 
 afterEach(() => {
-  identity.current = "test-qualified:birth-B";
+  identity.current = "linux:00000000-0000-4000-8000-000000000001:2";
   identity.observation = undefined;
   identity.gate = undefined;
   identity.waiting = undefined;
@@ -94,7 +94,7 @@ describe("SPEC-0001@v12 deterministic PID-reuse recovery", () => {
       project_key: key,
       instance: "00000000-0000-4000-8000-000000000001",
       pid: process.pid,
-      process_identity: "test-qualified:birth-A",
+      process_identity: "linux:00000000-0000-4000-8000-000000000001:1",
       created_at: "2026-07-24T12:00:00.000Z",
     }), { mode: 0o600 });
 
@@ -104,7 +104,9 @@ describe("SPEC-0001@v12 deterministic PID-reuse recovery", () => {
     const replacement = JSON.parse(await readFile(join(ownerDir, "owner.json"), "utf8")) as {
       process_identity: string;
     };
-    expect(replacement.process_identity).toBe("test-qualified:birth-B");
+    expect(replacement.process_identity).toBe(
+      "linux:00000000-0000-4000-8000-000000000001:2",
+    );
     await coordinator.cleanup();
   });
 

@@ -2,6 +2,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import {
   currentProcessIdentity,
+  isQualifiedProcessIdentity,
   observeProcess,
   parseDarwinIdentity,
   parseLinuxIdentity,
@@ -31,6 +32,20 @@ function linuxStat(pid: number, comm: string, starttime: string): string {
 }
 
 describe("SPEC-0001 v6 exact qualified process identities", () => {
+  it("recognizes only exact Linux and calendar-valid Darwin provider tokens", () => {
+    expect(isQualifiedProcessIdentity(`linux:${BOOT_ID}:987654`)).toBe(true);
+    expect(isQualifiedProcessIdentity("darwin:2024-02-29T02:03:04")).toBe(true);
+    for (const invalid of [
+      "not-a-qualified-platform-token",
+      `linux:${BOOT_ID}:-1`,
+      "linux:123e4567-e89b-72d3-a456-426614174000:1",
+      "darwin:2023-02-29T02:03:04",
+      "darwin:2024-01-01T24:00:00",
+    ]) {
+      expect(isQualifiedProcessIdentity(invalid), invalid).toBe(false);
+    }
+  });
+
   it("classifies deterministic same-PID/new-token evidence for dashboard and bus recovery", () => {
     expect(processInstanceIsGone("birth-A", { state: "present", token: "birth-B" })).toBe(true);
     expect(processInstanceIsGone("birth-A", { state: "present", token: "birth-A" })).toBe(false);

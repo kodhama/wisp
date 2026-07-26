@@ -1,7 +1,15 @@
 // SPEC-0001@v12 S34-S36/S49/S71 / R39/R43/R59/R89 — dashboard acquisition, health, and exact owners.
 import { createHash } from "node:crypto";
 import { join } from "node:path";
-import { mkdtemp, readFile, realpath, stat } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  realpath,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -9,6 +17,7 @@ const seam = vi.hoisted(() => ({
   replaceAfterAcquisition: false,
   transientMissingDirectory: undefined as string | undefined,
   transientMissingObserved: false,
+  observeCalls: 0,
 }));
 
 vi.mock("node:fs/promises", async () => {
@@ -49,11 +58,14 @@ vi.mock("../src/process-identity.ts", async () => {
   const actual = await vi.importActual<typeof import("../src/process-identity.ts")>(
     "../src/process-identity.ts",
   );
-  const token = "test-qualified-process:2026-07-24T12:00:00";
+  const token = "linux:00000000-0000-4000-8000-000000000001:1";
   return {
     ...actual,
     currentProcessIdentity: async () => token,
-    observeProcess: async () => ({ state: "present" as const, token }),
+    observeProcess: async () => {
+      seam.observeCalls += 1;
+      return { state: "present" as const, token };
+    },
   };
 });
 
@@ -70,6 +82,7 @@ afterEach(() => {
   seam.replaceAfterAcquisition = false;
   seam.transientMissingDirectory = undefined;
   seam.transientMissingObserved = false;
+  seam.observeCalls = 0;
   if (originalHome === undefined) delete process.env.HOME;
   else process.env.HOME = originalHome;
   vi.restoreAllMocks();
@@ -86,7 +99,7 @@ describe("SPEC-0001 v7 dashboard acquisition and post-acquisition recheck", () =
       project_key: "a".repeat(64),
       instance: "12345678-1234-1234-1234-123456789abc",
       pid: 123,
-      process_identity: "linux:12345678-1234-1234-1234-123456789abc:1",
+      process_identity: "linux:123e4567-e89b-42d3-a456-426614174000:1",
       created_at: "2026-07-26T00:00:00.000Z",
     };
     expect(validDashboardOwnerForTesting(starting)).toBe(true);
@@ -102,6 +115,10 @@ describe("SPEC-0001 v7 dashboard acquisition and post-acquisition recheck", () =
       { ...starting, pid: Number.MAX_SAFE_INTEGER },
       { ...starting, process_identity: " " },
       { ...starting, process_identity: "x".repeat(513) },
+      {
+        ...starting,
+        process_identity: "not-a-qualified-platform-token",
+      },
       { ...starting, created_at: "2026-02-30T00:00:00.000Z" },
       { ...starting, unknown: true },
       { ...starting, state: "ready" },
@@ -116,6 +133,47 @@ describe("SPEC-0001 v7 dashboard acquisition and post-acquisition recheck", () =
     for (const owner of invalid) {
       expect(validDashboardOwnerForTesting(owner), JSON.stringify(owner)).toBe(false);
     }
+  });
+
+  it("rejects a non-qualified live owner without observing, quarantining, or replacing it", async () => {
+    const project = await realpath(
+      await mkdtemp(join(tmpdir(), "wisp-dashboard-invalid-identity-project-")),
+    );
+    const home = await realpath(
+      await mkdtemp(join(tmpdir(), "wisp-dashboard-invalid-identity-home-")),
+    );
+    process.env.HOME = home;
+    const key = createHash("sha256").update(project, "utf8").digest("hex");
+    const keyDirectory = join(home, ".wisp/runtime/dashboard", key);
+    const ownerDirectory = join(keyDirectory, "owner");
+    const ownerPath = join(ownerDirectory, "owner.json");
+    const owner = {
+      schema: 1,
+      protocol: 1,
+      state: "starting",
+      project,
+      project_key: key,
+      instance: "12345678-1234-1234-1234-123456789abc",
+      pid: process.pid,
+      process_identity: "not-a-qualified-platform-token",
+      created_at: "2026-07-26T00:00:00.000Z",
+    };
+    await mkdir(ownerDirectory, { recursive: true, mode: 0o700 });
+    await writeFile(ownerPath, JSON.stringify(owner), { mode: 0o600 });
+    const coordinator = new DashboardCoordinator(project);
+
+    await expect(coordinator.start()).rejects.toMatchObject({
+      code: "dashboard_unavailable",
+      details: {
+        reason: "owner_identity_unverifiable",
+        retryable: false,
+      },
+    });
+
+    expect(seam.observeCalls).toBe(0);
+    expect(JSON.parse(await readFile(ownerPath, "utf8"))).toEqual(owner);
+    expect(await readdir(keyDirectory)).toEqual(["owner"]);
+    await coordinator.cleanup();
   });
   it("issue #38 treats an owner published after an absent probe as convergence, not runtime_unsafe", async () => {
     const project = await realpath(

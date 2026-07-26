@@ -15491,6 +15491,18 @@ var execFileAsync = promisify(execFile);
 var BOOT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 var PS_DATE = /^(Sun|Mon|Tue|Wed|Thu|Fri|Sat) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) ([ 0-3][0-9]) ([0-2][0-9]):([0-5][0-9]):([0-5][0-9]) ([0-9]{4})$/;
 var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+function isQualifiedProcessIdentity(value) {
+  if (typeof value !== "string" || Buffer.byteLength(value, "utf8") > 512) {
+    return false;
+  }
+  if (/^linux:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}:[0-9]+$/u.test(value)) return true;
+  const darwin = /^darwin:(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})$/u.exec(value);
+  if (darwin === null) return false;
+  const [, yearText, monthText, dayText, hourText, minuteText, secondText] = darwin;
+  const [year, month, day, hour, minute, second] = [yearText, monthText, dayText, hourText, minuteText, secondText].map(Number);
+  const date3 = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+  return date3.getUTCFullYear() === year && date3.getUTCMonth() === month - 1 && date3.getUTCDate() === day && date3.getUTCHours() === hour && date3.getUTCMinutes() === minute && date3.getUTCSeconds() === second;
+}
 function parseLinuxIdentity(bootIdText, statText, pid) {
   const bootId = bootIdText.trim();
   if (!BOOT_ID.test(bootId)) return void 0;
@@ -16296,24 +16308,12 @@ async function recoverStaleLock(lockPath, ownerPath, options = {}) {
 function validPlatformPid(value) {
   return Number.isSafeInteger(value) && Number(value) > 0 && Number(value) <= 2147483647;
 }
-function qualifiedIdentity(value) {
-  if (typeof value !== "string" || Buffer.byteLength(value, "utf8") > 512) {
-    return false;
-  }
-  if (/^linux:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}:[0-9]+$/u.test(value)) return true;
-  const darwin = /^darwin:(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})$/u.exec(value);
-  if (darwin === null) return false;
-  const [, yearText, monthText, dayText, hourText, minuteText, secondText] = darwin;
-  const [year, month, day, hour, minute, second] = [yearText, monthText, dayText, hourText, minuteText, secondText].map(Number);
-  const date3 = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
-  return date3.getUTCFullYear() === year && date3.getUTCMonth() === month - 1 && date3.getUTCDate() === day && date3.getUTCHours() === hour && date3.getUTCMinutes() === minute && date3.getUTCSeconds() === second;
-}
 function decodeLockOwner(value) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     return void 0;
   }
   const record2 = value;
-  if (Object.keys(record2).sort().join(",") !== "created,phase,pid,process_identity,token" || typeof record2.token !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u.test(record2.token) || !validPlatformPid(record2.pid) || !qualifiedIdentity(record2.process_identity) || typeof record2.created !== "number" || !Number.isFinite(record2.created) || !Number.isInteger(record2.created) || record2.created < 0 || record2.phase !== "held" && record2.phase !== "committed") return void 0;
+  if (Object.keys(record2).sort().join(",") !== "created,phase,pid,process_identity,token" || typeof record2.token !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u.test(record2.token) || !validPlatformPid(record2.pid) || !isQualifiedProcessIdentity(record2.process_identity) || typeof record2.created !== "number" || !Number.isFinite(record2.created) || !Number.isInteger(record2.created) || record2.created < 0 || record2.phase !== "held" && record2.phase !== "committed") return void 0;
   return record2;
 }
 async function readLockSnapshot(path) {
@@ -16362,7 +16362,7 @@ async function readLockSnapshot(path) {
     if (owner !== void 0) return { kind: "valid", owner };
     const record2 = value !== null && typeof value === "object" && !Array.isArray(value) ? value : void 0;
     const created = record2 !== void 0 && typeof record2.created === "number" && Number.isFinite(record2.created) && Number.isInteger(record2.created) && record2.created >= 0 ? Number(record2.created) : void 0;
-    const salvaged = record2 !== void 0 && validPlatformPid(record2.pid) && qualifiedIdentity(record2.process_identity) ? {
+    const salvaged = record2 !== void 0 && validPlatformPid(record2.pid) && isQualifiedProcessIdentity(record2.process_identity) ? {
       pid: record2.pid,
       process_identity: record2.process_identity
     } : void 0;
@@ -17287,7 +17287,7 @@ function nonblankBounded(value, maximum) {
 function validOwner(value) {
   const base = ["schema", "protocol", "state", "project", "project_key", "instance", "pid", "process_identity", "created_at"];
   const keys = value.state === "ready" ? [...base, "port", "capability", "published_at"] : base;
-  return Object.keys(value).sort().join(",") === keys.sort().join(",") && value.schema === 1 && Number.isSafeInteger(value.protocol) && Number(value.protocol) > 0 && (value.state === "starting" || value.state === "ready") && nonblankBounded(value.project, Number.MAX_SAFE_INTEGER) && isAbsolute3(value.project) && typeof value.project_key === "string" && /^[0-9a-f]{64}$/u.test(value.project_key) && typeof value.instance === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u.test(value.instance) && Number.isSafeInteger(value.pid) && Number(value.pid) > 0 && Number(value.pid) <= 2147483647 && nonblankBounded(value.process_identity, 512) && canonicalTimestamp(value.created_at) && (value.state !== "ready" || Number.isInteger(value.port) && Number(value.port) > 0 && Number(value.port) <= 65535 && typeof value.capability === "string" && /^[A-Za-z0-9_-]{43}$/u.test(value.capability) && canonicalTimestamp(value.published_at));
+  return Object.keys(value).sort().join(",") === keys.sort().join(",") && value.schema === 1 && Number.isSafeInteger(value.protocol) && Number(value.protocol) > 0 && (value.state === "starting" || value.state === "ready") && nonblankBounded(value.project, Number.MAX_SAFE_INTEGER) && isAbsolute3(value.project) && typeof value.project_key === "string" && /^[0-9a-f]{64}$/u.test(value.project_key) && typeof value.instance === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u.test(value.instance) && Number.isSafeInteger(value.pid) && Number(value.pid) > 0 && Number(value.pid) <= 2147483647 && isQualifiedProcessIdentity(value.process_identity) && canonicalTimestamp(value.created_at) && (value.state !== "ready" || Number.isInteger(value.port) && Number(value.port) > 0 && Number(value.port) <= 65535 && typeof value.capability === "string" && /^[A-Za-z0-9_-]{43}$/u.test(value.capability) && canonicalTimestamp(value.published_at));
 }
 function exactOwner(left, right) {
   return left !== void 0 && JSON.stringify(left) === JSON.stringify(right);

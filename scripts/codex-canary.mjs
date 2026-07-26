@@ -127,6 +127,17 @@ export async function runCommand(command, args, options = {}) {
         child.exitCode === null && child.signalCode === null,
       signal: callbackAbort.signal,
     };
+    const processGroupIsLive = () => {
+      if (process.platform === "win32" || child.pid === undefined) {
+        return false;
+      }
+      try {
+        process.kill(-child.pid, 0);
+        return true;
+      } catch (error) {
+        return error?.code !== "ESRCH";
+      }
+    };
     const terminate = (signal) => {
       if (process.platform !== "win32" && child.pid !== undefined) {
         try {
@@ -148,6 +159,7 @@ export async function runCommand(command, args, options = {}) {
     });
     let killTimer;
     let terminating = false;
+    let graceExpired = false;
     const terminateWithGrace = () => {
       if (terminating) return;
       terminating = true;
@@ -155,7 +167,10 @@ export async function runCommand(command, args, options = {}) {
       stopCallbacks();
       terminate("SIGTERM");
       killTimer = setTimeout(() => {
-        terminate("SIGKILL");
+        graceExpired = true;
+        if (process.platform === "win32" || processGroupIsLive()) {
+          terminate("SIGKILL");
+        }
         child.stdout.destroy();
         child.stderr.destroy();
         void finish(child.exitCode, child.signalCode);
@@ -181,6 +196,7 @@ export async function runCommand(command, args, options = {}) {
     };
     const finish = async (status, signal) => {
       if (resolved) return;
+      if (terminating && !graceExpired && processGroupIsLive()) return;
       if (pendingLine !== "" && !collector.result().outputExceeded) {
         queueCallback(pendingLine);
       }
@@ -190,8 +206,14 @@ export async function runCommand(command, args, options = {}) {
       if (killTimer !== undefined) clearTimeout(killTimer);
       resolved = true;
       const output = collector.result();
+      const observedStatus = child.exitCode ?? status;
+      const failedByTermination = timedOut ||
+        output.outputExceeded ||
+        callbackFailed;
       resolveRun({
-        status: child.exitCode ?? status,
+        status: failedByTermination && observedStatus === 0
+          ? null
+          : observedStatus,
         signal: child.signalCode ?? signal,
         timedOut,
         outputExceeded: output.outputExceeded,

@@ -297,6 +297,53 @@ describe("SPEC-0002@v8 real Codex Preview-smoke normalization", () => {
     }
   });
 
+  it("keeps the grace period alive for a same-group descendant after its leader closes", async () => {
+    if (process.platform === "win32") return;
+    const root = await mkdtemp(join(tmpdir(), "wisp-canary-group-leader-"));
+    const pidPath = join(root, "descendant.pid");
+    let descendantPid = 0;
+    try {
+      const result = await runCommand(
+        process.execPath,
+        [
+          "-e",
+          [
+            'const{spawn}=require("node:child_process");',
+            'const{writeFileSync}=require("node:fs");',
+            "const child=spawn(process.execPath,",
+            '["-e","process.on(\\"SIGTERM\\",()=>{});setInterval(()=>{},1000)"],',
+            "{stdio:'ignore'});",
+            "writeFileSync(process.argv[1],String(child.pid));",
+            "process.on('SIGTERM',()=>process.exit(0));",
+            "setInterval(()=>{},1000);",
+          ].join(""),
+          pidPath,
+        ],
+        { timeoutMs: 100, killGraceMs: 100 },
+      );
+      descendantPid = Number(await readFile(pidPath, "utf8"));
+      expect(result.timedOut).toBe(true);
+      expect(result.status).not.toBe(0);
+      await expect.poll(() => {
+        try {
+          process.kill(descendantPid, 0);
+          return true;
+        } catch {
+          return false;
+        }
+      }, { timeout: 500, interval: 10 }).toBe(false);
+    } finally {
+      if (descendantPid > 0) {
+        try {
+          process.kill(descendantPid, "SIGKILL");
+        } catch {
+          // The grace-period group kill may already have reaped it.
+        }
+      }
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("passes risk-reviewed config and terminates subprocesses at a deadline", async () => {
     const args = buildCodexExecArgs("/tmp/project", "prompt");
     expect(args).toContain('approval_policy="on-request"');

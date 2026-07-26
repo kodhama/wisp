@@ -6,7 +6,12 @@ import { homedir } from "node:os";
 import { isAbsolute, join, relative } from "node:path";
 import type { Socket } from "node:net";
 import type { Duplex } from "node:stream";
-import { currentProcessIdentity, observeProcess, processInstanceIsGone } from "./process-identity.ts";
+import {
+  currentProcessIdentity,
+  isQualifiedProcessIdentity,
+  observeProcess,
+  processInstanceIsGone,
+} from "./process-identity.ts";
 import { createRuntime, WispError, type WispRuntime } from "./runtime.ts";
 
 export const DASHBOARD_PROTOCOL_VERSION = 1;
@@ -648,7 +653,7 @@ function validOwner(value: Record<string, unknown>): boolean {
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u.test(value.instance) &&
     Number.isSafeInteger(value.pid) && Number(value.pid) > 0 &&
     Number(value.pid) <= 2_147_483_647 &&
-    nonblankBounded(value.process_identity, 512) &&
+    isQualifiedProcessIdentity(value.process_identity) &&
     canonicalTimestamp(value.created_at) &&
     (value.state !== "ready" || (
       Number.isInteger(value.port) && Number(value.port) > 0 && Number(value.port) <= 65535 &&

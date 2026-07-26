@@ -12,7 +12,12 @@ import {
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { randomUUID } from "node:crypto";
-import { currentProcessIdentity, observeProcess, processInstanceIsGone } from "./process-identity.ts";
+import {
+  currentProcessIdentity,
+  isQualifiedProcessIdentity,
+  observeProcess,
+  processInstanceIsGone,
+} from "./process-identity.ts";
 
 export const PROTOCOL_VERSION = 1 as const;
 export const BUS_RELATIVE_PATH = ".wisp/events.ndjson";
@@ -937,28 +942,6 @@ function validPlatformPid(value: unknown): value is number {
     Number(value) <= 2_147_483_647;
 }
 
-function qualifiedIdentity(value: unknown): value is string {
-  if (typeof value !== "string" || Buffer.byteLength(value, "utf8") > 512) {
-    return false;
-  }
-  if (/^linux:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}:[0-9]+$/u
-    .test(value)) return true;
-  const darwin =
-    /^darwin:(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})$/u.exec(value);
-  if (darwin === null) return false;
-  const [, yearText, monthText, dayText, hourText, minuteText, secondText] =
-    darwin;
-  const [year, month, day, hour, minute, second] =
-    [yearText, monthText, dayText, hourText, minuteText, secondText].map(Number);
-  const date = new Date(Date.UTC(year!, month! - 1, day, hour, minute, second));
-  return date.getUTCFullYear() === year &&
-    date.getUTCMonth() === month! - 1 &&
-    date.getUTCDate() === day &&
-    date.getUTCHours() === hour &&
-    date.getUTCMinutes() === minute &&
-    date.getUTCSeconds() === second;
-}
-
 function decodeLockOwner(value: unknown): LockOwner | undefined {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     return undefined;
@@ -970,7 +953,7 @@ function decodeLockOwner(value: unknown): LockOwner | undefined {
     typeof record.token !== "string" ||
     !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u.test(record.token) ||
     !validPlatformPid(record.pid) ||
-    !qualifiedIdentity(record.process_identity) ||
+    !isQualifiedProcessIdentity(record.process_identity) ||
     typeof record.created !== "number" ||
     !Number.isFinite(record.created) ||
     !Number.isInteger(record.created) ||
@@ -1037,7 +1020,8 @@ async function readLockSnapshot(
       ? Number(record.created)
       : undefined;
     const salvaged = record !== undefined &&
-      validPlatformPid(record.pid) && qualifiedIdentity(record.process_identity)
+      validPlatformPid(record.pid) &&
+      isQualifiedProcessIdentity(record.process_identity)
       ? {
         pid: record.pid,
         process_identity: record.process_identity,

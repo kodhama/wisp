@@ -21,6 +21,28 @@ const BOOT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-
 const PS_DATE = /^(Sun|Mon|Tue|Wed|Thu|Fri|Sat) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) ([ 0-3][0-9]) ([0-2][0-9]):([0-5][0-9]):([0-5][0-9]) ([0-9]{4})$/;
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
+export function isQualifiedProcessIdentity(value: unknown): value is string {
+  if (typeof value !== "string" || Buffer.byteLength(value, "utf8") > 512) {
+    return false;
+  }
+  if (/^linux:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}:[0-9]+$/u
+    .test(value)) return true;
+  const darwin =
+    /^darwin:(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})$/u.exec(value);
+  if (darwin === null) return false;
+  const [, yearText, monthText, dayText, hourText, minuteText, secondText] =
+    darwin;
+  const [year, month, day, hour, minute, second] =
+    [yearText, monthText, dayText, hourText, minuteText, secondText].map(Number);
+  const date = new Date(Date.UTC(year!, month! - 1, day, hour, minute, second));
+  return date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month! - 1 &&
+    date.getUTCDate() === day &&
+    date.getUTCHours() === hour &&
+    date.getUTCMinutes() === minute &&
+    date.getUTCSeconds() === second;
+}
+
 export function parseLinuxIdentity(bootIdText: string, statText: string, pid: number): string | undefined {
   const bootId = bootIdText.trim();
   if (!BOOT_ID.test(bootId)) return undefined;
