@@ -1,7 +1,7 @@
 ---
 id: adr-0015-scope-inherited-stale-lock-atomicity
 type: adr
-status: approved
+status: superseded
 depends_on:
   - adr-0002-plugin-mcp-distribution
   - adr-0014-retire-preview-qualification-machinery
@@ -12,6 +12,11 @@ changes:
 ---
 
 # ADR-0015 — Scope inherited stale-lock atomicity out of qualification retirement
+
+> Superseded by `adr-0016-scope-inherited-directory-lock-races`, which
+> preserves this scope decision while correcting the affected surface from
+> stale recovery alone to every match-to-pathname-mutation seam and its
+> derived bus guarantees.
 
 ## Decision state
 

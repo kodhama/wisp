@@ -23,9 +23,11 @@ changes:
 # ADR-0014 — Retire aggregate qualification machinery while Wisp is Preview
 
 > Partially superseded by
-> `adr-0015-scope-inherited-stale-lock-atomicity`: PR #49 does not claim
-> inode-conditional stale-lock retirement and parks the crash-safe lock
-> redesign in issue #50.
+> `adr-0016-scope-inherited-directory-lock-races`: PR #49 does not claim
+> inode-conditional directory-lock mutation or the exclusivity-derived
+> rollback and concurrent-size guarantees under the documented final-gap
+> interleaving, and parks the crash-safe lock redesign in issue #50.
+> ADR-0016 supersedes the earlier, narrower ADR-0015 record.
 
 ## Decision state
 

@@ -1,4 +1,4 @@
-// SPEC-0001@v13 S20/S23/S25/S28/S65-S69 / R24-R30/R34/R37/R55/R73-R77.
+// SPEC-0001@v14 S20/S23/S25/S28/S65-S69 / R24-R30/R34/R37/R55/R73-R77.
 import { readFile, readdir } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -48,7 +48,7 @@ async function sourceFiles(): Promise<string[]> {
   return files;
 }
 
-describe("SPEC-0001@v13 Preview dual-host MCP-only payload", () => {
+describe("SPEC-0001@v14 Preview dual-host MCP-only payload", () => {
   it("contains exactly the eight distributed paths and no retired metadata", async () => {
     expect(await inventory()).toEqual([
       ".claude-plugin/plugin.json",

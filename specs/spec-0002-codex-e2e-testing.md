@@ -8,7 +8,7 @@ depends_on:
   - adr-0009-independent-plugin-package-metadata
   - adr-0011-node-24-only-support
   - adr-0014-retire-preview-qualification-machinery
-  - spec-0001-plugin-mcp-distribution@v13
+  - spec-0001-plugin-mcp-distribution@v14
 implements: adr-0014-retire-preview-qualification-machinery
 owner: agent
 updated: 2026-07-26
@@ -16,6 +16,22 @@ version: 8
 ---
 
 # SPEC-0002 — Reproducible Codex adapter and dashboard E2E
+
+> **AMENDED 2026-07-26**
+> **WHAT:** Advanced the current SPEC-0001 behavioral pin from v13 to v14
+> across dependency, staging, test-ledger, acceptance, verification, and
+> rubric references without changing this specification's behavior.
+> **WHY:** ADR-0016 expands SPEC-0001's honest inherited directory-lock
+> limitation across release, rollback, and concurrent-size effects while
+> leaving the eight-path Preview payload and every ordinary E2E behavior
+> exercised here unchanged.
+> **SCOPE:** Upstream pin and current-behavior references only. Version remains
+> 8, status remains `gated`, and ADR-0014 remains the implemented decision
+> because this is a pin-only re-derivation rather than new E2E behavior.
+> **POINTER:** ADR-0016 and SPEC-0001@v14.
+> **VALUE:** A contributor's E2E contract follows the complete current
+> lock-risk boundary without claiming coverage that belongs to issue #50.
+> **CONFIDENCE:** verified.
 
 > **AMENDED 2026-07-26**
 > **WHAT:** Advanced the current SPEC-0001 behavioral pin from v12 to v13
@@ -140,12 +156,15 @@ Claude remains outside scope and tracked by issue #25.
 
 All Wisp behavior under test, including the exact eight-path plugin payload,
 seven MCP tools, canonical bus, dashboard security, and ownership lifecycle,
-is inherited from `spec-0001-plugin-mcp-distribution@v13` and is not redefined
+is inherited from `spec-0001-plugin-mcp-distribution@v14` and is not redefined
 here.
 
-SPEC-0001@v13 changes only the honest contract for the inherited stale-lock
+SPEC-0001@v14 changes the honest contract for the protocol-wide directory-lock
 final gap. It changes none of the package or ordinary E2E behavior exercised
-here, and these layers do not claim inode-conditional stale-lock retirement.
+here, and these layers do not claim inode-conditional pathname mutation,
+uninterrupted ownership through append, rollback preservation during the
+documented overlap, or an exact aggregate bus maximum across overlapping
+operations.
 
 ## Required repository surfaces
 
@@ -185,8 +204,8 @@ delegate to this command without changing the test architecture.
 
 `test/test-deps.toml` SHALL have schema `1` and exactly two package tables.
 `packages.unit` covers `test/*.test.ts` and names
-`spec-0001-plugin-mcp-distribution@v13`. `packages.e2e` covers
-`test/e2e/**`, names `spec-0001-plugin-mcp-distribution@v13`,
+`spec-0001-plugin-mcp-distribution@v14`. `packages.e2e` covers
+`test/e2e/**`, names `spec-0001-plugin-mcp-distribution@v14`,
 `spec-0002-codex-e2e-testing@v8`, and the unversioned decisions
 `adr-0006-codex-e2e-testing`, `adr-0007-codex-canary-evidence`, and
 `adr-0011-node-24-only-support`. The implementation SHALL update
@@ -196,7 +215,7 @@ delegate to this command without changing the test architecture.
 
 Each run SHALL create fresh fixture projects, `HOME`, and `CODEX_HOME`. It
 SHALL build the package once, verify the source plugin has exactly the eight
-distributed paths defined by SPEC-0001@v13, and byte-copy all eight paths to:
+distributed paths defined by SPEC-0001@v14, and byte-copy all eight paths to:
 
 ```text
 <CODEX_HOME>/plugins/cache/kodhama/wisp/<manifest-version>/
@@ -717,7 +736,7 @@ provider tests.
   whose safety cannot be proved, leave no browser artifact file, and persist
   only the scanned typed redacted record after the capability-bearing interval.
 - **R15 (ubiquitous):** The deterministic installed-plugin fixture shall
-  verify and byte-stage exactly SPEC-0001@v13's eight distributed paths into
+  verify and byte-stage exactly SPEC-0001@v14's eight distributed paths into
   the manifest-version cache directory and shall reject either retired
   metadata file.
 - **R16 (ubiquitous):** The fast pull-request job shall use exactly Node 24
@@ -749,7 +768,7 @@ provider tests.
 
 | Contract area | Minimum evidence |
 |---|---|
-| Installed Preview payload | Fixture staging proves byte-for-byte copying of exactly SPEC-0001@v13's eight paths into the manifest-version cache, rejects `qualification.json` and `surfaces.json`, launches the literal manifest bootstrap, lists seven tools, and confines bus writes to the fixture project |
+| Installed Preview payload | Fixture staging proves byte-for-byte copying of exactly SPEC-0001@v14's eight paths into the manifest-version cache, rejects `qualification.json` and `surfaces.json`, launches the literal manifest bootstrap, lists seven tools, and confines bus writes to the fixture project |
 | Capability-safe artifacts | Positive fixtures cover one and multiple fragment/bearer occurrences in top-level and nested JSON strings for pass, fail, and inconclusive runs; byte comparisons prove exact sentinel replacement and otherwise-identical retained JSONL; one shared counter accepts exactly 4,194,304 mixed stdout/stderr bytes, rejects the whole first crossing chunk and later output, aborts callbacks/processes, forces fail in both modes, retains only the prior stdout prefix, and still transforms/scans it before persistence; raw-output spies prove no tee or raw stderr write, and injected transform/scan failures prove no artifact readiness or upload |
 | Capability-safe browser failures | Playwright configuration inspection proves trace/video/screenshot/retry/file reporters and attachments are disabled; injected assertion, timeout, crash, signal, and cleanup failures at every browser stage place the observed capability in page URL, bearer, console, network, exception, and reporter inputs; ordering spies prove cleanup then freeze→validate→single serialization→exact-capability scan→discard/end→same-buffer persistence, mutation attempts cannot alter frozen evidence, persisted bytes equal the pre-scanned buffer, no write occurs before discard, and every preparation/order/failure injection writes nothing |
 | Live Preview smoke | Workflow and driver fixtures prove weekly/current-source and manual/declared-source modes; representative read, write, dashboard, health, bus-path, and model-mediated host behavior; fetch rejection, synchronous throw, response-access failure, timeout, parent abort, and callback throw/rejection reduce silently to false typed fields and fail in both modes; bearer-bearing error/request/response/callback objects reach no sink; no candidate version or SHA input, exact-candidate verifier, checked-in evidence mutation, qualification, release, or support result; and only pre-tool external absence remains weekly-inconclusive |
@@ -762,18 +781,18 @@ None.
 
 ## Rubric check
 
-**PASS.** Frontmatter is complete; ADR-0014 and SPEC-0001@v13 are consumable
+**PASS.** Frontmatter is complete; ADR-0014 and SPEC-0001@v14 are consumable
 upstreams with the exact behavioral pin; the pin-only re-derivation confirms
-that v13 changes no E2E obligation here and that no clause claims
-inode-conditional stale-lock retirement; scope is bounded; repository,
-execution, evidence, cadence, retired-verifier, and eight-path staging
-contracts are implementable; GWT scenarios cover deterministic E2E, weekly
-and manual Preview smoke, Node 24 execution, exact combined-output overflow,
-silent health/callback failure, and pre-discard browser scanning; S1–S6 and
-S11–S17 use GWT, R1–R6 and R13–R20 use EARS, every amended contract maps to
-executable evidence, and no unresolved question is hidden. The Grove
-lifecycle companion therefore retains version 8 as `gated` after this
-self-check.
+that v14 changes no E2E obligation here and that no clause claims
+inode-conditional mutation or exclusivity-derived guarantees during the
+documented overlap; scope is bounded; repository, execution, evidence,
+cadence, retired-verifier, and eight-path staging contracts are implementable;
+GWT scenarios cover deterministic E2E, weekly and manual Preview smoke, Node
+24 execution, exact combined-output overflow, silent health/callback failure,
+and pre-discard browser scanning; S1–S6 and S11–S17 use GWT, R1–R6 and
+R13–R20 use EARS, every amended contract maps to executable evidence, and no
+unresolved question is hidden. The Grove lifecycle companion therefore
+retains version 8 as `gated` after this self-check.
 
 ## Gate record
 
