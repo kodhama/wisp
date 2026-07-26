@@ -116,11 +116,10 @@ export class DashboardCoordinator {
   }
 
   async #startOnce(): Promise<DashboardResult> {
-    const identity = await currentProcessIdentity();
-    if (identity === undefined) throw unavailable("process_identity_unavailable", false);
     const location = await runtimeLocation(this.#project);
     const deadline = this.#clock.now() + CONVERGENCE_MS;
     let liveStarting = false;
+    let identity: string | undefined;
     while (this.#clock.now() <= deadline) {
       const existing = await readOwner(location.ownerDir, location.ownerFile);
       if (existing !== undefined) {
@@ -136,6 +135,8 @@ export class DashboardCoordinator {
         continue;
       }
       liveStarting = false;
+      identity ??= await currentProcessIdentity();
+      if (identity === undefined) throw unavailable("process_identity_unavailable", false);
       const instance = randomUUID();
       const starting: StartingOwner = {
         schema: 1, protocol: 1, state: "starting",

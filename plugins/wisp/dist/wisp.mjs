@@ -16780,11 +16780,10 @@ var DashboardCoordinator = class {
     }
   }
   async #startOnce() {
-    const identity = await currentProcessIdentity();
-    if (identity === void 0) throw unavailable("process_identity_unavailable", false);
     const location = await runtimeLocation(this.#project);
     const deadline = this.#clock.now() + CONVERGENCE_MS;
     let liveStarting = false;
+    let identity;
     while (this.#clock.now() <= deadline) {
       const existing = await readOwner(location.ownerDir, location.ownerFile);
       if (existing !== void 0) {
@@ -16800,6 +16799,8 @@ var DashboardCoordinator = class {
         continue;
       }
       liveStarting = false;
+      identity ??= await currentProcessIdentity();
+      if (identity === void 0) throw unavailable("process_identity_unavailable", false);
       const instance = randomUUID2();
       const starting = {
         schema: 1,

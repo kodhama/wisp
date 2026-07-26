@@ -17,6 +17,8 @@ const seam = vi.hoisted(() => ({
   replaceAfterAcquisition: false,
   transientMissingDirectory: undefined as string | undefined,
   transientMissingObserved: false,
+  currentIdentity: "linux:00000000-0000-4000-8000-000000000001:1" as string | undefined,
+  currentIdentityCalls: 0,
   observeCalls: 0,
 }));
 
@@ -61,7 +63,10 @@ vi.mock("../src/process-identity.ts", async () => {
   const token = "linux:00000000-0000-4000-8000-000000000001:1";
   return {
     ...actual,
-    currentProcessIdentity: async () => token,
+    currentProcessIdentity: async () => {
+      seam.currentIdentityCalls += 1;
+      return seam.currentIdentity;
+    },
     observeProcess: async () => {
       seam.observeCalls += 1;
       return { state: "present" as const, token };
@@ -82,6 +87,8 @@ afterEach(() => {
   seam.replaceAfterAcquisition = false;
   seam.transientMissingDirectory = undefined;
   seam.transientMissingObserved = false;
+  seam.currentIdentity = "linux:00000000-0000-4000-8000-000000000001:1";
+  seam.currentIdentityCalls = 0;
   seam.observeCalls = 0;
   if (originalHome === undefined) delete process.env.HOME;
   else process.env.HOME = originalHome;
@@ -135,7 +142,7 @@ describe("SPEC-0001 v7 dashboard acquisition and post-acquisition recheck", () =
     }
   });
 
-  it("rejects a non-qualified live owner without observing, quarantining, or replacing it", async () => {
+  it("rejects a non-qualified live owner before unavailable contender identity without observing, quarantining, or replacing it", async () => {
     const project = await realpath(
       await mkdtemp(join(tmpdir(), "wisp-dashboard-invalid-identity-project-")),
     );
@@ -159,7 +166,9 @@ describe("SPEC-0001 v7 dashboard acquisition and post-acquisition recheck", () =
       created_at: "2026-07-26T00:00:00.000Z",
     };
     await mkdir(ownerDirectory, { recursive: true, mode: 0o700 });
-    await writeFile(ownerPath, JSON.stringify(owner), { mode: 0o600 });
+    const ownerBytes = Buffer.from(JSON.stringify(owner), "utf8");
+    await writeFile(ownerPath, ownerBytes, { mode: 0o600 });
+    seam.currentIdentity = undefined;
     const coordinator = new DashboardCoordinator(project);
 
     await expect(coordinator.start()).rejects.toMatchObject({
@@ -170,8 +179,9 @@ describe("SPEC-0001 v7 dashboard acquisition and post-acquisition recheck", () =
       },
     });
 
+    expect(seam.currentIdentityCalls).toBe(0);
     expect(seam.observeCalls).toBe(0);
-    expect(JSON.parse(await readFile(ownerPath, "utf8"))).toEqual(owner);
+    expect(await readFile(ownerPath)).toEqual(ownerBytes);
     expect(await readdir(keyDirectory)).toEqual(["owner"]);
     await coordinator.cleanup();
   });
