@@ -1,4 +1,4 @@
-// SPEC-0001@v14 S64/S72/R87/R91; SPEC-0002@v8 S11-S12/S17/R13-R14/R20.
+// SPEC-0001@v15 S64/S72/R87/R91; SPEC-0002@v8 S11-S12/S17/R13-R14/R20.
 import { spawnSync } from "node:child_process";
 import {
   mkdir,

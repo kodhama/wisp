@@ -1,4 +1,4 @@
-// SPEC-0001@v14 S9-S16/S26-S30/S47/S70/S73 / R10-R18/R31-R36/R58/R88/R90.
+// SPEC-0001@v15 S9-S16/S26-S30/S73 / R10-R18/R31-R36/R90; current bus-lock concurrency/recovery cases are ADR-0017 implementation characterization only.
 import { mkdir, readFile, readdir, symlink, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -276,7 +276,7 @@ describe("SPEC-0001 S14-S16/S29 — deterministic command safety", () => {
     expect(ack).toMatchObject({ kind: "command_ack", ack: { commandId: "wanted", result: "accepted" } });
   });
 
-  it("serializes concurrent first writes without loss or leaked locks", async () => {
+  it("characterizes current concurrent first writes without loss or leaked locks", async () => {
     const root = await project();
     await Promise.all(
       Array.from({ length: 24 }, (_, index) =>
@@ -325,7 +325,7 @@ describe("SPEC-0001 S14-S16/S29 — deterministic command safety", () => {
   });
 });
 
-describe("SPEC-0001 cross-process lock recovery", () => {
+describe("ADR-0017 implementation characterization — current cross-process bus-lock recovery", () => {
   it("never steals an aged lock whose usable owner PID is alive", async () => {
     const root = await project();
     const lock = join(root, ".wisp/write.lock");

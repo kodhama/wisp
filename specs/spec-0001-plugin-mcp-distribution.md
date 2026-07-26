@@ -9,14 +9,30 @@ depends_on:
   - adr-0009-independent-plugin-package-metadata
   - adr-0011-node-24-only-support
   - adr-0014-retire-preview-qualification-machinery
-  - adr-0016-scope-inherited-directory-lock-races
-implements: adr-0016-scope-inherited-directory-lock-races
+  - adr-0017-bound-preview-directory-lock-contract
+implements: adr-0017-bound-preview-directory-lock-contract
 owner: agent
 updated: 2026-07-26
-version: 14
+version: 15
 ---
 
 # SPEC-0001 — Dual-host Wisp plugin, bundled stdio MCP, and project dashboard
+
+> **AMENDED 2026-07-26**
+> **WHAT:** Replaced v14's positive directory-lock-internal contract with the
+> minimal Preview boundary and advanced the behavioral version to 15.
+> **WHY:** Human-approved ADR-0017 supersedes ADR-0016's attempt to normatively
+> encode inherited concurrency, ownership, recovery, cleanup, path, timing,
+> and diagnostic mechanics.
+> **SCOPE:** Lock constants and prose, S47/S51/S52/S70/S74,
+> R58/R66–R69/R88/R90/R92–R94, verification matrix, rubric, and gate record.
+> Unrelated schema, validation, exact serialization, project confinement,
+> per-operation byte accounting, dashboard, distribution, and security
+> guarantees remain current.
+> **POINTER:** ADR-0017.
+> **VALUE:** A Preview user can distinguish Wisp's retained data contract from
+> lock behavior that is not promised until issue #50 lands.
+> **CONFIDENCE:** verified.
 
 > **AMENDED 2026-07-26**
 > **WHAT:** Corrected v14 to the source-exact acquisition-deadline start,
@@ -281,14 +297,6 @@ required by their external formats.
 | Dashboard shutdown grace | `1,000 ms` |
 | Dashboard request-body maximum | `32,768 UTF-8 bytes` |
 | Dashboard process-identity maximum | `512 UTF-8 bytes` |
-| Project bus write-lock acquisition deadline | `5,000 ms`, computed before owner construction and the first `mkdir` |
-| Project bus write-lock poll interval | `10 ms` |
-| Project bus ownerless-lock stale age | `120,000 ms` |
-| Project bus committed-release synchronous retry | `250 ms` attempt-admission deadline with referenced `10 ms` failure delays; an admitted filesystem operation or final delay may finish later |
-| Project bus committed-release horizon | `5,000 ms` from the start of committed release, after `operation()` returns; governs worker admission/rescheduling, not a hard completion cutoff |
-| Project bus committed-release background scheduler | outer `50 ms` timers receive `.unref()`; each worker invokes a `45 ms` attempt-admission loop with referenced `10 ms` failure delays and may finish after either deadline |
-| Project bus held/pre-commit release retry | `250 ms` attempt-admission deadline with referenced `10 ms` failure delays; no background retry |
-| Project bus retired-lock cleanup scheduler | outer `0 ms` timer receives `.unref()`; cleanup makes `5` attempts, with a referenced `50 ms` delay after every caught failure, including the fifth |
 | Identifier maximum | `128 UTF-8 bytes` |
 | Verdict maximum | `256 UTF-8 bytes` |
 | Activity or acknowledgement note maximum | `2,048 UTF-8 bytes` |
@@ -396,10 +404,10 @@ The bus path is exactly `<real-project>/.wisp/events.ndjson`.
 
 ## Qualified process-identity contract
 
-Dashboard ownership and project-bus write locks use one shared qualified
-process-identity provider. A PID without its birth identity is never a
-qualified identity and never proves that a recorded owner is still the same
-process instance.
+Dashboard ownership uses the qualified process-identity provider below. A PID
+without its birth identity is never a qualified dashboard-owner identity and
+never proves that a recorded dashboard owner is still the same process
+instance. This provider contract creates no guarantee for project-bus locking.
 
 The exact supported providers are:
 
@@ -435,248 +443,27 @@ absent after exit. Deterministic injected evidence presents one PID with
 recorded birth token A and later current birth token B. Tests never attempt to
 force OS PID reuse.
 
-## Project bus write-lock contract
+## Project bus append and Preview lock boundary
 
-Every bus append, whether initiated by an MCP report/acknowledgement or the
-dashboard command route, uses the same project-local lock as its serialization
-primitive:
+MCP reports and acknowledgements and dashboard commands use the same canonical
+project-bus append operation. The event schema, validation, exact
+serialization, project confinement, and per-operation byte accounting in this
+specification apply to each call.
 
-```text
-<canonical-project>/.wisp/write.lock/
-  owner.json
-```
+The append commit point means only that the operation completed the full write
+of the compact canonical event plus its terminating LF. It does not guarantee
+that those bytes will later be preserved or remain durable when any
+same-process or cross-process operation overlaps.
 
-The lock directory is acquired by atomic `mkdir` with mode `0700`; no
-check-then-create sequence is allowed. The owner file is then opened inside
-the acquired directory with `O_WRONLY | O_CREAT | O_EXCL`, `O_NOFOLLOW` where
-available, and mode `0600`. It is written completely and closed before the
-bus operation begins. The exact owner schema rejects unknown properties:
+Wisp Preview makes no guarantee about the current directory-lock
+implementation's concurrency, serialization, ownership, recovery, cleanup,
+path identity, deadlines, timing, error mapping, or diagnostics. This boundary
+applies whether operations run concurrently in different processes or within
+one process. In particular, the specification makes no aggregate bus-size
+guarantee across concurrent operations.
 
-```json
-{
-  "token": "<lowercase UUID>",
-  "pid": 123,
-  "process_identity": "<qualified platform birth token>",
-  "created": 1784900000000,
-  "phase": "held"
-}
-```
-
-`pid` is a positive integer no greater than the platform maximum. `created`
-is a finite non-negative integer Unix epoch millisecond value. The token is
-new for every acquisition attempt. `process_identity` is the shared qualified
-provider's exact token for that PID. `phase` is exactly `held` or `committed`.
-Acquisition fails as `bus_unwritable/process_identity_unavailable` before
-`mkdir` if the current process cannot obtain a qualified identity.
-
-Before acquisition or recovery, Wisp `lstat`s `write.lock` and, when present,
-`owner.json`. A symbolic-link lock returns
-`bus_unwritable/path_is_symlink`; a non-directory lock returns
-`bus_unwritable/path_not_directory`; a symbolic-link owner returns
-`bus_unwritable/path_is_symlink`; and a non-regular owner returns
-`bus_unwritable/path_not_regular_file`. Stat/read failures return
-`bus_unwritable/stat_failed` or `bus_unwritable/open_failed` as applicable.
-Wisp never follows either path while deciding ownership.
-
-Immediately before constructing the owner record and entering the loop whose
-first filesystem operation is `mkdir`, Wisp computes the acquisition deadline
-as the current time plus 5,000 ms. It retries an existing lock every 10 ms
-after recovery evaluation and rejects once the post-recovery deadline check
-observes the current time at or after that deadline. On any acquisition error
-other than `EEXIST`, including `mkdir`, owner open, owner write, or owner
-short-write failure, Wisp unconditionally attempts `unlink(ownerPath)` and
-then `rmdir(lockPath)`, ignores either cleanup error, and returns
-`bus_unwritable/open_failed`. It performs no owner-token or identity
-verification before those pathname operations. Replacement, disappearance,
-symlink/type substitution, or another occupant at either path therefore
-follows the actual unlink/rmdir result and can remove or act on state that
-does not belong to this acquisition attempt. This inherited cleanup exposure
-is parked in issue #50. Expiry of the acquisition deadline also returns
-`bus_unwritable/open_failed`; it does not perform an unlocked append.
-
-Recovery follows these exact rules:
-
-Recovery first snapshots `owner.json` as exactly one state: a complete valid
-owner record, present readable raw bytes that do not form a valid owner
-record, or `owner-missing` when `owner.json` is absent on that initial read.
-
-1. For an exact owner record, observe the recorded PID through the qualified
-   provider. The same token means the recorded process instance may be live.
-   A `held` lock is never stolen on age alone. An `inconclusive` observation
-   is also never treated as stale.
-2. `absent` or a different qualified token proves the recorded process
-   instance gone, including PID reuse, and permits immediate stale recovery.
-   PID existence alone never blocks or authorizes recovery.
-3. A matching live `committed` record has crossed its append commit point, so
-   the complete-record match authorizes a pathname-retirement attempt. The
-   match does not prove that the same directory will occupy that pathname when
-   the rename executes.
-4. If the safe regular `owner.json` bytes can be read but fail the exact owner
-   schema, Wisp retains those exact bytes as the recovery snapshot. Field
-   salvage first requires fatal UTF-8 decoding and parsing to one JSON object.
-   If that object contains both a valid platform PID and a valid qualified
-   `process_identity`, Wisp SHALL observe that PID before considering age.
-   The same qualified token or an `inconclusive` observation forbids recovery;
-   `absent` or a different qualified token proves that recorded process
-   instance gone and permits immediate recovery. Individually usable
-   `token`, `created`, or `phase` fields do not bypass this identity rule.
-5. For an initial `owner-missing` snapshot, Wisp uses the lock-directory
-   `mtime`. For a present malformed snapshot without both a usable PID and
-   qualified identity, Wisp uses the exact valid `created` value when
-   available and otherwise that `mtime`. Only an age strictly greater than
-   120,000 ms permits ownerless-lock recovery.
-6. Before renaming a stale lock, Wisp rereads without following links. An
-   exact valid owner must match the complete parsed record. Every readable
-   malformed owner, including syntactically invalid JSON, must match the
-   recovery snapshot byte-for-byte; field-level or normalized-JSON equality
-   is insufficient. An initial `owner-missing` snapshot may proceed only when
-   the reread is also missing. Appearance after an `owner-missing` snapshot,
-   disappearance after any present snapshot, or any unreadable, replaced, or
-   byte-different owner observed by this reread leaves the canonical pathname
-   untouched.
-7. After the required reread succeeds, Wisp attempts to atomically rename
-   `write.lock` to `write.lock.stale-<lowercase-UUID>`. A successful rename
-   atomically quarantines the canonical pathname entry present when it
-   executes—whichever directory occupies that pathname in the ordinary case.
-   Replacement can therefore quarantine a later owner's directory.
-   Disappearance, symlink or wrong-type substitution, and rename failure in
-   the final gap follow the filesystem operation's observed result and the
-   existing error or retry path; the earlier match supplies no
-   inode-conditional guarantee.
-8. After a successful stale rename, Wisp addresses
-   `write.lock.stale-<lowercase-UUID>/owner.json` and then
-   `write.lock.stale-<lowercase-UUID>` by pathname, removing the owner entry
-   and then the empty directory. Cleanup is best-effort; acquisition restarts
-   against canonical `write.lock`. These post-rename operations are not
-   inode-coupled or no-follow-coupled to the directory that was renamed. If
-   the quarantine pathname or its owner entry is substituted before cleanup,
-   the filesystem operation may follow or act on that substituted path; this
-   current risk is parked in issue #50.
-
-After acquiring the lock, Wisp revalidates the bus path and its projected
-bounded append before writing. The append commit point is the successful
-single `O_APPEND` write of every byte of the compact canonical event plus its
-terminating LF. A failed or short write before that point attempts to truncate
-the bus to the exact size observed by that operation before its write and
-returns `bus_unwritable/append_failed` whether that truncate succeeds or
-fails. Outside the final-gap-caused overlap defined below, the truncate target
-is exactly the end of the original prefix and never below it: successful
-truncate removes the attempted suffix, while truncate failure leaves the
-original prefix intact but may leave a partial suffix. This is not a
-byte-identical restoration guarantee when truncate fails. Under the overlap,
-the same original-size target can precede bytes committed later by another
-operation and truncate those bytes. A complete event-plus-LF write, unlike a
-failed or short attempt, crosses the commit point, returns append success, and
-does not invoke rollback in its own post-commit path because caller retry
-could duplicate the event.
-
-After the protected `operation()` returns a committed result, Wisp computes
-the committed-release horizon as 5,000 ms from that point and begins
-committed release. The horizon does not start at the earlier event-plus-LF
-write commit point. Wisp atomically rewrites its matching owner record from
-`phase: "held"` to `phase: "committed"` through a private write-close-rename,
-then rereads and matches the complete owner before attempting to rename
-canonical `write.lock` to `write.lock.retired-<token>`. A successful rename is
-the release point and atomically moves the canonical pathname entry present
-when it executes; new writers can then acquire canonical `write.lock` even
-when deletion of the retired sibling fails.
-
-Committed release admits owner-phase-publication and canonical-release-rename
-attempts synchronously while the current time is at or before a deadline set
-250 ms after synchronous release begins. A caught failure performs an
-ordinary referenced 10 ms delay before the next deadline check; an admitted
-filesystem operation or the final delay may complete after the 250 ms
-deadline. A failure after append commit still returns the exact append success
-and emits one redacted stderr diagnostic containing only a fresh incident ID and the stage
-`phase_publish`, `release_rename`, or `retired_cleanup`. It never exposes the
-event, project path, owner token, PID, or OS exception.
-
-If canonical-release rename still fails, the process records that token in a
-process-local committed-token set and schedules an outer 50 ms timer whose
-handle receives `.unref()`. When that timer fires, its worker invokes
-committed-release logic with a fresh 45 ms deadline. Inside that invocation,
-failed phase-publication or rename attempts use repeated ordinary referenced
-10 ms delays; the inner work is not `unref`. The worker admits attempts while
-the current time is at or before its local deadline, so an admitted filesystem
-operation or final delay can finish after 45 ms. The horizon is checked before
-a worker starts and, after an unsuccessful worker returns, before another
-outer timer is scheduled. It is therefore an admission/rescheduling horizon,
-not a hard completion cutoff: a worker admitted at or before it may finish,
-including successfully, after it. If release remains incomplete and the
-post-operation 5,000 ms horizon has not expired, the worker schedules the next
-outer 50 ms `unref` timer. A later writer in the same process
-encountering its own PID, qualified identity, and token in that set performs
-the ordinary 250 ms synchronous release retry before stale recovery. Another
-process may authorize a retirement attempt only after it observes the
-committed phase or proves the recorded process instance gone. If the horizon
-expires while canonical lock remains, subsequent writers follow ordinary
-acquisition and may return `bus_unwritable/open_failed`; the operation that
-crossed the append commit point still returns success.
-
-Held/pre-commit release admits matching-record-check and canonical-pathname-
-rename attempts while the current time is at or before a deadline set 250 ms
-after release begins. A caught failure performs an ordinary referenced 10 ms
-delay before the next deadline check; admitted filesystem work or the final
-delay can finish after that deadline. It schedules no background release
-worker. If release does not complete, the operation preserves and returns its
-original pre-commit bus error; release or cleanup failure never replaces that
-error.
-
-After the release rename, Wisp schedules cleanup through an outer 0 ms timer
-whose handle receives `.unref()`. When it fires, cleanup attempts deletion of
-the retired owner and directory at most five times. Every caught failure,
-including the fifth, awaits an ordinary referenced 50 ms delay before the
-loop continues or returns failure; the cleanup work itself is therefore not
-`unref`. Exhausted deletion emits one redacted diagnostic but cannot block
-canonical lock acquisition. Cleanup addresses `<retired>/owner.json` and then
-`<retired>` by pathname, where `<retired>` is
-`write.lock.retired-<token>`. Like
-stale-quarantine cleanup, it is not inode-coupled or no-follow-coupled to the
-renamed directory; substitution can cause an operation to follow or act on
-the substituted path according to the filesystem result. Safe post-rename
-cleanup is parked in issue #50. A different token or identity observed by a
-check never authorizes rename or deletion.
-
-Stale recovery retains the 5,000 ms acquisition horizon, 10 ms acquisition
-poll, owner classification and equality rules, pathname quarantine attempt,
-and best-effort cleanup described in steps 1–8. It does not borrow the
-committed- or held-release retry workers.
-
-Stale recovery, held release, committed release, and every cleanup path that
-matches state before mutating canonical `write.lock` share one limitation:
-the equality check and pathname mutation are separate operations. No current
-Node filesystem operation couples them by inode identity. After a successful
-check, replacement, disappearance, symlink or type substitution, or rename
-failure follows the actual later filesystem operation and its existing error,
-retry, or diagnostic behavior. Every successful rename atomically moves the
-canonical pathname entry present at execution—whichever directory occupies
-that pathname in the ordinary case; it does not prove that this is the
-directory whose owner supplied the match.
-
-Non-`EEXIST` acquisition-failure cleanup is a separate canonical-path
-mutation with no preceding equality check: it unconditionally attempts
-`unlink(ownerPath)` and then `rmdir(lockPath)`. Replacement or substitution
-between the acquisition failure and either cleanup call can therefore remove
-or act on another occupant and create the same kind of ownership overlap.
-
-No append operation writes unless its own lock acquisition previously
-succeeded. Outside an ownership overlap caused by one of those final gaps or
-by unconditional acquisition-failure cleanup,
-the acquired directory remains the exclusive serialization boundary through
-append, a short-write truncate target never precedes that operation's original
-prefix, and the exact projected-size check enforces the nominal bus maximum.
-Truncate failure may still leave a partial suffix. Under the documented
-overlap, the current protocol cannot guarantee uninterrupted exclusive
-ownership, cannot guarantee that rollback preserves another operation's later
-committed bytes, and cannot guarantee the nominal projected maximum across
-overlapping appends. Post-rename pathname cleanup also lacks identity/no-follow
-coupling under substitution. These inherited Preview limitations remain until
-issue #50 supplies the separately researched, decided, implemented, and
-migrated crash-safe replacement; issue #50 is the sole redesign venue.
-
-This project-local `write.lock` is transient bus serialization only. It is
-not dashboard discovery, listener ownership, or capability state; those live
-exclusively under the user-runtime dashboard root.
+Issue #50 is the sole venue for directory-lock correctness, protocol,
+migration, and redesign. PR #49 changes no runtime lock behavior.
 
 ## Dashboard discovery and ownership contract
 
@@ -1036,8 +823,7 @@ command-type contracts. `payload` is optional and, when present, is a JSON
 object under the existing recursive JSON and event-size rules. Wisp generates
 `command.id` as `cmd-<lowercase UUID>`, stamps `agent: "maintainer"`, omits
 `to` and `meta`, creates a canonical `command` event, and appends it through
-the same lock and single-call `O_APPEND` operation as MCP writes, subject to
-the same documented final-gap overlap. Success is exactly
+the same canonical project-bus operation as MCP writes. Success is exactly
 `{"ok":true,"data":{"event":<canonical-command-event>}}`. Wisp never executes
 or automatically acknowledges the command.
 
@@ -1159,18 +945,16 @@ The serialization boundaries use these exact vectors:
 |---|---|
 | `Buffer.byteLength(JSON.stringify(value), "utf8") === 32_768` | event-size validation passes; append writes those 32,768 bytes plus one LF |
 | `Buffer.byteLength(JSON.stringify(value), "utf8") === 32_769` | reject `invalid_input/event_too_large` with `limit: 32768`, `actual: 32769`, and no bus creation or modification |
-| outside a final-gap-caused ownership overlap, existing bus bytes plus serialized bytes plus one LF equals `16_777_216` | projected-bus validation passes |
-| outside a final-gap-caused ownership overlap, existing bus bytes plus serialized bytes plus one LF equals `16_777_217` | reject `bus_limit_exceeded` with `subject: "bus"`, `unit: "utf8_bytes"`, `limit: 16777216`, `actual: 16777217`, and preserve existing bytes exactly |
+| for one operation, observed existing bus bytes plus serialized bytes plus one LF equals `16_777_216` | that operation's projected-bus validation passes |
+| for one operation, observed existing bus bytes plus serialized bytes plus one LF equals `16_777_217` | that operation rejects `bus_limit_exceeded` with `subject: "bus"`, `unit: "utf8_bytes"`, `limit: 16777216`, `actual: 16777217`, and does not append its event |
 
 Boundary fixtures SHALL include ASCII, escaped control characters, and
 non-ASCII scalar values so UTF-16 string length cannot substitute for the
 post-serialization UTF-8 byte count.
 
-Per-operation serialization and projected-size arithmetic remain exact during
-an overlap, but two overlapping operations may both validate against the same
-prior bus size and append beyond `16,777,216` bytes. The nominal maximum is
-therefore not an aggregate concurrent bound under the documented final-gap
-overlap.
+Per-operation serialization and projected-size arithmetic use the bytes that
+operation observes. The nominal maximum is not an aggregate bound across
+concurrent operations.
 
 Explicit `null` and unknown properties are invalid at the event root and in
 all defined nested bodies except recursively inside `command.payload`.
@@ -1317,7 +1101,8 @@ Write-tool success data is `{"event": <canonical-event>}`.
 it is `true` after an existing compatible owner passed the authenticated
 health proof. No other property is returned.
 
-Error `code`, `details.reason`, and `details.field` values are contractual;
+Except for failures originating in the non-contracted directory lock, error
+`code`, `details.reason`, and `details.field` values are contractual;
 human-readable `message` and operating-system exception text are not.
 `details.field` is an RFC 6901 JSON Pointer (`""` for the whole input,
 `/run`, `/refs/3`, and so on).
@@ -1331,13 +1116,16 @@ Stable `project_unresolved` reasons are `invalid_environment_root`,
 
 Stable bus reasons are `path_is_symlink`, `path_not_directory`,
 `path_not_regular_file`, `outside_project`, `stat_failed`, `mkdir_failed`,
-`open_failed`, `read_failed`, `append_failed`, `process_identity_unavailable`,
-and `invalid_utf8`.
+`open_failed`, `read_failed`, `append_failed`, and `invalid_utf8`.
 `bus_unreadable` uses the applicable reason except `mkdir_failed` and
-`append_failed` and never uses `process_identity_unavailable`;
+`append_failed`;
 `bus_unwritable` uses the applicable reason except `read_failed` and
 `invalid_utf8`. Stable parse-error reasons are `invalid_json` and
 `invalid_event`.
+
+No code, reason, retryability, message, operating-system text, or stderr
+diagnostic caused by directory-lock acquisition, ownership, recovery, release,
+or cleanup is contractual.
 
 | Error code | Used when | Required `details` |
 |---|---|---|
@@ -1575,8 +1363,8 @@ follow the Stewards 0023 availability/support grammar received by ADR-0013.
 **S12 — Boundary validation**
 
 - **Given** each string, reference count, event size, bus size, line size, and
-  returned-count boundary and, for projected bus size, no documented
-  final-gap ownership overlap,
+  returned-count boundary and, for projected bus size, one operation's
+  observed existing bus bytes,
 - **When** values at and one unit beyond the boundary are exercised,
 - **Then** boundary values succeed and excess values return the specified
   error without partial output or append.
@@ -1846,8 +1634,8 @@ follow the Stewards 0023 availability/support grammar received by ADR-0013.
 - **Given** exact and invalid dashboard command bodies,
 - **When** authenticated same-origin `POST /api/commands` runs,
 - **Then** each valid body appends and returns exactly one canonical
-  `maintainer` command through the shared lock/append path, every invalid body
-  appends zero bytes, and no command is executed or acknowledged.
+  `maintainer` command through the shared canonical bus-append path, every
+  invalid body appends zero bytes, and no command is executed or acknowledged.
 
 **S44 — Project-key isolation**
 
@@ -1875,34 +1663,15 @@ follow the Stewards 0023 availability/support grammar received by ADR-0013.
   remote transport, external dashboard resource, or legacy `.grove` data
   path, and only explicit dashboard invocation can start HTTP.
 
-**S47 — Exact project bus write lock**
+**S47 — Preview directory-lock boundary**
 
-- **Given** concurrent appends, exact and malformed owner records, live/dead
-  qualified process identities, same-PID/different-birth tokens, ownerless
-  locks below/above 120,000 ms, symlink/wrong-type paths, a held lock beyond
-  5,000 ms, and replacement, disappearance, symlink/type substitution, or
-  rename failure before or after the final owner match in stale recovery,
-  held release, committed release, and matching cleanup, plus substitution at
-  a stale or retired pathname after successful rename but before cleanup and
-  any non-`EEXIST` acquisition error with a replacement at `ownerPath` or
-  `lockPath`,
-- **When** MCP and dashboard writers acquire, recover, use, and release
-  `.wisp/write.lock`,
-- **Then** every append uses `mkdir`/`O_EXCL` acquisition, live owners are
-  computes its 5,000 ms acquisition deadline immediately before owner
-  construction and the first `mkdir`, never classifies live owners stale by
-  PID-only reasoning, recovers same-PID/new-birth owners, fails closed on
-  every mismatch observed before mutation, and atomically moves with each
-  successful rename the canonical pathname entry present when it
-  executes—whichever directory occupies that pathname in the ordinary case;
-  the earlier match does not identify that directory's inode, and every
-  final-gap substitution, disappearance, or rename failure follows the
-  observed filesystem result and existing error/retry behavior; post-rename
-  cleanup addresses the quarantine owner entry and directory by pathname, so
-  it may follow or act on the substituted path without inode/no-follow
-  coupling; and non-`EEXIST` acquisition cleanup unconditionally attempts
-  `unlink(ownerPath)` followed by `rmdir(lockPath)` without token or identity
-  verification, so either operation can act on the replacement.
+- **Given** same-process or cross-process bus operations and any current lock
+  state, interleaving, failure, or delay,
+- **When** MCP or dashboard writers append to the project bus,
+- **Then** Wisp Preview makes no guarantee for directory-lock concurrency,
+  serialization, ownership, recovery, cleanup, path identity, deadlines,
+  timing, error mapping, or diagnostics, and issue #50 remains the sole venue
+  for a positive lock-correctness contract.
 
 **S48 — Safe functional dashboard UI**
 
@@ -1935,27 +1704,14 @@ follow the Stewards 0023 availability/support grammar received by ADR-0013.
   work, success keys the resolved canonical project, and failure creates no
   dashboard state or listener.
 
-**S51 — Append commit and distinct release budgets**
+**S51 — Append commit has a per-operation meaning**
 
-- **Given** a completed append with committed-phase or release failure, a
-  held/pre-commit operation with an original bus error, a failed retired-path
-  deletion, and a caller that would retry a reported append failure,
-- **When** Wisp runs the applicable release and cleanup path,
-- **Then** after `operation()` returns the completed append, Wisp starts the
-  5,000 ms committed-release horizon and admits synchronous attempts while
-  time is at or before the 250 ms deadline, with referenced 10 ms delays after
-  failures and admitted work permitted to finish later; if still incomplete,
-  each outer 50 ms timer is unref'd but its worker admits release attempts
-  while time is at or before its 45 ms deadline, whose repeated 10 ms delays
-  are referenced; a worker admitted at or before the horizon may finish,
-  including successfully, after it; held/pre-commit release uses the same
-  250 ms attempt-admission and referenced-delay semantics, starts no
-  background release worker, and preserves the original bus error; retired
-  cleanup starts from an unref'd outer 0 ms timer but makes five attempts with
-  a referenced 50 ms delay after every caught failure, including the fifth;
-  and a
-  successful canonical retirement permits new writers despite later cleanup
-  failure without making the retirement inode-conditional.
+- **Given** one append that completes the full compact event-plus-LF write and
+  any overlapping same-process or cross-process lock activity,
+- **When** that operation reaches its append commit point,
+- **Then** commit establishes only that the complete write occurred for that
+  operation; it creates no guarantee that the bytes will later be preserved
+  or remain durable under overlap.
 
 **S52 — Exact qualified process providers**
 
@@ -1963,8 +1719,9 @@ follow the Stewards 0023 availability/support grammar received by ADR-0013.
   observations, deterministic same-PID/new-birth tokens, and Windows,
 - **When** the shared identity provider is qualified,
 - **Then** only exact Linux boot-id/start-ticks and macOS absolute-`/bin/ps`
-  C-locale tokens qualify, both dashboard and bus recovery use them, Windows
-  remains unsupported, and no PID-only result is accepted.
+  C-locale tokens qualify for dashboard ownership, Windows remains
+  unsupported, and no PID-only result is accepted; these provider guarantees
+  create no project-bus lock guarantee.
 
 **S53 — HTTP deadline boundaries**
 
@@ -2033,21 +1790,14 @@ follow the Stewards 0023 availability/support grammar received by ADR-0013.
   evidence, and renewal policy, and every declared row follows the Stewards
   0023 availability/support grammar.
 
-**S70 — Malformed bus-lock salvage is identity-safe**
+**S70 — Bus-lock recovery is not contracted**
 
-- **Given** initial `owner-missing` and present readable-malformed snapshots,
-  usable malformed PID/identity pairs with every provider observation, and
-  owner appearance, disappearance, and raw-byte replacement before and after
-  the final reread,
-- **When** stale-lock recovery evaluates the owner,
-- **Then** same-token and inconclusive observations forbid that recovery
-  attempt from renaming, absent and different-token observations may
-  authorize recovery, a missing snapshot may authorize rename only after a
-  second missing read, every present malformed snapshot must byte-match on
-  reread, and appearance, disappearance, or byte change observed by that
-  reread fails closed; replacement after a successful reread and before rename
-  is not detected by these checks and is governed by the protocol-wide issue
-  #50 Preview limitation.
+- **Given** any complete, malformed, missing, replaced, or concurrently
+  changed lock state,
+- **When** current directory-lock recovery runs,
+- **Then** Wisp Preview promises no owner interpretation, identity use,
+  recovery eligibility, mutation, error, timing, or cleanup result; issue #50
+  solely owns a future positive recovery contract.
 
 **S71 — Invalid dashboard owners fail closed**
 
@@ -2075,34 +1825,23 @@ follow the Stewards 0023 availability/support grammar received by ADR-0013.
 
 - **Given** validated canonical events whose one-argument Node 24
   `JSON.stringify` outputs encode to exactly 32,768 and 32,769 UTF-8 bytes,
-  plus non-overlapping projected buses ending at exactly 16,777,216 and
-  16,777,217 bytes,
+  plus one operation's observed existing bus bytes producing projections of
+  exactly 16,777,216 and 16,777,217 bytes,
 - **When** event-size and projected-bus validation run,
 - **Then** the two exact-limit vectors pass, the two limit-plus-one vectors
   fail with the specified `actual` and `limit` values without modifying the
   bus, and accepted storage is the unchanged JSON string followed by one LF.
 
-**S74 — Rollback, overlap, and cleanup limitations**
+**S74 — Retained data boundary under overlap**
 
-- **Given** an owner match followed by replacement at the canonical lock
-  pathname in stale recovery, held release, committed release, or matching
-  cleanup, failed and short writes whose truncate succeeds or fails, a
-  rollback racing a later commit, two near-limit appends validating against
-  the same prior size, substitution at a post-rename cleanup pathname, and
-  non-`EEXIST` acquisition cleanup racing a replacement owner or lock path,
-- **When** append failure, delayed pathname mutation, and cleanup execute,
-- **Then** outside the ownership overlap the truncate target is the original
-  size and never below the original prefix, successful truncate removes the
-  attempted suffix, failed truncate leaves that prefix but may leave a partial
-  suffix, and a completed event-plus-LF append remains distinct from either
-  failed attempt; under the overlap there is no uninterrupted-exclusivity,
-  later-commit-preservation, or aggregate bus-maximum guarantee; and
-  post-rename cleanup may follow or act on a substituted path, while
-  acquisition cleanup performs unconditional owner unlink then lock rmdir
-  without verification and can act on the replacement. Event schema, exact
-  serialization and size accounting, append commit, identity validation,
-  snapshot equality, observed-mismatch refusal, and non-overlapping
-  projected-size enforcement remain unchanged.
+- **Given** validated events and same-process or cross-process bus operations
+  that may overlap,
+- **When** each operation validates, serializes, accounts for, and attempts
+  its append,
+- **Then** event schema, validation, exact serialization, project confinement,
+  and that operation's byte accounting remain contracted, while directory-lock
+  behavior, later preservation or durability of committed bytes, and an
+  aggregate concurrent bus-size bound are not guaranteed.
 
 ### EARS requirements
 
@@ -2244,7 +1983,7 @@ follow the Stewards 0023 availability/support grammar received by ADR-0013.
   order.
 - **R51 (event-driven):** When an exact authenticated same-origin command is
   submitted, Wisp shall create one canonical `maintainer` command and append
-  it through the shared lock and single-call `O_APPEND` bus writer.
+  it through the shared canonical project-bus operation.
 - **R52 (unwanted behavior):** If an HTTP or command request is unauthorized,
   malformed, oversized, wrong-origin, wrong-host, or wrong-content-type, Wisp
   shall return the exact stable HTTP failure and append nothing.
@@ -2266,15 +2005,10 @@ follow the Stewards 0023 availability/support grammar received by ADR-0013.
   dashboard in Claude Code and Codex and jointly prove cross-host singleton,
   project isolation, command append, security, cleanup/recovery, and qualified
   process identity.
-- **R58 (ubiquitous):** Every project-bus append shall use the exact
-  `.wisp/write.lock` location, owner schema, atomic `mkdir`/`O_EXCL`
-  acquisition, an acquisition deadline computed immediately before owner
-  construction and the first `mkdir` as current time plus 5,000 ms, 10 ms
-  poll, 120,000 ms ownerless-stale policy, lstat defenses, recovery,
-  matching-token authorization checks before recovery/release cleanup
-  pathname mutation, unconditional owner unlink then lock rmdir without
-  verification on any non-`EEXIST` acquisition error, and stable error
-  mapping.
+- **R58 (ubiquitous):** Wisp Preview shall make no guarantee for the current
+  directory lock's concurrency, serialization, ownership, recovery, cleanup,
+  path identity, deadlines, timing, error mapping, or diagnostics, whether
+  operations are same-process or cross-process.
 - **R59 (event-driven):** When a dashboard contender acquires ownership, it
   shall recheck authoritative owner, project, protocol, and process identity
   after acquisition and before listener bind.
@@ -2287,51 +2021,31 @@ follow the Stewards 0023 availability/support grammar received by ADR-0013.
 - **R62 (ubiquitous):** The embedded UI shall meet the exact refresh,
   lifecycle/event/parse-error/command rendering, explicit command-control,
   in-flight, failure, and text-only insertion behavior.
-- **R63 (ubiquitous):** Qualified-process-identity tests shall combine live
-  provider stability/child/absence evidence with a deterministic injected
-  same-PID/new-token recovery test and shall not require forced OS PID reuse.
+- **R63 (ubiquitous):** Dashboard qualified-process-identity tests shall
+  combine live provider stability/child/absence evidence with a deterministic
+  injected same-PID/new-token dashboard-recovery test and shall not require
+  forced OS PID reuse.
 - **R64 (event-driven):** When `wisp_dashboard` is the process's first tool,
   Wisp shall resolve and memoize the canonical project before user-runtime,
   discovery, or listener work.
 - **R65 (ubiquitous):** Dashboard command-state output shall use the same
   reducer and duplicate/acknowledgement semantics as `wisp_check`; neither the
   HTTP adapter nor browser shall implement a second reduction.
-- **R66 (state-driven):** Once the complete event-plus-LF append write
-  succeeds, that operation shall return append success regardless of its later
-  lock cleanup failure, shall perform no rollback in its own post-commit path,
-  and shall emit only a redacted incident diagnostic for post-commit failures.
-  When a write fails or is short before that commit point, Wisp shall attempt
-  to truncate to the size observed before the write and return
-  `bus_unwritable/append_failed` whether truncate succeeds or fails; outside
-  an ownership overlap that target shall never precede the original prefix,
-  and truncate failure may leave a partial suffix, while under an overlap the
-  truncate may remove another operation's later committed bytes.
-- **R67 (event-driven):** When `operation()` returns a committed result, Wisp
-  shall start the 5,000 ms committed-release horizon, then retry phase
-  publication and canonical rename by admitting attempts while the current
-  time is at or before the 250 ms deadline, using referenced 10 ms delays
-  after caught failures and permitting admitted work or the final delay to
-  finish later. If still incomplete, each outer 50 ms scheduler timer shall
-  be unref'd, and its worker shall use the same admission semantics with a
-  45 ms deadline and referenced 10 ms failure delays; the horizon shall not
-  be measured from the earlier event-plus-LF write, shall control worker
-  admission and rescheduling rather than completion, and shall permit a
-  worker admitted at or before it to finish, including successfully, after
-  it. When held/pre-commit release runs, Wisp shall use the 250 ms
-  attempt-admission and referenced-delay semantics for its matching-record
-  rename, schedule no background release worker, and preserve the original
-  bus error. After
-  successful retirement, cleanup shall start from an unref'd outer 0 ms timer
-  and make five attempts, with a referenced 50 ms delay after every caught
-  failure, including the fifth.
-  Stale recovery shall retain its 5,000 ms acquisition horizon and 10 ms poll
-  without borrowing either release worker.
-- **R68 (ubiquitous):** Bus-lock owner records shall include the qualified
-  process birth identity and phase, and stale/PID-reuse recovery shall never
-  use PID existence alone.
+- **R66 (state-driven):** Once one operation completes the full compact
+  event-plus-LF write, its append commit point shall mean only that the full
+  write occurred; it shall not guarantee later preservation or durability of
+  those bytes under overlap.
+- **R67 (ubiquitous):** No acquisition, release, recovery, cleanup, retry,
+  deadline, timer, error, or diagnostic behavior of the current directory
+  lock shall be normative under this specification.
+- **R68 (ubiquitous):** No current bus-lock owner schema, owner identity,
+  phase, liveness interpretation, or recovery authorization shall be
+  normative under this specification.
 - **R69 (ubiquitous):** Qualified process identity shall use exactly Linux
   boot ID plus `/proc` start ticks or macOS absolute `/bin/ps` start time under
-  C locale; Windows and unspecified platforms shall remain unsupported.
+  C locale for dashboard ownership; Windows and unspecified platforms shall
+  remain unsupported, and this provider contract shall create no project-bus
+  lock guarantee.
 - **R70 (unwanted behavior):** If `/api/events` encounters a duplicate command
   id, it shall return HTTP `409` with the exact existing `command_conflict`
   Wisp envelope and no partial data.
@@ -2367,12 +2081,9 @@ follow the Stewards 0023 availability/support grammar received by ADR-0013.
   write, verify that no observed or capability-shaped value remains, and
   block persistence and upload on failure while preserving only non-secret
   typed structural evidence.
-- **R88 (state-driven):** While stale bus-lock recovery holds an initial
-  owner snapshot, a readable malformed record with valid PID/identity shall
-  obey qualified observation and exact raw-byte reread equality, an initial
-  `owner-missing` snapshot shall rename only after a second missing read, and
-  appearance after missing, disappearance after any present snapshot, or any
-  snapshot mismatch observed by the reread shall fail closed.
+- **R88 (ubiquitous):** No current bus-lock recovery snapshot, malformed-owner
+  salvage, identity observation, reread, mutation, or failure behavior shall
+  be normative under this specification.
 - **R89 (unwanted behavior):** If a dashboard owner fails any property of the
   complete `starting` or `ready` schema, discovery shall return
   `dashboard_unavailable/owner_identity_unverifiable` without using partial
@@ -2381,49 +2092,24 @@ follow the Stewards 0023 availability/support grammar received by ADR-0013.
 - **R90 (ubiquitous):** Compact event serialization shall be exactly Node 24
   `JSON.stringify(value)` with one argument and no replacer or spacing,
   followed by UTF-8 encoding; per-operation size accounting shall exclude only
-  the appended LF from the event-size count, accept exact event and projected
-  bus maxima, and reject limit-plus-one with exact diagnostics; exact
-  aggregate bus-size enforcement shall apply outside the documented
-  final-gap ownership overlap and is not guaranteed across overlapping
-  operations.
+  the appended LF from the event-size count and shall accept or reject that
+  operation's exact event and projected bus sizes from the bytes it observes;
+  no aggregate bus-size guarantee shall apply across concurrent operations.
 - **R91 (unwanted behavior):** If capability material leaves permitted
   transient memory, it may cross only the mandated `wisp_dashboard` MCP
   response and loopback request/response transport; it shall cross no other
   Wisp-controlled output, log, error, or evidence sink, the private ready
   record shall remain its sole persistent location, and evidence retention
   shall sanitize and scan fail-closed.
-- **R92 (event-driven):** When a record or raw-byte equality check authorizes
-  a canonical-path mutation in stale recovery, held release, committed
-  release, or matching cleanup, a successful rename shall atomically move the
-  canonical pathname entry present when it executes—whichever directory
-  occupies `write.lock` in the ordinary case; replacement, disappearance,
-  symlink/type substitution, or rename failure in the final gap shall follow
-  the observed filesystem operation and error, not an inode-conditional
-  guarantee. After successful quarantine or retirement, cleanup shall address
-  `<quarantine>/owner.json` and `<quarantine>` by pathname without inode or
-  no-follow coupling, so substitution may cause it to follow or act on the
-  substituted path. On any non-`EEXIST` acquisition error, Wisp shall
-  unconditionally attempt `unlink(ownerPath)` followed by `rmdir(lockPath)`
-  without token verification, so replacement or substitution shall follow the
-  actual pathname-operation result.
-- **R93 (state-driven):** While no ownership overlap caused by an R92
-  match-to-mutation gap or acquisition-failure cleanup exists, exclusive
-  ownership through append and exact projected bus-size enforcement shall
-  remain in force; a failed/short append's truncate target shall equal the
-  original size and never precede the original prefix, successful truncate
-  shall remove the attempted suffix, and failed truncate may leave a partial
-  suffix while preserving that prefix. Event schema, exact serialization and
-  size accounting, the completed-write append commit point, identity
-  validation, snapshot equality, and observed-mismatch refusal shall remain
-  unchanged.
-- **R94 (event-driven):** When an R92 final gap or unconditional
-  acquisition-failure cleanup creates an ownership overlap, Wisp shall not
-  guarantee uninterrupted exclusive ownership through append, preservation
-  of another operation's later committed bytes during short-write rollback,
-  or the nominal projected bus maximum across the overlapping operations.
-  Safe identity/no-follow-coupled cleanup, like the crash-safe replacement
-  lock, shall remain parked in issue #50 as the sole venue for research,
-  decision, implementation, and migration.
+- **R92 (ubiquitous):** The negative lock boundary shall apply equally to
+  same-process and cross-process operations and shall not imply a safe case
+  from any observed owner, path, timing, or absence of known contention.
+- **R93 (ubiquitous):** Event schema, validation, exact serialization, project
+  confinement, and per-operation byte accounting shall remain contracted
+  independently of the negative lock boundary.
+- **R94 (ubiquitous):** Issue #50 shall be the sole venue for directory-lock
+  correctness, research, decision, implementation, migration, and positive
+  guarantees; PR #49 shall make no runtime lock change.
 
 ## Verification matrix
 
@@ -2432,16 +2118,16 @@ follow the Stewards 0023 availability/support grammar received by ADR-0013.
 | Constants and schemas | Generated-schema snapshot plus table-driven at-limit/over-limit tests for every fixed value, all seven tools, both owner-record variants, all six stored-event kinds, exact timestamp/version, null/unknown rejection, and recursively arbitrary command-payload JSON |
 | Resolution | Table-driven tests for environment root, capability absence, list failure/timeout, counts, URI validity, realpath, no-I/O, memoization, and dashboard-as-first-tool success/failure ordering; Codex host smoke verifies session-cwd binding |
 | Filesystem | Temp-project tests for missing read, first-write creation, lstat/symlink/type/containment rejection, one-line append, fatal UTF-8, LF/CR/final-segment/blank handling, limits, and no truncation |
-| Project write lock | Cross-process and injected-filesystem tests cover the qualified-identity/phase owner schema, `mkdir`/`O_EXCL`, non-overlapping MCP/dashboard appends, the complete event-plus-LF commit point, and post-commit success; failed/short-write fixtures prove truncate targets the original size, successful truncate removes only the attempted suffix, failed truncate returns `append_failed` while retaining the original prefix and permitting a partial suffix, and a completed append does not enter rollback; acquisition timing spies prove the 5,000 ms deadline is computed immediately before owner construction and the first `mkdir`; committed-release timing spies prove the 5,000 ms horizon begins after `operation()` returns, synchronous attempts are admitted while time is at or before the 250 ms deadline with referenced 10 ms failure delays and admitted work permitted to finish later, each background outer 50 ms timer is unref'd, each worker uses the same admission semantics with a 45 ms deadline and referenced 10 ms inner delays, and a worker admitted at or before the horizon may finish, including successfully, after it; held/pre-commit fixtures prove the 250 ms attempt-admission and referenced-delay semantics, no background worker, and preservation of the original error; retired cleanup proves its outer 0 ms timer is unref'd, its five attempts use a referenced 50 ms delay after every caught failure including the fifth, and acquisition continues after successful retirement; stale recovery retains the 5,000 ms/10 ms acquisition timing, live/dead/same-PID-new-birth/PID-less/malformed owners, 120,000 ms boundary, symlink/types, quarantine, matching-token/identity authorization, redacted diagnostics, and stable errors; non-`EEXIST` acquisition-error fixtures at `mkdir`, owner open, owner write, and short owner write prove unconditional owner unlink followed by lock rmdir, ignored cleanup errors, no token verification, and replacement/substitution exposure; readable malformed-owner fixtures cover usable PID/identity with same, inconclusive, absent, and different-token observations plus byte-for-byte snapshot/reread races for JSON-valid and invalid raw bytes; missing-owner fixtures prove missing→missing stale recovery and fail-closed missing→present, present→missing, and present→byte-different transitions; deterministic hooks cover replacement, disappearance, symlink/type substitution, and rename failure after the last match in stale recovery, held release, committed release, and matching cleanup, asserting the actual filesystem result/error and that successful rename moves the current pathname occupant; post-rename hooks substitute stale and retired owner/directory pathnames and prove cleanup may follow or act on the substitute without inode/no-follow coupling; overlap fixtures demonstrate later committed bytes truncated by another operation's rollback and two near-limit projected-size checks producing an over-limit bus, while paired no-overlap controls prove the truncate target never precedes the original prefix, exclusivity, and the exact bus maximum; safe cleanup and lock redesign remain parked solely in issue #50 |
+| Preview directory-lock boundary | Contract scans prove no current directory-lock concurrency, serialization, ownership, recovery, cleanup, path-identity, deadline, timing, error, or diagnostic mechanic is normative for same-process or cross-process operations; append fixtures prove only that the commit point completes one full event-plus-LF write, without treating later preservation or durability as acceptance; characterization tests may observe the implementation but create no product guarantee; issue #50 is the sole positive lock-correctness venue |
 | Dashboard discovery | Fake-home and process-identity adapters prove exact root/key derivation, ownership/mode/type/symlink rejection, project-ancestor rejection, candidate promotion, mandatory post-acquisition recheck, authenticated reuse, bounded starting wait, live-owner refusal, deterministic same-PID/new-token recovery, contention, and distinct-project isolation; a property-by-property invalid-owner table, including otherwise usable PID/identity/instance/capability and invalid protocol fields, proves exact `owner_identity_unverifiable`, zero provider/health calls, and no quarantine or replacement, while a complete owner with another positive integer protocol reaches `dashboard_version_conflict` only after identity proof |
-| Process identity | Linux fixtures prove boot-ID and `/proc/<pid>/stat` field-22 parsing including hostile `comm`; macOS fixtures prove absolute `/bin/ps` C-locale parsing and failures; live current/child/exit observations plus deterministic same-PID/new-birth-token adapters exercise both dashboard and bus recovery; Windows is rejected |
+| Process identity | Linux fixtures prove boot-ID and `/proc/<pid>/stat` field-22 parsing including hostile `comm`; macOS fixtures prove absolute `/bin/ps` C-locale parsing and failures; live current/child/exit observations plus deterministic same-PID/new-birth-token adapters exercise dashboard ownership and recovery only; Windows is rejected, and no result is treated as a bus-lock guarantee |
 | Dashboard faults/lifecycle | Fault injection before claim and after claim/bind/publish/completion plus stdio close, `SIGINT`, and `SIGTERM` proves failed-live-owner listener/record cleanup, no bound-unpublished survivor, dead-owner recovery, 1,000 ms bounded drain, forced tracked-socket destruction, matching-instance cleanup, and no daemon |
 | Dashboard HTTP/UI | Loopback and browser-DOM tests snapshot exact precedence, condition/status/code mapping including `command_conflict`→`409`, routes/envelopes/headers, acceptance-to-`CRLFCRLF` header bytes/deadline, header-to-body-complete deadline, acceptance-to-response-complete total deadline, keep-alive idle and cleanup-to-forced-close boundaries, bearer, Host, Origin, query, method, content type, body, CSP, capability-bootstrap/rotation/redaction, refresh/visibility/in-flight behavior, exact run/agent append-order projection, text-only rendering, event/parse-error/command-state views, explicit command controls, and zero-write failures |
 | Capability-safe host evidence | Host-smoke, canary, and Playwright-failure fixtures prove the exact capability URL is allowed in the mandated `wisp_dashboard` MCP response and its loopback request/response transport, place the live capability in every other permitted transient location and prohibited query, bus, cookie/storage, error-object, log, reporter, screenshot, video, trace, attachment, cache, artifact, and upload sink, prove the private ready record is its sole persistent location, intercept every other Wisp-controlled output before a sink, require exact structural sentinels and typed fields, absence-scan retained evidence/logs, and prove a failed scan produces no persisted or uploaded artifact |
-| Compact serialization | Node 24 fixtures invoke one-argument `JSON.stringify(value)` with no replacer/spacing, compare exact UTF-8 bytes and property/escape output, cover ASCII, control escapes, and non-ASCII scalars, accept event size 32,768 and a non-overlapping projected bus size of 16,777,216, reject 32,769 and a non-overlapping 16,777,217 projection with exact diagnostics, and prove the accepted event is followed by exactly one LF while every validation rejection preserves the bus; the lock-overlap fixtures separately prove that per-operation arithmetic remains exact without claiming an aggregate concurrent bus maximum |
+| Compact serialization | Node 24 fixtures invoke one-argument `JSON.stringify(value)` with no replacer/spacing, compare exact UTF-8 bytes and property/escape output, cover ASCII, control escapes, and non-ASCII scalars, accept event size 32,768 and one operation's observed projection of 16,777,216, reject 32,769 and that operation's observed projection of 16,777,217 with exact diagnostics, and prove the accepted event is followed by exactly one LF; no fixture result is represented as a concurrent aggregate bus-size guarantee |
 | Runtime boundary | Spies or dependency injection prove all six event/check MCP handlers call shared operations, `wisp_dashboard` calls the memoized coordinator, HTTP reads/writes reuse the canonical runtime, and HTTP/browser contain no second command reducer |
 | Command safety | Append-order tests prove issued fields, whole-check first-duplicate conflict/count/no-partial-data, ack duplicate conflict, unique-id-only reduction, same-run/following-ack filtering, last-ack wins, stable ordering, all-status dashboard projection, no execution, and every acknowledgement result |
-| Errors | Contract snapshots for all MCP and HTTP code/reason/JSON-pointer/detail shapes, retryability, `process_identity_unavailable`, parse reasons, `isError`, `-32601`, `-32602`, dashboard version conflict, HTTP `409` command conflict, post-commit diagnostic redaction, and unexpected-exception containment |
+| Errors | Contract snapshots for non-lock MCP and HTTP code/reason/JSON-pointer/detail shapes, retryability, parse reasons, `isError`, `-32601`, `-32602`, dashboard version conflict, HTTP `409` command conflict, and unexpected-exception containment; structural checks prove lock-originated errors and diagnostics are outside the contract |
 | Stdio | Spawned-process transcript proves all stdout is MCP framing and diagnostics are stderr-only |
 | Import safety | Isolated import probes for every reusable module prove no bus or dashboard state and no listener before explicit invocation |
 | Bundle | Build inspection proves target `node24`; a clean fixture with no global Wisp or dependency tree launches the exact distributed artifact under Node 24; documentation and fixtures prove that this technical boundary creates no Supported claim |
@@ -2457,52 +2143,42 @@ follow the Stewards 0023 availability/support grammar received by ADR-0013.
 The configured `SPEC_RUBRIC_PATH` says no dedicated rubric exists, so this
 check uses `specs/README.md`.
 
-- **Frontmatter:** PASS — all required fields are present; `version: 14`
-  records the ADR-0016 behavioral amendment, `implements` names ADR-0016,
-  superseded ADR-0015 is absent from active dependencies, and ADR-0014 remains
-  a deliberate retained dependency.
+- **Frontmatter:** PASS — all required fields are present; `version: 15`
+  records the significant ADR-0017 behavioral amendment, `implements` names
+  ADR-0017, superseded ADR-0016 is absent from active dependencies, and
+  ADR-0014 remains a deliberate retained dependency.
 - **Approved dependencies:** PASS — ADR-0004, ADR-0005, ADR-0008, ADR-0009,
-  ADR-0011, ADR-0014, and ADR-0016 are approved and record the retained
+  ADR-0011, ADR-0014, and ADR-0017 are approved and record the retained
   adapter, dashboard, package, Node technical boundary, Preview-retirement
-  intent, and scoped inherited directory-lock limitation.
+  intent, and minimal Preview directory-lock boundary.
 - **Testable acceptance criteria:** PASS — S1–S53, S64–S74, and S3a are GWT
   scenarios, R1–R77 and R87–R94 are EARS requirements, and the matrix names
   executable evidence. The remaining gaps preserve historical identifiers of
   retired family machinery.
 - **Exactness:** PASS — all seven schemas, outputs, error mapping, project
   selection, stored-event validity, confinement/decoding, duplicate/unique
-  command reduction, append commit/release behavior, qualified
-  process-birth identity, finite limits, dashboard write-lock,
+  command reduction, the per-operation append-commit meaning, qualified
+  process-birth identity, finite limits, dashboard ownership,
   discovery/ownership/HTTP deadline/error/UI-projection/lifecycle behavior,
-  malformed-owner raw-byte recovery, fail-closed observed mismatches,
-  match-to-pathname outcomes across stale/held/committed/cleanup seams,
-  conditional exclusivity, exact successful/failed truncate outcomes,
-  completed-append separation, acquisition-deadline computation before owner
-  construction and the first `mkdir`, post-operation committed-release
-  horizon, attempt-admission rather than hard-completion deadline semantics,
-  permitted post-horizon worker completion,
-  outer-unref/inner-referenced background timing, held/pre-commit release
-  budget, retired-cleanup retries, unconditional unverified acquisition-error
-  cleanup, post-rename pathname substitution risk, concurrent-size bounds,
-  and the protocol-wide non-inode-conditional issue #50 final gap,
   schema-invalid dashboard-owner refusal, Node 24 one-argument JSON
-  serialization and exact byte boundaries, the
+  serialization and exact per-operation byte boundaries, the negative
+  same-process/cross-process lock boundary, absence of any concurrent
+  aggregate-size or later-preservation/durability guarantee, issue #50's sole
+  ownership of lock correctness, the
   capability's sole persistent location and permitted transient path,
   eight payload paths, `0.2.1-rc.4` carrier parity, retired-metadata absence,
   root-Claude/inline-Codex launch definitions, Node 24 technical targeting,
   Preview/no-support disclosure, and capability-safe evidence policy are
   fixed rather than deferred.
 - **Open questions:** PASS — the required section is present below.
-- **Scope fidelity:** PASS — ADR-0016 keeps ADR-0014's qualification
-  retirement intact, supersedes ADR-0015's incomplete stale-only boundary,
-  limits only guarantees derived from uninterrupted directory-lock ownership,
-  records the inherited unverified acquisition-failure cleanup and exact
-  scheduler without selecting a fix, and assigns crash-safe locking and safe
-  cleanup solely to issue #50; event schema, serialization, per-operation size
-  accounting, completed append commit, identity and snapshot checks,
-  observed-mismatch refusal, plugin-only distribution, dual-host runtime, dashboard
+- **Scope fidelity:** PASS — ADR-0017 preserves ADR-0014's qualification
+  retirement while superseding ADR-0016's positive lock-internal contract,
+  makes no lock promise for same-process or cross-process operations, and
+  assigns all lock correctness and redesign solely to issue #50; event schema,
+  validation, serialization, project confinement, per-operation byte
+  accounting, plugin-only distribution, dual-host runtime, dashboard
   isolation/security/recovery, explicit skill boundary, and session-owned
-  listener remain intact outside the documented overlap.
+  listener remain intact.
 
 Result: **PASS**.
 
@@ -2617,3 +2293,16 @@ replacement/substitution exposure in constants, prose, GWT, EARS, and
 verification while leaving redesign parked in issue #50. ADR-0016, version
 14, `gated` status, and the rubric `PASS` remain unchanged; no new adversary
 or conformance verdict is claimed here.
+
+Version 15 derives approved ADR-0017 and significantly changes the behavioral
+contract, so the version advances rather than remaining 14 under Grove's
+versioning rule. It supersedes v14's positive directory-lock-internal
+requirements with one minimal negative Preview boundary for both same-process
+and cross-process operations. The retained contract covers event schema,
+validation, exact serialization, project confinement, per-operation byte
+accounting, and only the fact that append commit completed the full
+event-plus-LF write; it promises neither later preservation or durability nor
+a concurrent aggregate bus-size bound. Issue #50 solely owns positive lock
+correctness, and PR #49 makes no runtime lock change. The configured rubric
+self-check passes, so v15 remains `gated`; no v15 adversary or conformance
+verdict is claimed here.

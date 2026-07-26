@@ -1,4 +1,4 @@
-// SPEC-0001@v14: S51/S70 / R66-R67/R88 — post-commit success and exact owner identity.
+// SPEC-0001@v15 S51/R66 — per-operation append evidence; current bus-lock release/retry/timing assertions are ADR-0017 implementation characterization only.
 import { join } from "node:path";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -90,7 +90,7 @@ function diagnosticText(write: { mock: { calls: readonly (readonly unknown[])[] 
   return write.mock.calls.map((call) => String(call[0])).join("");
 }
 
-describe("SPEC-0001 v6 irreversible append commit", () => {
+describe("ADR-0017 implementation characterization — current bus-lock commit/release timing", () => {
   it("retries committed-phase publication yet returns the one committed event with one redacted diagnostic", async () => {
     const root = await mkdtemp(join(tmpdir(), "wisp-phase-publish-"));
     faults.phaseFailuresRemaining = 2;

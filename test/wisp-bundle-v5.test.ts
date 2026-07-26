@@ -14,7 +14,7 @@ afterEach(async () => {
   await Promise.all(transports.splice(0).map((transport) => transport.close()));
 });
 
-describe("SPEC-0001 concurrent cross-process acknowledgement", () => {
+describe("ADR-0017 implementation characterization — current concurrent cross-process acknowledgement", () => {
   it("allows exactly one acknowledgement of one pending command", async () => {
     const project = await mkdtemp(join(tmpdir(), "wisp-ack-race-"));
     await mkdir(join(project, ".wisp"));

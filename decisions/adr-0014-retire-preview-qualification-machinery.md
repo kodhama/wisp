@@ -22,12 +22,12 @@ changes:
 
 # ADR-0014 — Retire aggregate qualification machinery while Wisp is Preview
 
-> Partially superseded by
-> `adr-0016-scope-inherited-directory-lock-races`: PR #49 does not claim
-> inode-conditional directory-lock mutation or the exclusivity-derived
-> rollback and concurrent-size guarantees under the documented final-gap
-> interleaving, and parks the crash-safe lock redesign in issue #50.
-> ADR-0016 supersedes the earlier, narrower ADR-0015 record.
+> Partially superseded by `adr-0017-bound-preview-directory-lock-contract`:
+> Wisp Preview makes no positive guarantee for the current directory lock,
+> retains only the decision's unrelated product guarantees, and parks all
+> lock correctness and redesign in issue #50. ADR-0017 supersedes ADR-0016's
+> positive lock-internal contract; ADR-0016 remains provenance for the scoped
+> decision not to redesign the lock in PR #49.
 
 ## Decision state
 

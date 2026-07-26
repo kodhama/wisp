@@ -1,4 +1,4 @@
-// SPEC-0001@v14: S37/S47/S70 / R63/R88 — deterministic identity-safe recovery.
+// SPEC-0001@v15 S37/R63 — dashboard identity acceptance; current bus-lock recovery cases are ADR-0017 implementation characterization only.
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import {
@@ -71,7 +71,7 @@ async function makeLockOld(lock: string): Promise<void> {
   await utimes(lock, old, old);
 }
 
-describe("SPEC-0001@v14 deterministic PID-reuse recovery", () => {
+describe("SPEC-0001@v15 S37/R63 dashboard identity acceptance", () => {
   it("quarantines an actual dashboard owner with the same PID and old birth token", async () => {
     const project = await realpath(await mkdtemp(join(tmpdir(), "wisp-pid-dashboard-project-")));
     const home = await realpath(await mkdtemp(join(tmpdir(), "wisp-pid-dashboard-home-")));
@@ -109,7 +109,9 @@ describe("SPEC-0001@v14 deterministic PID-reuse recovery", () => {
     );
     await coordinator.cleanup();
   });
+});
 
+describe("ADR-0017 implementation characterization — current bus-lock identity recovery", () => {
   it("quarantines an actual bus lock with the same PID and old birth token", async () => {
     const root = await mkdtemp(join(tmpdir(), "wisp-pid-bus-"));
     const lock = join(root, ".wisp/write.lock");

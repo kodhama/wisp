@@ -46,7 +46,7 @@ describe("SPEC-0001 v6 exact qualified process identities", () => {
     }
   });
 
-  it("classifies deterministic same-PID/new-token evidence for dashboard and bus recovery", () => {
+  it("classifies deterministic same-PID/new-token evidence for dashboard ownership; bus-lock use is ADR-0017 implementation characterization", () => {
     expect(processInstanceIsGone("birth-A", { state: "present", token: "birth-B" })).toBe(true);
     expect(processInstanceIsGone("birth-A", { state: "present", token: "birth-A" })).toBe(false);
     expect(processInstanceIsGone("birth-A", { state: "absent" })).toBe(true);
