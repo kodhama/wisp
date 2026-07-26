@@ -1,7 +1,7 @@
 ---
 id: adr-0014-retire-preview-qualification-machinery
 type: adr
-status: draft
+status: gated
 depends_on:
   - adr-0002-plugin-mcp-distribution
   - adr-0004-codex-session-bootstrap
@@ -229,3 +229,11 @@ certification paperwork.
   dashboard behavior, or Supported claim is introduced.
 - **Verification:** the acceptance criteria separate deleted certification
   carriers from retained behavioral and security gates.
+
+## Lifecycle record
+
+The shaper converged the issue #48 direction into this decision after the
+Stewards conformance preflight returned `PASS`. The self-check found no open
+intent item, preserved every runtime and security stop condition, and made the
+partial-supersession boundary explicit; the record therefore moved to
+`gated` for independent decision-adversary review.
