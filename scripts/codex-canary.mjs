@@ -202,6 +202,7 @@ export async function runCommand(command, args, options = {}) {
       }
       await Promise.race([callbacks, callbacksStopped]);
       void callbacks.catch(() => undefined);
+      if (terminating && !graceExpired && processGroupIsLive()) return;
       clearTimeout(deadline);
       if (killTimer !== undefined) clearTimeout(killTimer);
       resolved = true;

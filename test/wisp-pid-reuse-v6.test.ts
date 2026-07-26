@@ -1,4 +1,4 @@
-// SPEC-0001@v12: S37/S47/S70 / R63/R88 — deterministic identity-safe recovery.
+// SPEC-0001@v13: S37/S47/S70 / R63/R88 — deterministic identity-safe recovery.
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import {
@@ -71,7 +71,7 @@ async function makeLockOld(lock: string): Promise<void> {
   await utimes(lock, old, old);
 }
 
-describe("SPEC-0001@v12 deterministic PID-reuse recovery", () => {
+describe("SPEC-0001@v13 deterministic PID-reuse recovery", () => {
   it("quarantines an actual dashboard owner with the same PID and old birth token", async () => {
     const project = await realpath(await mkdtemp(join(tmpdir(), "wisp-pid-dashboard-project-")));
     const home = await realpath(await mkdtemp(join(tmpdir(), "wisp-pid-dashboard-home-")));

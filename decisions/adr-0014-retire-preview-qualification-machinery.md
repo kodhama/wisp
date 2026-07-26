@@ -22,6 +22,11 @@ changes:
 
 # ADR-0014 — Retire aggregate qualification machinery while Wisp is Preview
 
+> Partially superseded by
+> `adr-0015-scope-inherited-stale-lock-atomicity`: PR #49 does not claim
+> inode-conditional stale-lock retirement and parks the crash-safe lock
+> redesign in issue #50.
+
 ## Decision state
 
 ### Decided

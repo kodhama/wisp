@@ -9,13 +9,33 @@ depends_on:
   - adr-0009-independent-plugin-package-metadata
   - adr-0011-node-24-only-support
   - adr-0014-retire-preview-qualification-machinery
-implements: adr-0014-retire-preview-qualification-machinery
+  - adr-0015-scope-inherited-stale-lock-atomicity
+implements: adr-0015-scope-inherited-stale-lock-atomicity
 owner: agent
 updated: 2026-07-26
-version: 12
+version: 13
 ---
 
 # SPEC-0001 — Dual-host Wisp plugin, bundled stdio MCP, and project dashboard
+
+> **AMENDED 2026-07-26**
+> **WHAT:** Replaced the absolute final-reread-to-rename stale-lock guarantee
+> with the checks Wisp actually provides and recorded the inherited final-gap
+> race as a Preview limitation tracked by issue #50.
+> **WHY:** ADR-0015 establishes that portable dependency-free Node 24
+> filesystem APIs cannot condition pathname rename on the inode that supplied
+> the reread snapshot and keeps the crash-safe lock redesign out of
+> qualification retirement.
+> **SCOPE:** Stale-lock recovery prose, GWT and EARS acceptance, verification
+> evidence, rubric, and gate record; version advanced from 12 to 13. Exact
+> valid-owner equality, malformed-owner byte equality, missing-owner equality,
+> observed-mismatch refusal, atomic pathname quarantine, and all unaffected
+> runtime, dashboard, distribution, and qualification-retirement guarantees
+> remain unchanged.
+> **POINTER:** ADR-0015 and issue #50.
+> **VALUE:** A Preview user sees the real inherited concurrency risk instead
+> of receiving a stronger lock-safety promise than the runtime can enforce.
+> **CONFIDENCE:** verified.
 
 > **AMENDED 2026-07-26**
 > **WHAT:** Closed four intrinsic safety gaps in v12: malformed bus-lock
@@ -358,7 +378,8 @@ force OS PID reuse.
 ## Project bus write-lock contract
 
 Every bus append, whether initiated by an MCP report/acknowledgement or the
-dashboard command route, is serialized by the same project-local lock:
+dashboard command route, uses the same project-local lock as its serialization
+primitive:
 
 ```text
 <canonical-project>/.wisp/write.lock/
@@ -369,8 +390,7 @@ The lock directory is acquired by atomic `mkdir` with mode `0700`; no
 check-then-create sequence is allowed. The owner file is then opened inside
 the acquired directory with `O_WRONLY | O_CREAT | O_EXCL`, `O_NOFOLLOW` where
 available, and mode `0600`. It is written completely and closed before the
-protected bus operation begins. The exact owner schema rejects unknown
-properties:
+bus operation begins. The exact owner schema rejects unknown properties:
 
 ```json
 {
@@ -419,8 +439,9 @@ record, or `owner-missing` when `owner.json` is absent on that initial read.
    instance gone, including PID reuse, and permits immediate stale recovery.
    PID existence alone never blocks or authorizes recovery.
 3. A matching live `committed` record is safe to retire because its append
-   commit point has passed. Any contender may retire it after rereading and
-   matching the complete record.
+   commit point has passed. It is eligible for the pathname-retirement attempt
+   after the contender rereads and matches the complete record, subject to the
+   final-gap limitation below.
 4. If the safe regular `owner.json` bytes can be read but fail the exact owner
    schema, Wisp retains those exact bytes as the recovery snapshot. Field
    salvage first requires fatal UTF-8 decoding and parsing to one JSON object.
@@ -442,16 +463,23 @@ record, or `owner-missing` when `owner.json` is absent on that initial read.
    is insufficient. An initial `owner-missing` snapshot may proceed only when
    the reread is also missing. Appearance after an `owner-missing` snapshot,
    disappearance after any present snapshot, or any unreadable, replaced, or
-   byte-different owner leaves the canonical lock untouched.
+   byte-different owner observed by this reread leaves the canonical pathname
+   untouched.
 7. After the required reread succeeds, Wisp atomically renames `write.lock`
-   to `write.lock.stale-<lowercase-UUID>`. A race or mismatch leaves the
-   current lock untouched.
+   to `write.lock.stale-<lowercase-UUID>`. The rename atomically quarantines
+   whichever directory occupies the canonical pathname when it executes. The
+   reread and pathname rename are not one inode-conditional operation: a
+   replacement in that final gap can therefore cause the replacement
+   directory to be quarantined and deleted. This inherited final-gap race is
+   a Preview limitation tracked by issue #50; this specification does not
+   claim that the quarantined directory is the inode that supplied the reread
+   snapshot.
 8. Wisp removes only `owner.json` from the quarantined directory and then the
    empty directory. Deletion cleanup is best-effort; acquisition restarts
    against the canonical `write.lock` path.
 
 After acquiring the lock, Wisp revalidates the bus path and its projected
-bounded append while protected. The append commit point is the successful
+bounded append before writing. The append commit point is the successful
 single `O_APPEND` write of every byte of the compact canonical event plus its
 terminating LF. Before that point, a short or failed write attempts to restore
 the original size and returns `bus_unwritable/append_failed`. After that
@@ -492,7 +520,10 @@ deletion emits one redacted diagnostic but cannot block canonical lock
 acquisition. For an operation that failed before commit, release uses the same
 matching-record atomic rename; cleanup failure never replaces the original
 bus error. A different token or identity never authorizes rename or deletion.
-No code path appends outside this lock.
+No append operation writes unless its own lock acquisition previously
+succeeded; the final-gap limitation tracked by issue #50 means the current
+pathname protocol cannot guarantee that an acquired lock remains exclusively
+owned until append completes.
 
 This project-local `write.lock` is transient bus serialization only. It is
 not dashboard discovery, listener ownership, or capability state; those live
@@ -1691,15 +1722,21 @@ follow the Stewards 0023 availability/support grammar received by ADR-0013.
 
 - **Given** concurrent appends, exact and malformed owner records, live/dead
   qualified process identities, same-PID/different-birth tokens, ownerless
-  locks below/above 120,000 ms, symlink/wrong-type paths, and a held lock
-  beyond 5,000 ms,
+  locks below/above 120,000 ms, symlink/wrong-type paths, a held lock beyond
+  5,000 ms, and replacement before or after the final owner reread,
 - **When** MCP and dashboard writers acquire, recover, use, and release
   `.wisp/write.lock`,
-- **Then** `mkdir`/`O_EXCL` serialize every append, live owners are never
-  stolen by PID-only reasoning, same-PID/new-birth owners are recoverable,
-  only exact stale cases are quarantined, cleanup removes only the matching
-  token and identity, and each unsafe/timeout condition uses the specified
-  stable bus error without unlocked append.
+- **Then** every append uses `mkdir`/`O_EXCL` acquisition, live owners are
+  never classified stale by PID-only reasoning, same-PID/new-birth owners are
+  recoverable,
+  every mismatch observed before rename fails closed, a successful reread
+  authorizes atomic quarantine of whichever directory occupies the canonical
+  pathname when rename executes, and each detected unsafe/timeout condition
+  uses the specified stable bus error without calling append unless that
+  operation previously acquired the lock; replacement after the reread is not
+  inode-conditionally excluded, so exclusive ownership through append is not
+  guaranteed in that gap and remains the inherited Preview limitation tracked
+  by issue #50.
 
 **S48 — Safe functional dashboard UI**
 
@@ -1824,13 +1861,17 @@ follow the Stewards 0023 availability/support grammar received by ADR-0013.
 
 - **Given** initial `owner-missing` and present readable-malformed snapshots,
   usable malformed PID/identity pairs with every provider observation, and
-  owner appearance, disappearance, and raw-byte replacement races,
+  owner appearance, disappearance, and raw-byte replacement before and after
+  the final reread,
 - **When** stale-lock recovery evaluates the owner,
-- **Then** same-token and inconclusive observations leave the lock untouched,
-  absent and different-token observations may recover it, a missing snapshot
-  may rename only after a second missing read, every present malformed
-  snapshot must byte-match on reread, and appearance, disappearance, or byte
-  change fails closed.
+- **Then** same-token and inconclusive observations forbid that recovery
+  attempt from renaming, absent and different-token observations may
+  authorize recovery, a missing snapshot may authorize rename only after a
+  second missing read, every present malformed snapshot must byte-match on
+  reread, and appearance, disappearance, or byte change observed by that
+  reread fails closed; replacement after a successful reread and before rename
+  is not detected by these checks and is governed by the issue #50 Preview
+  limitation.
 
 **S71 — Invalid dashboard owners fail closed**
 
@@ -2105,8 +2146,8 @@ follow the Stewards 0023 availability/support grammar received by ADR-0013.
   owner snapshot, a readable malformed record with valid PID/identity shall
   obey qualified observation and exact raw-byte reread equality, an initial
   `owner-missing` snapshot shall rename only after a second missing read, and
-  appearance after missing or disappearance after any present snapshot shall
-  fail closed.
+  appearance after missing, disappearance after any present snapshot, or any
+  snapshot mismatch observed by the reread shall fail closed.
 - **R89 (unwanted behavior):** If a dashboard owner fails any property of the
   complete `starting` or `ready` schema, discovery shall return
   `dashboard_unavailable/owner_identity_unverifiable` without using partial
@@ -2123,6 +2164,13 @@ follow the Stewards 0023 availability/support grammar received by ADR-0013.
   Wisp-controlled output, log, error, or evidence sink, the private ready
   record shall remain its sole persistent location, and evidence retention
   shall sanitize and scan fail-closed.
+- **R92 (event-driven):** When stale-lock recovery's required final reread
+  matches, Wisp shall atomically quarantine whichever directory occupies the
+  canonical `write.lock` pathname when rename executes; it shall not represent
+  that pathname operation as conditional on the inode that supplied the
+  reread snapshot, and replacement in the final gap shall remain an inherited
+  Preview limitation tracked by issue #50 until a separately decided
+  crash-safe lock redesign lands.
 
 ## Verification matrix
 
@@ -2131,7 +2179,7 @@ follow the Stewards 0023 availability/support grammar received by ADR-0013.
 | Constants and schemas | Generated-schema snapshot plus table-driven at-limit/over-limit tests for every fixed value, all seven tools, both owner-record variants, all six stored-event kinds, exact timestamp/version, null/unknown rejection, and recursively arbitrary command-payload JSON |
 | Resolution | Table-driven tests for environment root, capability absence, list failure/timeout, counts, URI validity, realpath, no-I/O, memoization, and dashboard-as-first-tool success/failure ordering; Codex host smoke verifies session-cwd binding |
 | Filesystem | Temp-project tests for missing read, first-write creation, lstat/symlink/type/containment rejection, one-line append, fatal UTF-8, LF/CR/final-segment/blank handling, limits, and no truncation |
-| Project write lock | Cross-process and injected-filesystem tests cover the qualified-identity/phase owner schema, `mkdir`/`O_EXCL`, concurrent MCP/dashboard appends, exact commit point and post-commit success, phase/release failure, 250 ms synchronous and `unref` same-owner recovery, retired-deletion failure with continued new acquisition, 5,000 ms/10 ms timing, live/dead/same-PID-new-birth/PID-less/malformed owners, 120,000 ms boundary, symlink/types, stale quarantine, matching-token/identity cleanup, redacted diagnostics, and every stable error; readable malformed-owner fixtures cover usable PID/identity with same, inconclusive, absent, and different-token observations plus byte-for-byte snapshot/reread races for JSON-valid and invalid raw bytes; missing-owner fixtures prove missing→missing stale recovery and fail-closed missing→present, present→missing, and present→byte-different transitions |
+| Project write lock | Cross-process and injected-filesystem tests cover the qualified-identity/phase owner schema, `mkdir`/`O_EXCL`, concurrent MCP/dashboard appends, exact commit point and post-commit success, phase/release failure, 250 ms synchronous and `unref` same-owner recovery, retired-deletion failure with continued new acquisition, 5,000 ms/10 ms timing, live/dead/same-PID-new-birth/PID-less/malformed owners, 120,000 ms boundary, symlink/types, stale quarantine, matching-token/identity authorization checks, redacted diagnostics, and every stable error; readable malformed-owner fixtures cover usable PID/identity with same, inconclusive, absent, and different-token observations plus byte-for-byte snapshot/reread races for JSON-valid and invalid raw bytes; missing-owner fixtures prove missing→missing stale recovery and fail-closed missing→present, present→missing, and present→byte-different transitions; a deterministic replacement after successful reread and before pathname rename demonstrates the inherited issue #50 final gap and asserts atomic quarantine of the directory occupying the canonical pathname rather than inode-conditional retirement of the inspected directory |
 | Dashboard discovery | Fake-home and process-identity adapters prove exact root/key derivation, ownership/mode/type/symlink rejection, project-ancestor rejection, candidate promotion, mandatory post-acquisition recheck, authenticated reuse, bounded starting wait, live-owner refusal, deterministic same-PID/new-token recovery, contention, and distinct-project isolation; a property-by-property invalid-owner table, including otherwise usable PID/identity/instance/capability and invalid protocol fields, proves exact `owner_identity_unverifiable`, zero provider/health calls, and no quarantine or replacement, while a complete owner with another positive integer protocol reaches `dashboard_version_conflict` only after identity proof |
 | Process identity | Linux fixtures prove boot-ID and `/proc/<pid>/stat` field-22 parsing including hostile `comm`; macOS fixtures prove absolute `/bin/ps` C-locale parsing and failures; live current/child/exit observations plus deterministic same-PID/new-birth-token adapters exercise both dashboard and bus recovery; Windows is rejected |
 | Dashboard faults/lifecycle | Fault injection before claim and after claim/bind/publish/completion plus stdio close, `SIGINT`, and `SIGTERM` proves failed-live-owner listener/record cleanup, no bound-unpublished survivor, dead-owner recovery, 1,000 ms bounded drain, forced tracked-socket destruction, matching-instance cleanup, and no daemon |
@@ -2156,14 +2204,15 @@ follow the Stewards 0023 availability/support grammar received by ADR-0013.
 The configured `SPEC_RUBRIC_PATH` says no dedicated rubric exists, so this
 check uses `specs/README.md`.
 
-- **Frontmatter:** PASS — all required fields are present; `version: 12`
-  records the ADR-0014 behavioral amendment and retained upstreams are
-  deliberate.
+- **Frontmatter:** PASS — all required fields are present; `version: 13`
+  records the ADR-0015 behavioral amendment, `implements` names ADR-0015, and
+  ADR-0014 remains a deliberate retained dependency.
 - **Approved dependencies:** PASS — ADR-0004, ADR-0005, ADR-0008, ADR-0009,
-  ADR-0011, and ADR-0014 are approved and record the retained adapter,
-  dashboard, package, Node technical boundary, and Preview-retirement intent.
+  ADR-0011, ADR-0014, and ADR-0015 are approved and record the retained
+  adapter, dashboard, package, Node technical boundary, Preview-retirement
+  intent, and scoped inherited stale-lock limitation.
 - **Testable acceptance criteria:** PASS — S1–S53, S64–S73, and S3a are GWT
-  scenarios, R1–R77 and R87–R91 are EARS requirements, and the matrix names
+  scenarios, R1–R77 and R87–R92 are EARS requirements, and the matrix names
   executable evidence. The remaining gaps preserve historical identifiers of
   retired family machinery.
 - **Exactness:** PASS — all seven schemas, outputs, error mapping, project
@@ -2171,18 +2220,23 @@ check uses `specs/README.md`.
   command reduction, irreversible append/release behavior, qualified
   process-birth identity, finite limits, dashboard write-lock,
   discovery/ownership/HTTP deadline/error/UI-projection/lifecycle behavior,
-  malformed-owner raw-byte recovery, schema-invalid dashboard-owner refusal,
-  Node 24 one-argument JSON serialization and exact byte boundaries, the
+  malformed-owner raw-byte recovery, fail-closed observed mismatches, atomic
+  pathname quarantine and the non-inode-conditional issue #50 final gap,
+  schema-invalid dashboard-owner refusal, Node 24 one-argument JSON
+  serialization and exact byte boundaries, the
   capability's sole persistent location and permitted transient path,
   eight payload paths, `0.2.1-rc.4` carrier parity, retired-metadata absence,
   root-Claude/inline-Codex launch definitions, Node 24 technical targeting,
   Preview/no-support disclosure, and capability-safe evidence policy are
   fixed rather than deferred.
 - **Open questions:** PASS — the required section is present below.
-- **Scope fidelity:** PASS — ADR-0014 removes only aggregate certification and
-  exact-surface machinery; the plugin-only distribution, dual-host runtime,
-  project bus, dashboard isolation/security/recovery, explicit skill boundary,
-  session-owned listener, and qualified process identity remain intact.
+- **Scope fidelity:** PASS — ADR-0015 keeps ADR-0014's qualification
+  retirement intact, replaces only its overbroad preservation of
+  inode-conditional stale-lock safety, and parks the crash-safe lock redesign
+  in issue #50; the plugin-only distribution, dual-host runtime, other
+  project-bus checks, dashboard isolation/security/recovery, explicit skill
+  boundary, session-owned listener, and qualified process identity remain
+  intact.
 
 Result: **PASS**.
 
@@ -2243,3 +2297,16 @@ and final fidelity review returned `PASS`
 ([durable PR record](https://github.com/kodhama/wisp/pull/49#issuecomment-5082408751)).
 Under the steward profile's `spec=agent` gate, those durable records ratify
 gated SPEC-0001 v12 for downstream consumption. Its status remains `gated`.
+
+Version 13 derives the approved ADR-0015 scope correction: exact valid-owner,
+malformed-byte, and missing-owner equality checks remain; every mismatch
+observed before rename still fails closed; and the rename still atomically
+quarantines whichever directory occupies the canonical pathname when it
+executes. The spec no longer represents that pathname rename as conditional
+on the inode that supplied the reread snapshot. It names the inherited
+final-gap race as a Preview limitation, routes the crash-safe lock redesign
+solely through issue #50 and a future ADR, and leaves ADR-0014 qualification
+retirement plus all unaffected lock and product safety requirements intact.
+The configured rubric self-check passed and the amendment remains `gated`
+under the `spec=agent` profile; no v13 spec-adversary or conformance verdict
+is claimed here.

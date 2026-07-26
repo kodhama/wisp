@@ -344,6 +344,68 @@ describe("SPEC-0002@v8 real Codex Preview-smoke normalization", () => {
     }
   });
 
+  it("keeps the grace period alive when a final-line callback fails after the leader closes", async () => {
+    if (process.platform === "win32") return;
+    const root = await mkdtemp(join(tmpdir(), "wisp-canary-final-callback-group-"));
+    const pidPath = join(root, "descendant.pid");
+    const readyPath = join(root, "descendant.ready");
+    let descendantPid = 0;
+    try {
+      const result = await runCommand(
+        process.execPath,
+        [
+          "-e",
+          [
+            'const{spawn}=require("node:child_process");',
+            'const{existsSync,writeFileSync}=require("node:fs");',
+            "const child=spawn(process.execPath,",
+            '["-e","const{writeFileSync}=require(\\"node:fs\\");process.on(\\"SIGTERM\\",()=>{});writeFileSync(process.argv[1],\\"ready\\");setInterval(()=>{},1000)",process.argv[2]],',
+            "{stdio:'ignore'});",
+            "writeFileSync(process.argv[1],String(child.pid));",
+            "const ready=setInterval(()=>{",
+            "if(!existsSync(process.argv[2]))return;",
+            "clearInterval(ready);",
+            "process.stdout.write(String(child.pid),()=>process.exit(0));",
+            "},5);",
+          ].join(""),
+          pidPath,
+          readyPath,
+        ],
+        {
+          timeoutMs: 10_000,
+          killGraceMs: 80,
+          onStdoutLine: (line) => {
+            descendantPid = Number(line);
+            return Promise.reject(new Error("final callback rejected"));
+          },
+        },
+      );
+      expect(result.callbackFailed).toBe(true);
+      expect(result.status).not.toBe(0);
+      expect(descendantPid).toBeGreaterThan(0);
+      await expect.poll(() => {
+        try {
+          process.kill(descendantPid, 0);
+          return true;
+        } catch {
+          return false;
+        }
+      }, { timeout: 500, interval: 10 }).toBe(false);
+    } finally {
+      if (descendantPid === 0) {
+        descendantPid = Number(await readFile(pidPath, "utf8").catch(() => "0"));
+      }
+      if (descendantPid > 0) {
+        try {
+          process.kill(descendantPid, "SIGKILL");
+        } catch {
+          // The grace-period group kill may already have reaped it.
+        }
+      }
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("passes risk-reviewed config and terminates subprocesses at a deadline", async () => {
     const args = buildCodexExecArgs("/tmp/project", "prompt");
     expect(args).toContain('approval_policy="on-request"');

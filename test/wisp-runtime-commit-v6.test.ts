@@ -1,4 +1,4 @@
-// SPEC-0001@v12: S51/S70 / R66-R67/R88 — post-commit success and exact owner identity.
+// SPEC-0001@v13: S51/S70 / R66-R67/R88 — post-commit success and exact owner identity.
 import { join } from "node:path";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
