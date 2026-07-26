@@ -1,4 +1,4 @@
-// SPEC-0001 v7: S35, S36, S49 / R43, R59 — dashboard acquisition, health, and recheck.
+// SPEC-0001@v12 S34-S36/S49/S71 / R39/R43/R59/R89 — dashboard acquisition, health, and exact owners.
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { mkdtemp, readFile, realpath, stat } from "node:fs/promises";
@@ -57,7 +57,10 @@ vi.mock("../src/process-identity.ts", async () => {
   };
 });
 
-import { DashboardCoordinator } from "../src/dashboard.ts";
+import {
+  DashboardCoordinator,
+  validDashboardOwnerForTesting,
+} from "../src/dashboard.ts";
 import { callWispTool } from "../src/mcp.ts";
 import { createRuntime } from "../src/runtime.ts";
 
@@ -74,6 +77,46 @@ afterEach(() => {
 });
 
 describe("SPEC-0001 v7 dashboard acquisition and post-acquisition recheck", () => {
+  it("rejects every one-property-invalid owner while retaining positive protocol conflicts as structurally valid", () => {
+    const starting = {
+      schema: 1,
+      protocol: 1,
+      state: "starting",
+      project: "/tmp/project",
+      project_key: "a".repeat(64),
+      instance: "12345678-1234-1234-1234-123456789abc",
+      pid: 123,
+      process_identity: "linux:12345678-1234-1234-1234-123456789abc:1",
+      created_at: "2026-07-26T00:00:00.000Z",
+    };
+    expect(validDashboardOwnerForTesting(starting)).toBe(true);
+    expect(validDashboardOwnerForTesting({ ...starting, protocol: 2 })).toBe(true);
+    const invalid = [
+      { ...starting, schema: 2 },
+      { ...starting, protocol: 0 },
+      { ...starting, protocol: 1.5 },
+      { ...starting, project: "" },
+      { ...starting, project: "/tmp/\u0000project" },
+      { ...starting, project_key: "A".repeat(64) },
+      { ...starting, instance: "12345678-1234-1234-1234-123456789abz" },
+      { ...starting, pid: Number.MAX_SAFE_INTEGER },
+      { ...starting, process_identity: " " },
+      { ...starting, process_identity: "x".repeat(513) },
+      { ...starting, created_at: "2026-02-30T00:00:00.000Z" },
+      { ...starting, unknown: true },
+      { ...starting, state: "ready" },
+      {
+        ...starting,
+        state: "ready",
+        port: 65_536,
+        capability: "A".repeat(43),
+        published_at: "2026-07-26T00:00:00.000Z",
+      },
+    ];
+    for (const owner of invalid) {
+      expect(validDashboardOwnerForTesting(owner), JSON.stringify(owner)).toBe(false);
+    }
+  });
   it("issue #38 treats an owner published after an absent probe as convergence, not runtime_unsafe", async () => {
     const project = await realpath(
       await mkdtemp(join(tmpdir(), "wisp-dashboard-owner-appeared-project-")),

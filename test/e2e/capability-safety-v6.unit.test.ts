@@ -1,4 +1,4 @@
-// SPEC-0001@v11 S64/R87; SPEC-0002@v7 S11-S12/R13-R14.
+// SPEC-0001@v12 S64/S72/R87/R91; SPEC-0002@v8 S11-S12/S17/R13-R14/R20.
 import { spawnSync } from "node:child_process";
 import {
   mkdir,
@@ -14,6 +14,8 @@ import {
   CAPABILITY_REDACTION_ERROR,
   assertCapabilityAbsent,
   directoryIsAbsentOrEmpty,
+  persistPreparedBrowserEvidence,
+  prepareBrowserEvidence,
   runSanitizedCommand,
   sanitizeCapabilityBytes,
   validateBrowserEvidence,
@@ -27,7 +29,7 @@ import {
 const capability = "A".repeat(43);
 const secondCapability = "B".repeat(43);
 
-describe("SPEC-0002@v7 capability-safe evidence boundary", () => {
+describe("SPEC-0002@v8 capability-safe evidence boundary", () => {
   it("replaces only fragment and bearer forms byte-exactly", () => {
     const raw = Buffer.from([
       '{"url":"http://127.0.0.1:43123/#capability=',
@@ -183,6 +185,39 @@ describe("SPEC-0002@v7 capability-safe evidence boundary", () => {
     const target = join(root, "browser-evidence.json");
     await writeBrowserEvidence(target, pass, [capability]);
     expect(JSON.parse(await readFile(target, "utf8"))).toEqual(pass);
+  });
+
+  it("freezes, validates, serializes once, scans before discard, and persists the same buffer", async () => {
+    const evidence = {
+      schema: 1,
+      result: "pass",
+      failure_stage: null,
+      loopback_origin: "http://127.0.0.1:43123",
+      dashboard_url_shape:
+        "http://127.0.0.1:43123/#capability=<redacted>",
+      authorization_shape: "Bearer <redacted>",
+      fragment_removed: true,
+      authenticated_health_status: 200,
+      external_request_count: 0,
+    };
+    const order: string[] = [];
+    const capabilities = [capability];
+    const prepared = prepareBrowserEvidence(evidence, capabilities, {
+      onFreeze: () => order.push("freeze"),
+      onValidate: () => order.push("validate"),
+      onSerialize: () => order.push("serialize"),
+      onScan: () => order.push("scan"),
+      onDiscard: () => {
+        order.push("discard");
+        capabilities.splice(0);
+      },
+    });
+    expect(order).toEqual(["freeze", "validate", "serialize", "scan", "discard"]);
+    expect(Object.isFrozen(prepared.evidence)).toBe(true);
+    const root = await mkdtemp(join(tmpdir(), "wisp-prepared-browser-"));
+    const target = join(root, "browser-evidence.json");
+    await persistPreparedBrowserEvidence(target, prepared.bytes);
+    expect(await readFile(target)).toEqual(prepared.bytes);
   });
 
   it("strips authenticated control frames and redacts bare, fragment, and bearer forms", async () => {

@@ -5,20 +5,12 @@ on:
     - cron: "17 6 * * 1"
   workflow_dispatch:
     inputs:
-      candidate_version:
-        description: Exact candidate plugin SemVer
+      marketplace_source:
+        description: Marketplace Git source for the Preview smoke
         required: true
         type: string
-      candidate_bundle_sha256:
-        description: Exact candidate dist/wisp.mjs SHA-256
-        required: true
-        type: string
-      candidate_marketplace_source:
-        description: Candidate marketplace Git source
-        required: true
-        type: string
-      candidate_marketplace_ref:
-        description: Candidate marketplace Git ref
+      marketplace_ref:
+        description: Marketplace Git ref for the Preview smoke
         required: true
         type: string
 
@@ -57,8 +49,8 @@ jobs:
           --marketplace-source kodhama/stewards
           --marketplace-ref main
           --output "$EVIDENCE_DIR"
-      - name: Run candidate canary
-        id: candidate
+      - name: Run manual Preview smoke
+        id: manual
         if: github.event_name == 'workflow_dispatch'
         continue-on-error: true
         env:
@@ -66,39 +58,25 @@ jobs:
           EVIDENCE_DIR: ${{ runner.temp }}/wisp-codex-evidence
           CANARY_CODEX_API_KEY: ${{ secrets.CODEX_API_KEY }}
           CODEX_INSTALL_OUTCOME: ${{ steps.install_codex.outcome }}
-          CANARY_MARKETPLACE_SOURCE: ${{ inputs.candidate_marketplace_source }}
-          CANARY_MARKETPLACE_REF: ${{ inputs.candidate_marketplace_ref }}
-          CANARY_VERSION: ${{ inputs.candidate_version }}
-          CANARY_SHA256: ${{ inputs.candidate_bundle_sha256 }}
+          CANARY_MARKETPLACE_SOURCE: ${{ inputs.marketplace_source }}
+          CANARY_MARKETPLACE_REF: ${{ inputs.marketplace_ref }}
         run: >-
           node scripts/codex-canary.mjs
-          --mode candidate
+          --mode manual
           --marketplace-source "$CANARY_MARKETPLACE_SOURCE"
           --marketplace-ref "$CANARY_MARKETPLACE_REF"
-          --version "$CANARY_VERSION"
-          --sha256 "$CANARY_SHA256"
           --output "$EVIDENCE_DIR"
-      - name: Verify exact candidate evidence
-        if: github.event_name == 'workflow_dispatch'
-        env:
-          CODEX_HOME: ${{ runner.temp }}/wisp-codex-home
-          EVIDENCE_DIR: ${{ runner.temp }}/wisp-codex-evidence
-          CANARY_VERSION: ${{ inputs.candidate_version }}
-          CANARY_SHA256: ${{ inputs.candidate_bundle_sha256 }}
-        run: >-
-          node scripts/verify-codex-canary.mjs
-          --evidence "$EVIDENCE_DIR/evidence.json"
-          --bundle "$CODEX_HOME/plugins/cache/kodhama/wisp/$CANARY_VERSION/dist/wisp.mjs"
-          --version "$CANARY_VERSION"
-          --sha256 "$CANARY_SHA256"
       - name: Enforce weekly behavioral failures
         if: github.event_name == 'schedule' && steps.weekly.outcome == 'failure'
+        run: exit 1
+      - name: Enforce manual behavioral failures
+        if: github.event_name == 'workflow_dispatch' && steps.manual.outcome == 'failure'
         run: exit 1
       - name: Upload private canary evidence
         if: >-
           always() &&
           (steps.weekly.outputs.artifact_ready == 'true' ||
-          steps.candidate.outputs.artifact_ready == 'true')
+          steps.manual.outputs.artifact_ready == 'true')
         env:
           EVIDENCE_DIR: ${{ runner.temp }}/wisp-codex-evidence
         uses: actions/upload-artifact@v4

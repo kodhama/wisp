@@ -315,7 +315,10 @@ function validateJson(value: unknown, seen = new Set<object>()): value is JsonVa
   return Object.values(value as AnyRecord).every((item) => validateJson(item, seen));
 }
 
-export function validateStoredEvent(value: unknown): CanonicalEvent {
+export function validateStoredEvent(
+  value: unknown,
+  enforceSerializedLimit = true,
+): CanonicalEvent {
   const event = storedRecord(value);
   const common = ["v", "ts", "run", "agent", "kind"];
   if (event.v !== 1 || !validTimestamp(event.ts)) storedFailure();
@@ -388,29 +391,49 @@ export function validateStoredEvent(value: unknown): CanonicalEvent {
     }
   }
 
-  const actual = utf8Bytes(JSON.stringify(normalized));
-  if (actual > LIMITS.event) storedFailure();
+  if (enforceSerializedLimit) {
+    const actual = utf8Bytes(JSON.stringify(normalized));
+    if (actual > LIMITS.event) storedFailure();
+  }
   return normalized;
 }
 
-export function createCanonicalEvent(input: AnyRecord, now: () => Date = () => new Date()): CanonicalEvent {
-  const candidate = { v: 1, ts: now().toISOString(), ...input };
-  let serialized: string;
+interface SerializedEvent {
+  event: CanonicalEvent;
+  json: string;
+  bytes: Buffer;
+}
+
+const serializedEvents = new WeakMap<CanonicalEvent, SerializedEvent>();
+
+function serializeEvent(event: CanonicalEvent): SerializedEvent {
+  const cached = serializedEvents.get(event);
+  if (cached !== undefined) return cached;
+  const validated = validateStoredEvent(event, false);
+  let json: string;
   try {
-    serialized = JSON.stringify(candidate);
+    json = JSON.stringify(validated);
   } catch {
     storedFailure();
   }
-  const actual = utf8Bytes(serialized);
-  if (actual > LIMITS.event) {
+  const bytes = Buffer.from(json, "utf8");
+  if (bytes.byteLength > LIMITS.event) {
     throw new WispError("invalid_input", "Event exceeds byte limit", {
       field: "",
       reason: "event_too_large",
       limit: LIMITS.event,
-      actual,
+      actual: bytes.byteLength,
     });
   }
-  return validateStoredEvent(candidate);
+  const result = { event: validated, json, bytes };
+  serializedEvents.set(validated, result);
+  return result;
+}
+
+export function createCanonicalEvent(input: AnyRecord, now: () => Date = () => new Date()): CanonicalEvent {
+  const candidate = { v: 1, ts: now().toISOString(), ...input };
+  const event = validateStoredEvent(candidate, false);
+  return serializeEvent(event).event;
 }
 
 function validateStoredRefs(value: unknown): string[] {
@@ -586,17 +609,26 @@ async function readBus(project: string): Promise<{ events: CanonicalEvent[]; par
 }
 
 async function appendEventUnlocked(project: string, event: CanonicalEvent): Promise<void> {
-  const serialized = JSON.stringify(validateStoredEvent(event));
-  const actual = utf8Bytes(serialized);
-  if (actual > LIMITS.event) {
-    throw new WispError("invalid_input", "Event exceeds byte limit", {
-      field: "",
-      reason: "event_too_large",
-      limit: LIMITS.event,
-      actual,
+  const serialized = serializeEvent(event);
+  const checked = await inspectOwnedPaths(project, "write");
+  const originalSize = checked.busExists
+    ? (await lstat(checked.bus).catch(() => {
+      throw new WispError("bus_unwritable", "Cannot stat bus", {
+        path: checked.bus,
+        reason: "stat_failed",
+      });
+    })).size
+    : 0;
+  const bytes = Buffer.concat([serialized.bytes, Buffer.from("\n")]);
+  const projected = originalSize + bytes.byteLength;
+  if (projected > LIMITS.bus) {
+    throw new WispError("bus_limit_exceeded", "Bus exceeds byte limit", {
+      subject: "bus",
+      unit: "utf8_bytes",
+      limit: LIMITS.bus,
+      actual: projected,
     });
   }
-  const checked = await inspectOwnedPaths(project, "write");
   const flags = fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_APPEND |
     (typeof fsConstants.O_NOFOLLOW === "number" ? fsConstants.O_NOFOLLOW : 0);
   let handle;
@@ -608,7 +640,6 @@ async function appendEventUnlocked(project: string, event: CanonicalEvent): Prom
       reason: fsReason(error, "open_failed"),
     });
   }
-  let originalSize: number;
   try {
     const info = await handle.stat();
     if (!info.isFile()) {
@@ -617,22 +648,16 @@ async function appendEventUnlocked(project: string, event: CanonicalEvent): Prom
         reason: "path_not_regular_file",
       });
     }
-    originalSize = info.size;
+    if (info.size !== originalSize) {
+      throw new WispError("bus_unwritable", "Bus changed before append", {
+        path: checked.bus,
+        reason: "stat_failed",
+      });
+    }
   } catch (error) {
     await handle.close().catch(() => undefined);
     if (error instanceof WispError) throw error;
     throw new WispError("bus_unwritable", "Cannot stat bus", { path: checked.bus, reason: "stat_failed" });
-  }
-  const bytes = Buffer.from(`${serialized}\n`, "utf8");
-  const projected = originalSize + bytes.byteLength;
-  if (projected > LIMITS.bus) {
-    await handle.close().catch(() => undefined);
-    throw new WispError("bus_limit_exceeded", "Bus exceeds byte limit", {
-      subject: "bus",
-      unit: "utf8_bytes",
-      limit: LIMITS.bus,
-      actual: projected,
-    });
   }
   try {
     const { bytesWritten } = await handle.write(bytes, 0, bytes.byteLength, null);
@@ -855,38 +880,31 @@ export async function recoverStaleLock(lockPath: string, ownerPath: string): Pro
   if (!info.isDirectory()) {
     throw new WispError("bus_unwritable", "Write lock is not a directory", { path: lockPath, reason: "path_not_directory" });
   }
+  const snapshot = await readLockSnapshot(ownerPath);
+  if (snapshot === undefined) return;
   let dead = false;
-  let owner: LockOwner | undefined;
-  try {
-    const ownerInfo = await lstat(ownerPath);
-    if (ownerInfo.isSymbolicLink()) {
-      throw new WispError("bus_unwritable", "Write-lock owner is a symlink", {
-        path: ownerPath,
-        reason: "path_is_symlink",
-      });
-    }
-    if (!ownerInfo.isFile()) {
-      throw new WispError("bus_unwritable", "Write-lock owner is not a regular file", {
-        path: ownerPath,
-        reason: "path_not_regular_file",
-      });
-    }
-    owner = await readLockOwner(ownerPath);
-    const observed = await observeProcess(owner.pid);
-    const gone = processInstanceIsGone(owner.process_identity, observed);
+  if (snapshot.kind === "valid") {
+    const observed = await observeProcess(snapshot.owner.pid);
+    const gone = processInstanceIsGone(snapshot.owner.process_identity, observed);
     if (gone === undefined) return;
-    dead = gone || (!gone && owner.phase === "committed");
-  } catch (error) {
-    if (error instanceof WispError) throw error;
-    const created = await readMalformedOwnerCreated(ownerPath);
+    dead = gone || (!gone && snapshot.owner.phase === "committed");
+  } else if (snapshot.kind === "malformed" && snapshot.salvaged !== undefined) {
+    const observed = await observeProcess(snapshot.salvaged.pid);
+    const gone = processInstanceIsGone(
+      snapshot.salvaged.process_identity,
+      observed,
+    );
+    if (gone === undefined || gone === false) return;
+    dead = true;
+  } else {
+    const created = snapshot.kind === "malformed"
+      ? snapshot.created
+      : undefined;
     dead = Date.now() - (created ?? info.mtimeMs) > LOCK_STALE_MS;
   }
   if (!dead) return;
-  if (owner !== undefined) {
-    let current: LockOwner;
-    try { current = await readLockOwner(ownerPath); } catch { return; }
-    if (!sameLockOwner(current, owner)) return;
-  }
+  const current = await readLockSnapshot(ownerPath).catch(() => undefined);
+  if (current === undefined || !sameLockSnapshot(snapshot, current)) return;
   const stale = `${lockPath}.stale-${randomUUID()}`;
   try {
     await rename(lockPath, stale);
@@ -897,29 +915,154 @@ export async function recoverStaleLock(lockPath: string, ownerPath: string): Pro
   await rmdir(stale).catch(() => undefined);
 }
 
+type LockSnapshot =
+  | { kind: "valid"; owner: LockOwner }
+  | {
+    kind: "malformed";
+    bytes: Buffer;
+    created: number | undefined;
+    salvaged: { pid: number; process_identity: string } | undefined;
+  }
+  | { kind: "missing" };
+
+function validPlatformPid(value: unknown): value is number {
+  return Number.isSafeInteger(value) && Number(value) > 0 &&
+    Number(value) <= 2_147_483_647;
+}
+
+function qualifiedIdentity(value: unknown): value is string {
+  if (typeof value !== "string" || Buffer.byteLength(value, "utf8") > 512) {
+    return false;
+  }
+  if (/^linux:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}:[0-9]+$/u
+    .test(value)) return true;
+  const darwin =
+    /^darwin:(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})$/u.exec(value);
+  if (darwin === null) return false;
+  const [, yearText, monthText, dayText, hourText, minuteText, secondText] =
+    darwin;
+  const [year, month, day, hour, minute, second] =
+    [yearText, monthText, dayText, hourText, minuteText, secondText].map(Number);
+  const date = new Date(Date.UTC(year!, month! - 1, day, hour, minute, second));
+  return date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month! - 1 &&
+    date.getUTCDate() === day &&
+    date.getUTCHours() === hour &&
+    date.getUTCMinutes() === minute &&
+    date.getUTCSeconds() === second;
+}
+
+function decodeLockOwner(value: unknown): LockOwner | undefined {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  const record = value as Record<string, unknown>;
+  if (
+    Object.keys(record).sort().join(",") !==
+      "created,phase,pid,process_identity,token" ||
+    typeof record.token !== "string" ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u.test(record.token) ||
+    !validPlatformPid(record.pid) ||
+    typeof record.process_identity !== "string" ||
+    record.process_identity.length === 0 ||
+    Buffer.byteLength(record.process_identity, "utf8") > 512 ||
+    !Number.isSafeInteger(record.created) || Number(record.created) < 0 ||
+    (record.phase !== "held" && record.phase !== "committed")
+  ) return undefined;
+  return record as unknown as LockOwner;
+}
+
+async function readLockSnapshot(
+  path: string,
+): Promise<LockSnapshot | undefined> {
+  let info;
+  try {
+    info = await lstat(path);
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return { kind: "missing" };
+    }
+    throw new WispError("bus_unwritable", "Cannot inspect write-lock owner", {
+      path,
+      reason: "stat_failed",
+    });
+  }
+  if (info.isSymbolicLink()) {
+    throw new WispError("bus_unwritable", "Write-lock owner is a symlink", {
+      path,
+      reason: "path_is_symlink",
+    });
+  }
+  if (!info.isFile()) {
+    throw new WispError("bus_unwritable", "Write-lock owner is not a regular file", {
+      path,
+      reason: "path_not_regular_file",
+    });
+  }
+  const flags = fsConstants.O_RDONLY |
+    (typeof fsConstants.O_NOFOLLOW === "number" ? fsConstants.O_NOFOLLOW : 0);
+  let handle;
+  try {
+    handle = await open(path, flags);
+    const bytes = await handle.readFile();
+    let value: unknown;
+    try {
+      const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+      value = JSON.parse(text);
+    } catch {
+      return {
+        kind: "malformed",
+        bytes,
+        created: undefined,
+        salvaged: undefined,
+      };
+    }
+    const owner = decodeLockOwner(value);
+    if (owner !== undefined) return { kind: "valid", owner };
+    const record = value !== null && typeof value === "object" &&
+      !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+    const created = record !== undefined &&
+      Number.isSafeInteger(record.created) && Number(record.created) >= 0
+      ? Number(record.created)
+      : undefined;
+    const salvaged = record !== undefined &&
+      validPlatformPid(record.pid) && qualifiedIdentity(record.process_identity)
+      ? {
+        pid: record.pid,
+        process_identity: record.process_identity,
+      }
+      : undefined;
+    return { kind: "malformed", bytes, created, salvaged };
+  } catch (error) {
+    if (error instanceof WispError) throw error;
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      // The owner existed at lstat time but disappeared before or during the
+      // no-follow read. That is a present-to-missing race, not owner-missing.
+      return undefined;
+    }
+    throw new WispError("bus_unwritable", "Cannot read write-lock owner", {
+      path,
+      reason: "open_failed",
+    });
+  } finally {
+    await handle?.close().catch(() => undefined);
+  }
+}
+
+function sameLockSnapshot(left: LockSnapshot, right: LockSnapshot): boolean {
+  if (left.kind !== right.kind) return false;
+  if (left.kind === "missing") return true;
+  if (left.kind === "valid" && right.kind === "valid") {
+    return sameLockOwner(left.owner, right.owner);
+  }
+  return left.kind === "malformed" && right.kind === "malformed" &&
+    left.bytes.equals(right.bytes);
+}
+
 function sameLockOwner(left: LockOwner, right: LockOwner): boolean {
   return left.token === right.token && left.pid === right.pid &&
     left.process_identity === right.process_identity && left.created === right.created &&
     left.phase === right.phase;
-}
-
-async function readMalformedOwnerCreated(path: string): Promise<number | undefined> {
-  const flags = fsConstants.O_RDONLY |
-    (typeof fsConstants.O_NOFOLLOW === "number" ? fsConstants.O_NOFOLLOW : 0);
-  try {
-    const handle = await open(path, flags);
-    try {
-      const value = JSON.parse(await handle.readFile("utf8")) as Record<string, unknown>;
-      return typeof value.created === "number" &&
-        Number.isFinite(value.created) && Number.isInteger(value.created) && value.created >= 0
-        ? value.created
-        : undefined;
-    } finally {
-      await handle.close();
-    }
-  } catch {
-    return undefined;
-  }
 }
 
 async function readLockOwner(path: string): Promise<LockOwner> {
@@ -929,16 +1072,10 @@ async function readLockOwner(path: string): Promise<LockOwner> {
   try {
     const info = await handle.stat();
     if (!info.isFile()) throw new Error("lock owner is not a regular file");
-    const value = JSON.parse(await handle.readFile("utf8")) as Record<string, unknown>;
-    if (
-      Object.keys(value).sort().join(",") !== "created,phase,pid,process_identity,token" ||
-      typeof value.token !== "string" || !/^[0-9a-f-]{36}$/u.test(value.token) ||
-      typeof value.pid !== "number" || !Number.isInteger(value.pid) || value.pid <= 0 ||
-      typeof value.process_identity !== "string" || value.process_identity.length === 0 ||
-      typeof value.created !== "number" || !Number.isInteger(value.created) || value.created < 0 ||
-      (value.phase !== "held" && value.phase !== "committed")
-    ) throw new Error("invalid lock owner");
-    return value as unknown as LockOwner;
+    const value = JSON.parse(await handle.readFile("utf8"));
+    const owner = decodeLockOwner(value);
+    if (owner === undefined) throw new Error("invalid lock owner");
+    return owner;
   } finally {
     await handle.close().catch(() => undefined);
   }

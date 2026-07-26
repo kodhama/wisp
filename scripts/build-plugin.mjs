@@ -27,9 +27,5 @@ const normalized = generated.replace(/^[\t ]+$/gm, "");
 if (normalized !== generated) await writeFile(outfile, normalized);
 const bundle = Buffer.from(normalized, "utf8");
 const digest = createHash("sha256").update(bundle).digest("hex");
-const qualificationPath = "plugins/wisp/qualification.json";
-const qualification = JSON.parse(await readFile(qualificationPath, "utf8"));
-qualification.artifact_sha256 = digest;
-await writeFile(qualificationPath, `${JSON.stringify(qualification, null, 2)}\n`);
 
 process.stderr.write(`built ${outfile} (${bundle.byteLength} bytes, sha256 ${digest})\n`);

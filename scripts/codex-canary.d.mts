@@ -3,6 +3,7 @@ export interface CommandResult {
   signal: NodeJS.Signals | null;
   timedOut: boolean;
   outputExceeded: boolean;
+  callbackFailed: boolean;
   spawnError: Error | undefined;
   stdout: Buffer;
   stderr: Buffer;
@@ -35,6 +36,19 @@ export function runCommand(
   },
 ): Promise<CommandResult>;
 
+export function createOutputCollector(
+  limit: number,
+  onOverflow?: () => void,
+): {
+  accept(stream: "stdout" | "stderr", chunk: Uint8Array): boolean;
+  result(): {
+    acceptedBytes: number;
+    outputExceeded: boolean;
+    stdout: Buffer;
+    stderr: Buffer;
+  };
+};
+
 export function normalizeTranscript(
   values: unknown[],
   options: {
@@ -46,12 +60,20 @@ export function normalizeTranscript(
 ): NormalizedTranscript;
 
 export function classifyCanary(options: {
-  mode: "weekly" | "candidate";
+  mode: "weekly" | "manual";
   normalized: NormalizedTranscript;
   busPathVerified: boolean;
   dashboardHealthPassed: boolean;
   provenPreToolAbsence: boolean;
+  outputExceeded?: boolean;
+  callbackFailed?: boolean;
 }): "pass" | "fail" | "inconclusive";
+
+export function dashboardHealth(
+  urlText: string,
+  parentSignal?: AbortSignal,
+  fetchImpl?: typeof fetch,
+): Promise<boolean>;
 
 export function buildCodexExecArgs(fixture: string, prompt: string): string[];
 
@@ -65,6 +87,8 @@ export function workflowContext(env?: NodeJS.ProcessEnv): {
   workflow_run_url: string;
   git_sha: string;
 };
+
+export function validateCanaryEvidence(value: unknown): Record<string, unknown>;
 
 export function installOutcomeFailed(value: string | undefined): boolean;
 

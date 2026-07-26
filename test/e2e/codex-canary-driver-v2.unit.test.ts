@@ -1,13 +1,16 @@
-// SPEC-0002@v7 S6/S11/S14 / R5-R6/R13/R17 — Codex JSONL and pre-sink safety.
+// SPEC-0002@v8 S6/S11/S14-S16 / R5-R6/R13/R17-R19 — Codex JSONL and pre-sink safety.
 import { describe, expect, it, vi } from "vitest";
 import {
   buildCodexExecArgs,
   classifyCanary,
   commandEnvironments,
+  createOutputCollector,
+  dashboardHealth,
   execProvesPreToolAbsence,
   installOutcomeFailed,
   normalizeTranscript,
   runCommand,
+  validateCanaryEvidence,
   validCanonicalStatus,
   workflowContext,
 } from "../../scripts/codex-canary.mjs";
@@ -69,7 +72,7 @@ function successLines() {
   ];
 }
 
-describe("SPEC-0002@v7 real Codex canary normalization", () => {
+describe("SPEC-0002@v8 real Codex Preview-smoke normalization", () => {
   it("normalizes only exact top-level successful Wisp calls and proves each boolean independently", () => {
     const normalized = normalizeTranscript(successLines(), {
       nonce,
@@ -142,7 +145,7 @@ describe("SPEC-0002@v7 real Codex canary normalization", () => {
       provenPreToolAbsence: true,
     })).toBe("inconclusive");
     expect(classifyCanary({
-      mode: "candidate",
+      mode: "manual",
       normalized: noCalls,
       busPathVerified: false,
       dashboardHealthPassed: false,
@@ -311,6 +314,73 @@ describe("SPEC-0002@v7 real Codex canary normalization", () => {
     expect(Date.now() - started).toBeLessThan(1_000);
   });
 
+  it("accepts the exact combined output limit and rejects the whole crossing chunk and all later output", () => {
+    const aborted: string[] = [];
+    const collector = createOutputCollector(10, () => aborted.push("abort"));
+    expect(collector.accept("stdout", Buffer.from("1234"))).toBe(true);
+    expect(collector.accept("stderr", Buffer.from("567890"))).toBe(true);
+    expect(collector.accept("stdout", Buffer.from("x"))).toBe(false);
+    expect(collector.accept("stderr", Buffer.from("later"))).toBe(false);
+    expect(collector.result()).toMatchObject({
+      outputExceeded: true,
+      acceptedBytes: 10,
+      stdout: Buffer.from("1234"),
+      stderr: Buffer.from("567890"),
+    });
+    expect(aborted).toEqual(["abort"]);
+  });
+
+  it("turns streamed callback failures into typed failure and aborts the child", async () => {
+    const secret = `Bearer ${"Z".repeat(43)}`;
+    const stdout = vi.spyOn(process.stdout, "write");
+    const stderr = vi.spyOn(process.stderr, "write");
+    try {
+      const result = await runCommand(
+        process.execPath,
+        ["-e", "console.log('line');setInterval(()=>{},1000)"],
+        {
+          timeoutMs: 2_000,
+          killGraceMs: 20,
+          onStdoutLine: async () => {
+            throw new Error(secret);
+          },
+        },
+      );
+      expect(result.callbackFailed).toBe(true);
+      expect(result.status).not.toBe(0);
+      expect(stdout).not.toHaveBeenCalled();
+      expect(stderr).not.toHaveBeenCalled();
+      expect(result.stderr.toString()).not.toContain(secret);
+    } finally {
+      stdout.mockRestore();
+      stderr.mockRestore();
+    }
+  });
+
+  it("reduces every health exception path to false without emitting thrown values", async () => {
+    const url =
+      `http://127.0.0.1:43123/#capability=${"A".repeat(43)}`;
+    const secret = `Bearer ${"Z".repeat(43)}`;
+    const throwingStatus = {
+      get status() {
+        throw new Error(secret);
+      },
+    };
+    for (const fetchImpl of [
+      () => {
+        throw new Error(secret);
+      },
+      () => Promise.reject(new Error(secret)),
+      () => Promise.resolve(throwingStatus),
+    ]) {
+      await expect(dashboardHealth(
+        url,
+        undefined,
+        fetchImpl as unknown as typeof fetch,
+      )).resolves.toBe(false);
+    }
+  });
+
   it("requires real workflow provenance and honors the Codex installation outcome", () => {
     expect(workflowContext({
       GITHUB_RUN_ID: "123",
@@ -345,6 +415,43 @@ describe("SPEC-0002@v7 real Codex canary normalization", () => {
     expect(installOutcomeFailed("success")).toBe(false);
     expect(installOutcomeFailed("failure")).toBe(true);
     expect(() => installOutcomeFailed("skipped")).toThrow("invalid Codex install outcome");
+  });
+
+  it("validates the exact Preview-smoke evidence schema and pass invariants", () => {
+    const evidence = {
+      schema: 1,
+      mode: "manual",
+      result: "pass",
+      started_at: "2026-07-26T00:00:00.000Z",
+      finished_at: "2026-07-26T00:00:01.000Z",
+      workflow_id: 123,
+      workflow_run_url: "https://github.com/kodhama/wisp/actions/runs/123",
+      git_sha: "a".repeat(40),
+      marketplace_source: "kodhama/stewards",
+      codex_version: "codex-cli 1.0.0",
+      plugin_version: "0.2.1-rc.4",
+      completed_tools: ["wisp_check", "wisp_status", "wisp_dashboard"],
+      check_passed: true,
+      write_passed: true,
+      bus_path_verified: true,
+      dashboard_call_passed: true,
+      dashboard_health_passed: true,
+      transcript_verified: true,
+    };
+    expect(validateCanaryEvidence(evidence)).toEqual(evidence);
+    for (const invalid of [
+      { ...evidence, unknown: true },
+      { ...evidence, mode: "candidate" },
+      { ...evidence, marketplace_source: " " },
+      { ...evidence, finished_at: "2026-07-25T23:59:59.000Z" },
+      { ...evidence, plugin_version: "01.0.0" },
+      { ...evidence, completed_tools: ["wisp_status", "wisp_check", "wisp_dashboard"] },
+      { ...evidence, dashboard_health_passed: false },
+    ]) {
+      expect(() => validateCanaryEvidence(invalid)).toThrow(
+        "invalid canary evidence",
+      );
+    }
   });
 
   it("exposes the release secret only to codex exec children", () => {

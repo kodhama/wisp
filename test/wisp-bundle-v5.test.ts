@@ -199,6 +199,6 @@ describe("SPEC-0001 v6 S2/S9/S11/S18/S21/S22/S31 — clean bundled stdio MCP", (
 
     expect(code).toBe(1);
     expect(stdout.join("")).toBe("");
-    expect(stderr.join("")).toMatch(/^wisp failed to load: /u);
+    expect(stderr.join("")).toBe("wisp failed to load\n");
   });
 });

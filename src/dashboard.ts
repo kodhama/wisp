@@ -19,7 +19,7 @@ const backpressuredResponses = new WeakSet<ServerResponse>();
 
 interface OwnerBase {
   schema: 1;
-  protocol: 1;
+  protocol: number;
   state: "starting" | "ready";
   project: string;
   project_key: string;
@@ -620,23 +620,46 @@ async function readOwner(directory: string, path: string): Promise<OwnerRecord |
   }
 }
 
+function canonicalTimestamp(value: unknown): value is string {
+  return typeof value === "string" &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u.test(value) &&
+    !Number.isNaN(new Date(value).valueOf()) &&
+    new Date(value).toISOString() === value;
+}
+
+function nonblankBounded(value: unknown, maximum: number): value is string {
+  return typeof value === "string" &&
+    value.trim().length > 0 &&
+    !value.includes("\u0000") &&
+    Buffer.byteLength(value, "utf8") <= maximum;
+}
+
 function validOwner(value: Record<string, unknown>): boolean {
   const base = ["schema","protocol","state","project","project_key","instance","pid","process_identity","created_at"];
   const keys = value.state === "ready" ? [...base, "port", "capability", "published_at"] : base;
   return Object.keys(value).sort().join(",") === keys.sort().join(",") &&
-    value.schema === 1 && typeof value.protocol === "number" &&
+    value.schema === 1 && Number.isSafeInteger(value.protocol) &&
+    Number(value.protocol) > 0 &&
     (value.state === "starting" || value.state === "ready") &&
-    typeof value.project === "string" && isAbsolute(value.project) &&
+    nonblankBounded(value.project, Number.MAX_SAFE_INTEGER) &&
+    isAbsolute(value.project) &&
     typeof value.project_key === "string" && /^[0-9a-f]{64}$/u.test(value.project_key) &&
-    typeof value.instance === "string" && /^[0-9a-f-]{36}$/u.test(value.instance) &&
-    typeof value.pid === "number" && Number.isInteger(value.pid) && value.pid > 0 &&
-    typeof value.process_identity === "string" && value.process_identity.length > 0 &&
-    typeof value.created_at === "string" && !Number.isNaN(Date.parse(value.created_at)) &&
+    typeof value.instance === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u.test(value.instance) &&
+    Number.isSafeInteger(value.pid) && Number(value.pid) > 0 &&
+    Number(value.pid) <= 2_147_483_647 &&
+    nonblankBounded(value.process_identity, 512) &&
+    canonicalTimestamp(value.created_at) &&
     (value.state !== "ready" || (
-      typeof value.port === "number" && Number.isInteger(value.port) && value.port > 0 && value.port <= 65535 &&
+      Number.isInteger(value.port) && Number(value.port) > 0 && Number(value.port) <= 65535 &&
       typeof value.capability === "string" && /^[A-Za-z0-9_-]{43}$/u.test(value.capability) &&
-      typeof value.published_at === "string" && !Number.isNaN(Date.parse(value.published_at))
+      canonicalTimestamp(value.published_at)
     ));
+}
+
+export function validDashboardOwnerForTesting(value: unknown): boolean {
+  return value !== null && typeof value === "object" && !Array.isArray(value) &&
+    validOwner(value as Record<string, unknown>);
 }
 
 function exactOwner(left: OwnerRecord | undefined, right: OwnerRecord): boolean {

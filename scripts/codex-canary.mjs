@@ -1,15 +1,13 @@
 #!/usr/bin/env node
-// SPEC-0002@v7 S6/S11/S14 / R5-R6/R13/R17.
+// SPEC-0002@v8 S6/S11/S14-S16 / R5-R6/R13/R17-R19.
 import { spawn } from "node:child_process";
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import {
-  access,
   mkdir,
   mkdtemp,
   readFile,
   readdir,
   rm,
-  writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
@@ -28,7 +26,7 @@ const EXTERNAL_ABSENCE =
 const DASHBOARD_URL =
   /^http:\/\/127\.0\.0\.1:([1-9]\d{0,4})\/#capability=([A-Za-z0-9_-]{43})$/u;
 const SEMVER =
-  /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u;
+  /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u;
 const ISO_MILLISECONDS = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
 const COMMAND_TIMEOUT_MS = 120_000;
 const VERSION_TIMEOUT_MS = 30_000;
@@ -50,8 +48,6 @@ function parseArguments(argv) {
     "--mode",
     "--marketplace-source",
     "--marketplace-ref",
-    "--version",
-    "--sha256",
     "--output",
   ]);
   if (argv.length % 2 !== 0) throw new Error("invalid arguments");
@@ -64,19 +60,44 @@ function parseArguments(argv) {
     }
     values[key.slice(2)] = value;
   }
-  if (!["weekly", "candidate"].includes(values.mode) ||
+  if (!["weekly", "manual"].includes(values.mode) ||
     !values["marketplace-source"] || !values["marketplace-ref"] ||
     !values.output || !isAbsolute(values.output)) {
     throw new Error("invalid arguments");
   }
-  if (values.mode === "candidate" &&
-    (!SEMVER.test(values.version ?? "") || !/^[0-9a-f]{64}$/u.test(values.sha256 ?? ""))) {
-    throw new Error("invalid candidate identity");
-  }
-  if (values.mode === "weekly" && (values.version || values.sha256)) {
-    throw new Error("weekly identity is resolved from the install");
-  }
   return values;
+}
+
+export function createOutputCollector(limit, onOverflow = () => undefined) {
+  if (!Number.isSafeInteger(limit) || limit < 0) {
+    throw new Error("invalid output limit");
+  }
+  let acceptedBytes = 0;
+  let outputExceeded = false;
+  const stdout = [];
+  const stderr = [];
+  return {
+    accept(stream, chunk) {
+      if (outputExceeded) return false;
+      const bytes = Buffer.from(chunk);
+      if (acceptedBytes + bytes.byteLength > limit) {
+        outputExceeded = true;
+        onOverflow();
+        return false;
+      }
+      acceptedBytes += bytes.byteLength;
+      (stream === "stdout" ? stdout : stderr).push(bytes);
+      return true;
+    },
+    result() {
+      return {
+        acceptedBytes,
+        outputExceeded,
+        stdout: Buffer.concat(stdout),
+        stderr: Buffer.concat(stderr),
+      };
+    },
+  };
 }
 
 export async function runCommand(command, args, options = {}) {
@@ -85,16 +106,12 @@ export async function runCommand(command, args, options = {}) {
   const maxOutputBytes =
     options.maxOutputBytes ?? DEFAULT_OUTPUT_LIMIT_BYTES;
   return new Promise((resolveRun) => {
-    let finishing = false;
     let resolved = false;
     let timedOut = false;
     let spawnError;
-    let outputExceeded = false;
-    let outputBytes = 0;
+    let callbackFailed = false;
     let pendingLine = "";
     let callbacks = Promise.resolve();
-    const stdout = [];
-    const stderr = [];
     const decoder = new StringDecoder("utf8");
     const child = spawn(command, args, {
       cwd: options.cwd,
@@ -124,83 +141,60 @@ export async function runCommand(command, args, options = {}) {
         // The process may have exited between the liveness check and signal.
       }
     };
-    const append = (target, chunk) => {
-      if (outputExceeded) return;
-      const bytes = Buffer.from(chunk);
-      outputBytes += bytes.byteLength;
-      if (outputBytes > maxOutputBytes) {
-        outputExceeded = true;
-        callbackAbort.abort();
-        terminate("SIGKILL");
-        resolveDeadline();
-        resolveTermination();
-        void finish(child.exitCode, child.signalCode);
-        return;
-      }
-      target.push(bytes);
-    };
-    let resolveDeadline;
-    const deadlineReached = new Promise((resolve) => {
-      resolveDeadline = resolve;
-    });
-    let resolveTermination;
-    const terminationFinished = new Promise((resolve) => {
-      resolveTermination = resolve;
+    let stopCallbacks;
+    const callbacksStopped = new Promise((resolve) => {
+      stopCallbacks = resolve;
     });
     let killTimer;
+    const terminateWithGrace = () => {
+      callbackAbort.abort();
+      stopCallbacks();
+      terminate("SIGTERM");
+      killTimer ??= setTimeout(() => terminate("SIGKILL"), killGraceMs);
+    };
+    const collector = createOutputCollector(maxOutputBytes, terminateWithGrace);
     const deadline = setTimeout(() => {
       timedOut = true;
-      callbackAbort.abort();
-      terminate("SIGTERM");
-      resolveDeadline();
-      killTimer = setTimeout(() => {
-        terminate("SIGKILL");
-        resolveTermination();
-      }, killGraceMs);
-      void finish(child.exitCode, child.signalCode);
+      terminateWithGrace();
     }, timeoutMs);
     const queueCallback = (line) => {
+      if (!options.onStdoutLine || callbackAbort.signal.aborted) return;
       callbacks = callbacks
-        .catch(() => undefined)
-        .then(() => options.onStdoutLine(line, callbackState));
+        .then(async () => {
+          if (callbackAbort.signal.aborted) return;
+          try {
+            await options.onStdoutLine(line, callbackState);
+          } catch {
+            callbackFailed = true;
+            terminateWithGrace();
+          }
+        });
     };
     const finish = async (status, signal) => {
-      if (finishing || resolved) return;
-      finishing = true;
-      if (pendingLine !== "" && options.onStdoutLine) {
+      if (resolved) return;
+      if (pendingLine !== "" && !collector.result().outputExceeded) {
         queueCallback(pendingLine);
       }
-      const callbackResult = callbacks
-        .then(() => "callbacks")
-        .catch(() => "callbacks");
-      const winner = await Promise.race([
-        callbackResult,
-        deadlineReached.then(() => "deadline"),
-      ]);
-      if (winner === "callbacks" && !timedOut) {
-        clearTimeout(deadline);
-        resolveTermination();
-      } else {
-        await terminationFinished;
-        void callbacks.catch(() => undefined);
-      }
-      if (!timedOut) clearTimeout(deadline);
-      if (killTimer !== undefined && !timedOut) clearTimeout(killTimer);
+      await Promise.race([callbacks, callbacksStopped]);
+      void callbacks.catch(() => undefined);
+      clearTimeout(deadline);
+      if (killTimer !== undefined) clearTimeout(killTimer);
       resolved = true;
+      const output = collector.result();
       resolveRun({
         status: child.exitCode ?? status,
         signal: child.signalCode ?? signal,
         timedOut,
-        outputExceeded,
+        outputExceeded: output.outputExceeded,
+        callbackFailed,
         spawnError,
-        stdout: Buffer.concat(stdout),
-        stderr: Buffer.concat(stderr),
+        stdout: output.stdout,
+        stderr: output.stderr,
       });
     };
     child.stdout.on("data", (chunk) => {
       const bytes = Buffer.from(chunk);
-      append(stdout, bytes);
-      if (outputExceeded) return;
+      if (!collector.accept("stdout", bytes)) return;
       if (!options.onStdoutLine) return;
       pendingLine += decoder.write(bytes);
       const lines = pendingLine.split("\n");
@@ -209,10 +203,11 @@ export async function runCommand(command, args, options = {}) {
         queueCallback(line);
       }
     });
-    child.stderr.on("data", (chunk) => append(stderr, chunk));
+    child.stderr.on("data", (chunk) => {
+      collector.accept("stderr", chunk);
+    });
     child.once("error", (error) => {
       spawnError = error;
-      append(stderr, Buffer.from(error.message));
       void finish(null, null);
     });
     child.once("close", (status, signal) => {
@@ -330,7 +325,10 @@ export function classifyCanary({
   busPathVerified,
   dashboardHealthPassed,
   provenPreToolAbsence,
+  outputExceeded = false,
+  callbackFailed = false,
 }) {
+  if (outputExceeded || callbackFailed) return "fail";
   const pass = !normalized.incomplete_wisp_call &&
     JSON.stringify(normalized.completed_tools) === JSON.stringify(REPRESENTATIVE_TOOLS) &&
     normalized.check_passed &&
@@ -359,7 +357,11 @@ export function buildCodexExecArgs(fixture, prompt) {
   ];
 }
 
-async function dashboardHealth(urlText, parentSignal) {
+export async function dashboardHealth(
+  urlText,
+  parentSignal,
+  fetchImpl = globalThis.fetch,
+) {
   const match = DASHBOARD_URL.exec(urlText);
   if (!match) return false;
   const url = new URL(urlText);
@@ -369,11 +371,13 @@ async function dashboardHealth(urlText, parentSignal) {
   parentSignal?.addEventListener("abort", abort, { once: true });
   const timeout = setTimeout(abort, DASHBOARD_HEALTH_TIMEOUT_MS);
   try {
-    const response = await fetch(`${url.origin}/api/health`, {
+    const response = await fetchImpl(`${url.origin}/api/health`, {
       headers: { Authorization: `Bearer ${match[2]}` },
       signal: controller.signal,
-    }).catch(() => undefined);
-    return response?.status === 200;
+    });
+    return response.status === 200;
+  } catch {
+    return false;
   } finally {
     clearTimeout(timeout);
     parentSignal?.removeEventListener("abort", abort);
@@ -413,12 +417,8 @@ export function execProvesPreToolAbsence(result) {
       externalAbsence(result.stderr.toString("utf8"));
 }
 
-async function installedVersion(codexHome, requested) {
+async function installedVersion(codexHome) {
   const root = join(codexHome, "plugins/cache/kodhama/wisp");
-  if (requested) {
-    await access(join(root, requested, ".codex-plugin/plugin.json"));
-    return requested;
-  }
   const versions = (await readdir(root, { withFileTypes: true }))
     .filter((entry) => entry.isDirectory() && SEMVER.test(entry.name))
     .map((entry) => entry.name);
@@ -442,6 +442,85 @@ export function workflowContext(env = process.env) {
     workflow_run_url: `https://github.com/${repository}/actions/runs/${workflowId}`,
     git_sha: sha,
   };
+}
+
+export function validateCanaryEvidence(value) {
+  const keys = [
+    "schema",
+    "mode",
+    "result",
+    "started_at",
+    "finished_at",
+    "workflow_id",
+    "workflow_run_url",
+    "git_sha",
+    "marketplace_source",
+    "codex_version",
+    "plugin_version",
+    "completed_tools",
+    "check_passed",
+    "write_passed",
+    "bus_path_verified",
+    "dashboard_call_passed",
+    "dashboard_health_passed",
+    "transcript_verified",
+  ];
+  const canonicalTimestamp = (timestamp) =>
+    typeof timestamp === "string" &&
+    ISO_MILLISECONDS.test(timestamp) &&
+    !Number.isNaN(new Date(timestamp).valueOf()) &&
+    new Date(timestamp).toISOString() === timestamp;
+  const nonblank = (text) =>
+    typeof text === "string" && text.trim() !== "";
+  const orderedUniqueTools = Array.isArray(value?.completed_tools) &&
+    value.completed_tools.every((tool) =>
+      REPRESENTATIVE_TOOLS.includes(tool)
+    ) &&
+    new Set(value.completed_tools).size === value.completed_tools.length &&
+    value.completed_tools.every((tool, index, tools) =>
+      index === 0 ||
+      REPRESENTATIVE_TOOLS.indexOf(tools[index - 1]) <
+        REPRESENTATIVE_TOOLS.indexOf(tool)
+    );
+  const booleans = [
+    "check_passed",
+    "write_passed",
+    "bus_path_verified",
+    "dashboard_call_passed",
+    "dashboard_health_passed",
+    "transcript_verified",
+  ];
+  const valid = exactKeys(value, keys) &&
+    value.schema === 1 &&
+    ["weekly", "manual"].includes(value.mode) &&
+    ["pass", "fail", "inconclusive"].includes(value.result) &&
+    canonicalTimestamp(value.started_at) &&
+    canonicalTimestamp(value.finished_at) &&
+    value.finished_at >= value.started_at &&
+    Number.isSafeInteger(value.workflow_id) &&
+    value.workflow_id > 0 &&
+    new RegExp(
+      `^https://github\\.com/[^/\\s]+/[^/\\s]+/actions/runs/${value.workflow_id}$`,
+      "u",
+    ).test(value.workflow_run_url) &&
+    /^[0-9a-f]{40}$/u.test(value.git_sha) &&
+    nonblank(value.marketplace_source) &&
+    (value.codex_version === null || nonblank(value.codex_version)) &&
+    (value.plugin_version === null ||
+      typeof value.plugin_version === "string" &&
+      SEMVER.test(value.plugin_version)) &&
+    orderedUniqueTools &&
+    booleans.every((key) => typeof value[key] === "boolean");
+  const passValid = value?.result !== "pass" ||
+    value.codex_version !== null &&
+    value.plugin_version !== null &&
+    JSON.stringify(value.completed_tools) ===
+      JSON.stringify(REPRESENTATIVE_TOOLS) &&
+    booleans.every((key) => value[key] === true);
+  if (!valid || !passValid) {
+    throw new Error("invalid canary evidence");
+  }
+  return value;
 }
 
 export function installOutcomeFailed(value) {
@@ -501,13 +580,14 @@ async function main() {
   const { baseEnv, execEnv } = commandEnvironments();
   let codexVersion = null;
   let pluginVersion = null;
-  let bundleSha256 = null;
   let fixture;
   let nonce = `wisp-canary-${randomUUID()}`;
   let records = [];
   let everyLineParsed = true;
   let execStatus = null;
   let execTimedOut = false;
+  let execOutputExceeded = false;
+  let execCallbackFailed = false;
   let dashboardHealthPassed = false;
   let busPathVerified = false;
   let provenPreToolAbsence = false;
@@ -549,14 +629,7 @@ async function main() {
     provenPreToolAbsence ||= outcome.provenAbsence;
     if (!outcome.ok) throw new Error("plugin install failed");
 
-    pluginVersion = await installedVersion(codexHome, args.version);
-    const bundle = join(
-      codexHome,
-      "plugins/cache/kodhama/wisp",
-      pluginVersion,
-      "dist/wisp.mjs",
-    );
-    bundleSha256 = createHash("sha256").update(await readFile(bundle)).digest("hex");
+    pluginVersion = await installedVersion(codexHome);
     fixture = await mkdtemp(join(tmpdir(), "wisp-codex-canary-"));
     const prompt = [
       "Use Wisp MCP tools, not prose simulations.",
@@ -599,6 +672,8 @@ async function main() {
     rawTranscript = execution.stdout;
     execStatus = execution.status;
     execTimedOut = execution.timedOut;
+    execOutputExceeded = execution.outputExceeded;
+    execCallbackFailed = execution.callbackFailed;
     provenPreToolAbsence ||= execProvesPreToolAbsence(execution);
     const busText = await readFile(
       join(fixture, ".wisp/events.ndjson"),
@@ -627,6 +702,8 @@ async function main() {
     busPathVerified,
     dashboardHealthPassed,
     provenPreToolAbsence,
+    outputExceeded: execOutputExceeded,
+    callbackFailed: execCallbackFailed,
   });
   const evidence = {
     schema: 1,
@@ -635,9 +712,9 @@ async function main() {
     started_at: startedAt,
     finished_at: new Date().toISOString(),
     ...context,
+    marketplace_source: args["marketplace-source"],
     codex_version: codexVersion,
     plugin_version: pluginVersion,
-    bundle_sha256: bundleSha256,
     completed_tools: normalized.completed_tools,
     check_passed: normalized.check_passed,
     write_passed: normalized.write_passed,
@@ -647,6 +724,7 @@ async function main() {
     transcript_verified: normalized.transcript_verified,
   };
   const observedCapabilities = extractCapabilities(rawTranscript);
+  validateCanaryEvidence(evidence);
   await writeSafeCanaryArtifacts({
     outputDirectory: args.output,
     rawTranscript,

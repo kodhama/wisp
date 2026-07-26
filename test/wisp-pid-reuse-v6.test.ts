@@ -1,4 +1,4 @@
-// SPEC-0001 v6: S37/S47 / R63 — deterministic same-PID/new-birth recovery.
+// SPEC-0001@v12: S37/S47/S70 / R63/R88 — deterministic identity-safe recovery.
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import {
@@ -14,6 +14,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const identity = vi.hoisted(() => ({
   current: "test-qualified:birth-B",
+  observation: undefined as undefined |
+    { state: "present"; token: string } |
+    { state: "absent" } |
+    { state: "inconclusive" },
   gate: undefined as undefined | (() => void),
   waiting: undefined as undefined | Promise<void>,
 }));
@@ -27,7 +31,8 @@ vi.mock("../src/process-identity.ts", async () => {
     currentProcessIdentity: async () => identity.current,
     observeProcess: async () => {
       if (identity.waiting !== undefined) await identity.waiting;
-      return { state: "present" as const, token: identity.current };
+      return identity.observation ??
+        { state: "present" as const, token: identity.current };
     },
   };
 });
@@ -39,6 +44,7 @@ const originalHome = process.env.HOME;
 
 afterEach(() => {
   identity.current = "test-qualified:birth-B";
+  identity.observation = undefined;
   identity.gate = undefined;
   identity.waiting = undefined;
   if (originalHome === undefined) delete process.env.HOME;
@@ -55,7 +61,7 @@ function lockOwner(processIdentity: string, token: string): Record<string, unkno
   };
 }
 
-describe("SPEC-0001 v6 deterministic PID-reuse recovery", () => {
+describe("SPEC-0001@v12 deterministic PID-reuse recovery", () => {
   it("quarantines an actual dashboard owner with the same PID and old birth token", async () => {
     const project = await realpath(await mkdtemp(join(tmpdir(), "wisp-pid-dashboard-project-")));
     const home = await realpath(await mkdtemp(join(tmpdir(), "wisp-pid-dashboard-home-")));
@@ -125,5 +131,87 @@ describe("SPEC-0001 v6 deterministic PID-reuse recovery", () => {
     await recovery;
 
     expect(JSON.parse(await readFile(ownerPath, "utf8"))).toEqual(replacement);
+  });
+
+  it.each([
+    ["same token", { state: "present", token: "linux:00000000-0000-4000-8000-000000000001:1" }],
+    ["inconclusive", { state: "inconclusive" }],
+  ] as const)("keeps a malformed owner with usable identity on %s observation", async (
+    _label,
+    observation,
+  ) => {
+    const root = await mkdtemp(join(tmpdir(), "wisp-malformed-live-"));
+    const lock = join(root, ".wisp/write.lock");
+    const ownerPath = join(lock, "owner.json");
+    await mkdir(lock, { recursive: true, mode: 0o700 });
+    const owner = {
+      ...lockOwner(
+        "linux:00000000-0000-4000-8000-000000000001:1",
+        "00000000-0000-4000-8000-000000000001",
+      ),
+      unexpected: true,
+    };
+    await writeFile(ownerPath, JSON.stringify(owner), { mode: 0o600 });
+    identity.observation = observation;
+
+    await recoverStaleLock(lock, ownerPath);
+
+    expect(JSON.parse(await readFile(ownerPath, "utf8"))).toEqual(owner);
+  });
+
+  it.each([
+    ["absent", { state: "absent" }],
+    ["different token", {
+      state: "present",
+      token: "linux:00000000-0000-4000-8000-000000000001:2",
+    }],
+  ] as const)("recovers a malformed owner with usable identity on %s observation", async (
+    _label,
+    observation,
+  ) => {
+    const root = await mkdtemp(join(tmpdir(), "wisp-malformed-dead-"));
+    const lock = join(root, ".wisp/write.lock");
+    const ownerPath = join(lock, "owner.json");
+    await mkdir(lock, { recursive: true, mode: 0o700 });
+    await writeFile(ownerPath, JSON.stringify({
+      ...lockOwner(
+        "linux:00000000-0000-4000-8000-000000000001:1",
+        "00000000-0000-4000-8000-000000000001",
+      ),
+      unexpected: true,
+    }), { mode: 0o600 });
+    identity.observation = observation;
+
+    await recoverStaleLock(lock, ownerPath);
+
+    await expect(stat(lock)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("requires byte-for-byte equality after observing a malformed owner", async () => {
+    const root = await mkdtemp(join(tmpdir(), "wisp-malformed-race-"));
+    const lock = join(root, ".wisp/write.lock");
+    const ownerPath = join(lock, "owner.json");
+    await mkdir(lock, { recursive: true, mode: 0o700 });
+    const owner = {
+      ...lockOwner(
+        "linux:00000000-0000-4000-8000-000000000001:1",
+        "00000000-0000-4000-8000-000000000001",
+      ),
+      unexpected: true,
+    };
+    await writeFile(ownerPath, JSON.stringify(owner), { mode: 0o600 });
+    identity.observation = { state: "absent" };
+    identity.waiting = new Promise<void>((resolveGate) => {
+      identity.gate = resolveGate;
+    });
+    const recovery = recoverStaleLock(lock, ownerPath);
+    await new Promise((resolveWait) => setTimeout(resolveWait, 10));
+    const replacement = JSON.stringify({ ...owner, unexpected: false });
+    await writeFile(ownerPath, replacement, { mode: 0o600 });
+    identity.gate?.();
+
+    await recovery;
+
+    expect(await readFile(ownerPath, "utf8")).toBe(replacement);
   });
 });
