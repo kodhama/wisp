@@ -18,6 +18,22 @@ version: 8
 # SPEC-0002 — Reproducible Codex adapter and dashboard E2E
 
 > **AMENDED 2026-07-26**
+> **WHAT:** Closed three intrinsic capability-safety gaps in v8: the exact
+> combined subprocess-output bound, silent health/callback failure reduction,
+> and immutable pre-sink browser-evidence ordering.
+> **WHY:** The first intrinsic spec-adversary pass found that the retained
+> volatile and browser boundaries were not exact enough to prove fail-closed
+> behavior under overflow, exceptions, or capability-discard races.
+> **SCOPE:** Canary buffering and result precedence, health/callback failure
+> handling, browser evidence preparation/persistence, acceptance criteria,
+> verification matrix, rubric, and gate record. Version remains 8 because the
+> repair closes existing safety guarantees without changing ADR-0014 scope.
+> **POINTER:** First intrinsic `NEEDS-REVISION` pass for SPEC-0002@v8.
+> **VALUE:** A contributor can inject output, health, callback, and browser
+> failures without risking secret-bearing artifacts or ambiguous smoke results.
+> **CONFIDENCE:** verified.
+
+> **AMENDED 2026-07-26**
 > **WHAT:** Stages SPEC-0001@v12's eight-path Preview payload, retires the
 > exact-candidate verifier and its version/SHA inputs, and reframes scheduled
 > and manual Codex runs as live marketplace-drift smoke with no qualification
@@ -29,7 +45,8 @@ version: 8
 > matrix, and verifier removal; version advanced from 7 to 8. The pinned
 > Playwright supply-chain digest, Node 24 execution target, runtime/dashboard
 > assertions, process cleanup, and capability-safe evidence boundaries remain
-> unchanged.
+> in scope; the follow-up v8 amendment above makes the retained safety
+> boundaries intrinsically exact.
 > **POINTER:** ADR-0014 and SPEC-0001@v12.
 > **VALUE:** A contributor gets deterministic regression coverage and a live
 > Preview drift signal without representing either as support certification.
@@ -231,10 +248,27 @@ failure, timeout, browser crash, process signal, or cleanup failure follows
 the same pre-sink rules; no framework default failure writer may bypass the
 harness in either direct or container execution.
 
-After the interval ends, and only after the same absence scans pass, the suite
-may persist canonical JSON plus one LF at
-`test-results/browser-evidence.json`. The object rejects unknown properties
-and contains exactly:
+After every page/context is closed and every observer is detached, but while
+the complete exact observed-capability set is still retained, browser
+evidence preparation SHALL run in this order:
+
+1. Build the complete flat prospective evidence object from reduced typed
+   values and freeze that object against mutation.
+2. Validate its exact schema and pass/fail invariants.
+3. Serialize it exactly once as
+   `JSON.stringify(frozenEvidence, null, 2) + "\n"` and retain those
+   prospective UTF-8 bytes in volatile memory.
+4. Scan those exact bytes against every exact observed capability and the
+   fragment- and bearer-shaped grammars.
+5. Only after validation and every scan succeeds, discard the observed
+   capabilities; that discard ends the capability-bearing interval.
+6. After the interval, persist only the already validated and scanned byte
+   buffer at `test-results/browser-evidence.json`, without rebuilding,
+   mutating, reserializing, or substituting evidence.
+
+Preparation, freeze, validation, serialization, scan, or cleanup failure
+discards the capabilities, writes no browser evidence, and permits no upload.
+The frozen object rejects unknown properties and contains exactly:
 
 ```json
 {
@@ -333,6 +367,16 @@ has its own 5,000 ms upper bound, and aborts earlier when the parent exec
 deadline signal fires. A timed-out execution or callback cannot satisfy
 transcript verification.
 
+A dashboard health fetch rejection, synchronous throw, response-access
+exception, 5,000 ms timeout, or parent abort SHALL reduce silently to
+`dashboard_health_passed: false`. A streamed-line callback throw or rejection
+SHALL set callback failure and `transcript_verified: false`. Either condition
+forces overall `fail` in weekly and manual modes, never `inconclusive`. The
+volatile boundary SHALL catch these failures without printing, persisting,
+uploading, or serializing the thrown value, request, response, error object,
+Authorization header, bearer, or callback arguments; retained evidence
+contains only the contracted typed fields.
+
 The transcript normalization predicate is exact. A nonblank stdout line is a
 Wisp tool-call item only when it parses as a JSON object whose top-level
 `type` is `item.started` or `item.completed` and whose `item` is an object
@@ -368,10 +412,25 @@ The six behavioral booleans have these exclusive truth conditions:
   `turn.failed` or top-level `error`, and `codex exec` exits `0` before its
   deadline.
 
-The driver SHALL consume raw Codex stdout through a bounded volatile
-pipe/buffer and SHALL NOT tee, log, cache, persist, or upload those raw bytes.
-It computes the six behavioral booleans and performs the authenticated health
-request from that volatile stream while the Codex process is live.
+For each spawned command, stdout and stderr share one exact
+`4,194,304-byte` raw acceptance budget. Complete incoming chunks are
+considered in callback-arrival order. A chunk is accepted only when its full
+byte length keeps the combined accepted total at or below 4,194,304. The
+first crossing chunk is wholly rejected; no partial bytes from it and no
+later output are accepted. Overflow aborts streamed callbacks, terminates the
+process group under the same deadline cleanup, sets `outputExceeded`, and
+forces overall `fail` in weekly and manual modes, never `inconclusive`.
+
+Accepted stdout and stderr remain volatile and SHALL NOT be teed, logged,
+cached, or uploaded raw. For `codex exec`, only the previously accepted stdout
+prefix is eligible to become `codex.jsonl`; accepted stderr remains volatile
+and may contribute only to typed result classification. The accepted stdout
+prefix still undergoes the exact capability transformation and absence scans
+below. Only its resulting scanned bytes and the scanned typed evidence may
+cross the first persistent sink. A truncated/unsafe prefix, transform error,
+or scan failure produces no transcript or upload. The driver computes the six
+behavioral booleans and performs authenticated health from volatile values
+while the Codex process is live.
 
 Before the first persistent write, it derives retained `codex.jsonl` from the
 raw bytes with exactly these byte replacements everywhere, including nested
@@ -455,6 +514,10 @@ with no Wisp tool call and no proven pre-tool absence is also `fail`. Manual
 mode never records `inconclusive`: every pre-tool absence or behavioral
 failure is `fail`. Neither smoke mode affects pull-request gates, package
 identity, release, or support posture.
+
+Output overflow and any health or streamed-callback exception defined above
+take precedence over pre-tool external-absence classification and are always
+`fail` in both modes.
 
 For this precedence, a pre-tool external absence is proven only when spawning
 Codex fails, the workflow's Codex installation step fails, a marketplace or
@@ -572,6 +635,38 @@ provider tests.
   parsed major is asserted as `24`, and a mismatch prevents Playwright or
   canary execution; the current pinned container observation is `v24.16.0`.
 
+**S15 — Combined output overflow fails safely**
+
+- **Given** subprocess chunks whose accepted stdout-plus-stderr total is
+  exactly 4,194,304 bytes and whose next complete chunk crosses that bound,
+- **When** the volatile command collector receives them,
+- **Then** it accepts every prior whole chunk, rejects the whole crossing
+  chunk and all later output, aborts callbacks, terminates the process group,
+  records `fail` in either smoke mode, and persists at most the previously
+  accepted stdout prefix after the ordinary transformation and scans.
+
+**S16 — Health and callback exceptions are typed failures**
+
+- **Given** injected health fetch rejection, synchronous throw,
+  response-access exception, timeout, parent abort, and streamed-callback
+  throw or rejection whose error values contain bearer-shaped sentinels,
+- **When** the canary reduces volatile host evidence,
+- **Then** health or transcript verification becomes false, the smoke result
+  is `fail` rather than `inconclusive`, and no thrown value, request, response,
+  error object, Authorization header, bearer, or callback argument reaches a
+  transcript, evidence file, log, or upload.
+
+**S17 — Browser evidence is scanned before capability discard**
+
+- **Given** closed browser contexts, detached observers, reduced evidence, and
+  the complete exact observed-capability set still in memory,
+- **When** browser evidence is prepared,
+- **Then** the object is frozen, validated, serialized once, and its exact
+  prospective bytes are scanned before capabilities are discarded; only
+  those already-scanned bytes may be persisted afterward, and any ordering,
+  mutation, validation, serialization, scan, or cleanup failure writes
+  nothing.
+
 ### Requirements (EARS)
 
 - **R1 (ubiquitous):** The pull-request E2E gate shall require no Codex
@@ -613,15 +708,31 @@ provider tests.
   either real Codex smoke mode executes, its runtime preflight shall record
   the exact Node version, assert parsed major `24`, and fail closed on a
   missing, malformed, or non-24 observation.
+- **R18 (state-driven):** While a spawned command is running, stdout and
+  stderr shall share an exact 4,194,304-byte raw budget; the first wholly
+  unaccepted crossing chunk shall abort callbacks and process execution,
+  force `fail`, and leave only the prior accepted stdout prefix eligible for
+  pre-sink transformation, scanning, and persistence.
+- **R19 (unwanted behavior):** If health fetch or response handling rejects,
+  throws, times out, or aborts, or a streamed callback rejects or throws, the
+  canary shall reduce only to false typed evidence and overall `fail` and
+  shall never serialize or emit the thrown value, request/response/error
+  object, Authorization header, bearer, or callback arguments.
+- **R20 (event-driven):** When browser evidence may be retained after cleanup,
+  the suite shall freeze the complete flat object, validate it, serialize it
+  once, and scan those exact bytes against the still-retained complete
+  observed-capability set before discarding capabilities and ending the
+  interval; persistence shall write only that scanned buffer with no rebuild
+  or reserialization.
 
 ## Verification matrix
 
 | Contract area | Minimum evidence |
 |---|---|
 | Installed Preview payload | Fixture staging proves byte-for-byte copying of exactly SPEC-0001@v12's eight paths into the manifest-version cache, rejects `qualification.json` and `surfaces.json`, launches the literal manifest bootstrap, lists seven tools, and confines bus writes to the fixture project |
-| Capability-safe artifacts | Positive fixtures cover one and multiple fragment/bearer occurrences in top-level and nested JSON strings for pass, fail, and inconclusive runs; byte comparisons prove exact sentinel replacement and otherwise-identical retained JSONL, scans cover transcript/evidence/logs, raw-output spies prove no tee or write, and injected transform/scan failures prove no artifact upload |
-| Capability-safe browser failures | Playwright configuration inspection proves trace/video/screenshot/retry/file reporters and attachments are disabled; injected assertion, timeout, crash, signal, and cleanup failures at every browser stage place the observed capability in page URL, bearer, console, network, exception, and reporter inputs; sink spies prove interception precedes writes/logs, unsafe messages reduce only to the fixed error, the output directory receives no interval file, and the only allowed post-interval file has the exact scanned typed schema |
-| Live Preview smoke | Workflow and driver fixtures prove weekly/current-source and manual/declared-source modes; representative read, write, dashboard, health, bus-path, and model-mediated host behavior; no candidate version or SHA input; no exact-candidate verifier or checked-in evidence mutation; weekly-only inconclusive handling; and no qualification, release, or support result |
+| Capability-safe artifacts | Positive fixtures cover one and multiple fragment/bearer occurrences in top-level and nested JSON strings for pass, fail, and inconclusive runs; byte comparisons prove exact sentinel replacement and otherwise-identical retained JSONL; one shared counter accepts exactly 4,194,304 mixed stdout/stderr bytes, rejects the whole first crossing chunk and later output, aborts callbacks/processes, forces fail in both modes, retains only the prior stdout prefix, and still transforms/scans it before persistence; raw-output spies prove no tee or raw stderr write, and injected transform/scan failures prove no artifact readiness or upload |
+| Capability-safe browser failures | Playwright configuration inspection proves trace/video/screenshot/retry/file reporters and attachments are disabled; injected assertion, timeout, crash, signal, and cleanup failures at every browser stage place the observed capability in page URL, bearer, console, network, exception, and reporter inputs; ordering spies prove cleanup then freeze→validate→single serialization→exact-capability scan→discard/end→same-buffer persistence, mutation attempts cannot alter frozen evidence, persisted bytes equal the pre-scanned buffer, no write occurs before discard, and every preparation/order/failure injection writes nothing |
+| Live Preview smoke | Workflow and driver fixtures prove weekly/current-source and manual/declared-source modes; representative read, write, dashboard, health, bus-path, and model-mediated host behavior; fetch rejection, synchronous throw, response-access failure, timeout, parent abort, and callback throw/rejection reduce silently to false typed fields and fail in both modes; bearer-bearing error/request/response/callback objects reach no sink; no candidate version or SHA input, exact-candidate verifier, checked-in evidence mutation, qualification, release, or support result; and only pre-tool external absence remains weekly-inconclusive |
 | Fast Node gate | Workflow inspection proves one explicit Node 24 setup, no strategy matrix or Node 20/22 entry, one execution of typecheck/unit/build/plugin-validation, and `codex-e2e` dependency on that successful job; documentation treats Node 24 as a technical target, not support |
 | Node runtime preflights | The pinned Playwright image reports `v24.16.0`; container and weekly/manual smoke fixtures record exact runtime output, accept major 24, and fail before test or smoke execution for missing, malformed, Node 20, or Node 22 observations |
 
@@ -635,10 +746,12 @@ None.
 upstreams with the exact behavioral pin; scope is bounded; repository,
 execution, evidence, cadence, retired-verifier, and eight-path staging
 contracts are implementable; GWT scenarios cover deterministic E2E, weekly
-and manual Preview smoke, Node 24 execution, and capability safety; EARS
-requirements state the invariants; every amended contract maps to executable
-evidence; and no unresolved question is hidden. The Grove lifecycle companion
-therefore retains version 8 as `gated` after this self-check.
+and manual Preview smoke, Node 24 execution, exact combined-output overflow,
+silent health/callback failure, and pre-discard browser scanning; S1–S6 and
+S11–S17 use GWT, R1–R6 and R13–R20 use EARS, every amended contract maps to
+executable evidence, and no unresolved question is hidden. The Grove
+lifecycle companion therefore retains version 8 as `gated` after this
+self-check.
 
 ## Gate record
 
@@ -669,3 +782,14 @@ smoke semantics while preserving deterministic E2E, Node 24 execution, and
 capability-safe evidence handling. The configured rubric self-check above
 passed, so this amendment is `gated`; no independent spec-adversary or
 conformance verdict is claimed here.
+
+The first intrinsic spec-adversary pass for gated v8 returned
+`NEEDS-REVISION`: the subprocess-output bound lacked exact combined-stream
+and overflow precedence, health and callback exceptions lacked silent typed
+failure semantics, and browser evidence could be scanned after exact
+capabilities were discarded. This repair specifies the 4,194,304-byte
+whole-chunk boundary, false/fail exception reduction, and
+freeze→validate→serialize-once→scan→discard→same-buffer persistence order in
+prose, GWT, EARS, and the verification matrix while preserving v8 and
+ADR-0014 scope; the rubric self-check remains `PASS`. No second adversary
+verdict is claimed here.

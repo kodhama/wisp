@@ -18,6 +18,22 @@ version: 12
 # SPEC-0001 — Dual-host Wisp plugin, bundled stdio MCP, and project dashboard
 
 > **AMENDED 2026-07-26**
+> **WHAT:** Closed four intrinsic safety gaps in v12: malformed bus-lock
+> salvage, schema-invalid dashboard-owner refusal, capability sink/location
+> semantics, and exact compact-event serialization and byte boundaries.
+> **WHY:** The first intrinsic spec-adversary pass found that the approved
+> runtime guarantees were under-specified at recovery races, secret-bearing
+> transient boundaries, and serialization limits.
+> **SCOPE:** Bus-lock recovery, dashboard-owner validation, capability
+> persistence, event serialization, acceptance criteria, verification matrix,
+> rubric, and gate record. Version remains 12 because this repair makes the
+> existing safety contract testable without adding a product or ADR choice.
+> **POINTER:** First intrinsic `NEEDS-REVISION` pass for SPEC-0001@v12.
+> **VALUE:** A Wisp user gets fail-closed ownership recovery and byte-exact
+> event handling without weakening dashboard capability secrecy.
+> **CONFIDENCE:** verified.
+
+> **AMENDED 2026-07-26**
 > **WHAT:** Retired the aggregate qualification and exact-surface carriers,
 > restored the distributed payload to eight paths, advanced every retained
 > package-version carrier to `0.2.1-rc.4`, and made Preview/no-support
@@ -401,15 +417,29 @@ Recovery follows these exact rules:
 3. A matching live `committed` record is safe to retire because its append
    commit point has passed. Any contender may retire it after rereading and
    matching the complete record.
-4. For a missing or malformed owner that has no usable qualified identity,
-   Wisp uses the exact valid `created` value when available and otherwise the
-   lock-directory `mtime`. Only an age strictly greater than 120,000 ms
-   permits ownerless-lock recovery.
-5. Stale recovery rereads and matches the complete record when one was
-   readable, then atomically renames `write.lock` to
-   `write.lock.stale-<lowercase-UUID>`. A race or mismatch leaves the current
-   lock untouched.
-6. Wisp removes only `owner.json` from the quarantined directory and then the
+4. If the safe regular `owner.json` bytes can be read but fail the exact owner
+   schema, Wisp retains those exact bytes as the recovery snapshot. Field
+   salvage first requires fatal UTF-8 decoding and parsing to one JSON object.
+   If that object contains both a valid platform PID and a valid qualified
+   `process_identity`, Wisp SHALL observe that PID before considering age.
+   The same qualified token or an `inconclusive` observation forbids recovery;
+   `absent` or a different qualified token proves that recorded process
+   instance gone and permits immediate recovery. Individually usable
+   `token`, `created`, or `phase` fields do not bypass this identity rule.
+5. For a missing owner, or a malformed owner without both a usable PID and
+   qualified identity, Wisp uses the exact valid `created` value when
+   available and otherwise the lock-directory `mtime`. Only an age strictly
+   greater than 120,000 ms permits ownerless-lock recovery.
+6. Before renaming a stale lock, Wisp rereads without following links. An
+   exact valid owner must match the complete parsed record. Every readable
+   malformed owner, including syntactically invalid JSON, must match the
+   recovery snapshot byte-for-byte; field-level or normalized-JSON equality
+   is insufficient. A missing, unreadable, replaced, or byte-different
+   owner leaves the canonical lock untouched.
+7. After the required reread succeeds, Wisp atomically renames `write.lock`
+   to `write.lock.stale-<lowercase-UUID>`. A race or mismatch leaves the
+   current lock untouched.
+8. Wisp removes only `owner.json` from the quarantined directory and then the
    empty directory. Deletion cleanup is best-effort; acquisition restarts
    against the canonical `write.lock` path.
 
@@ -493,7 +523,8 @@ the canonical dashboard runtime root, `wisp_dashboard` returns
 `dashboard_unavailable/project_contains_runtime`. It does not choose a
 fallback rendezvous. Existing bus tools remain usable.
 
-`owner.json` rejects unknown properties and is exactly one of these records:
+`owner.json` rejects unknown properties and uses exactly one of these closed
+record shapes. Wisp writes protocol `1`:
 
 ```json
 {
@@ -533,12 +564,27 @@ nonblank strings without U+0000; process identity is within its fixed maximum.
 The record's project and project key SHALL recompute to the requesting
 process's canonical project and key before reuse.
 
+For discovery only, a positive safe-integer `protocol` other than `1` remains
+structurally schema-valid so Wisp can prove the complete owner's identity and
+return `dashboard_version_conflict`; it is protocol-incompatible, not
+schema-invalid. A non-integer, non-positive, or otherwise invalid protocol
+follows the unconditional schema-invalid refusal below.
+
 Dashboard ownership uses the shared qualified process-identity contract
 above; it does not define a weaker adapter. If the provider is unavailable
 before acquisition, return
 `dashboard_unavailable/process_identity_unavailable`. If an existing owner's
 identity cannot be compared conclusively, return
 `dashboard_unavailable/owner_identity_unverifiable` and never take ownership.
+Any readable `owner.json` that is invalid against the complete `starting` or
+`ready` schema SHALL return
+`dashboard_unavailable/owner_identity_unverifiable` with `retryable: false`
+immediately. This rule
+applies even when the invalid object contains an individually usable PID,
+process identity, instance, project, project key, protocol, port, capability,
+or timestamp. Wisp SHALL NOT observe such a PID, perform health proof, infer
+owner death, quarantine the owner, or continue acquisition from partial
+fields.
 
 Startup follows this exact state machine:
 
@@ -589,13 +635,14 @@ converge within the fixed timeout returns
 `dashboard_unavailable/ownership_contended`.
 
 A qualified provider result of `absent` or a different birth token proves that
-the recorded process instance is gone, including the PID-reuse case. Only then
-may a contender reread the same instance, atomically rename `owner/` to a
-private quarantine sibling, and restart acquisition. A missing, malformed, or
-incomplete record without conclusive process evidence fails closed as
-`owner_identity_unverifiable`; PID existence, age, or failed health alone
-never proves death. Quarantine cleanup is best-effort and never delays
-successful publication.
+the process instance recorded by a complete schema-valid owner is gone,
+including the PID-reuse case. Only then may a contender reread the same valid
+instance, atomically rename `owner/` to a private quarantine sibling, and
+restart acquisition. A missing owner record fails closed as
+`owner_identity_unverifiable`; every schema-invalid owner follows the
+unconditional refusal above. PID existence, age, failed health, or
+individually usable fields never repair an invalid owner or prove death.
+Quarantine cleanup is best-effort and never delays successful publication.
 
 During graceful HTTP shutdown, failed health against the still-live owner
 returns `dashboard_unavailable/owner_unhealthy`; callers retry explicitly
@@ -669,9 +716,13 @@ rejected before application work, and no permissive CORS header is emitted.
 
 The authorization header is exactly `Authorization: Bearer <capability>`.
 Missing, duplicated, malformed, or unequal authorization is rejected with the
-same response and compared without timing-dependent early exit. The
-capability appears only in the private ready record and in the MCP-returned
-URL:
+same response and compared without timing-dependent early exit. The private
+ready owner record is the capability's only permitted Wisp-controlled
+persistent at-rest location. Transient copies are permitted only in the
+owning process's memory,
+the MCP-returned URL, the page's in-memory closure, the loopback
+`Authorization` header while in transport, and a test harness's volatile
+memory:
 
 ```text
 http://127.0.0.1:<port>/#capability=<capability>
@@ -679,11 +730,14 @@ http://127.0.0.1:<port>/#capability=<capability>
 
 The HTML bootstrap accepts exactly that fragment form, immediately removes it
 from the visible URL with `history.replaceState`, retains the capability only
-in the page's in-memory closure, and sends it as the bearer header. It SHALL
-NOT store the capability in cookies, local storage, session storage, query
-strings, logs, error bodies, stderr diagnostics, health responses, or
-analytics. A replacement owner generates a new capability; an old capability
-cannot authenticate to it.
+in the page's in-memory closure, and sends it as the bearer header. Outside
+the private ready record, no transient copy may cross a Wisp-controlled
+persistent or output sink. The capability SHALL NOT persist in cookies, local
+storage, session
+storage, query strings, buses, transcripts, evidence, files, caches,
+artifacts, uploads, logs, error bodies or objects, stderr diagnostics, health
+responses, or analytics. A replacement owner generates a new capability; an
+old capability cannot authenticate to it.
 
 A host smoke, canary, or browser harness may inspect the MCP-returned
 capability URL and construct its bearer header only in volatile process memory
@@ -894,6 +948,28 @@ Every stored event is valid only when:
 - the UTF-8 size of its compact JSON serialization is within the event
   maximum, in addition to the raw bus line limit.
 
+“Compact JSON serialization” means the exact string produced under Node.js 24
+ECMAScript semantics by invoking `JSON.stringify(value)` with the validated
+canonical event as its sole argument: no replacer and no `space` argument.
+Wisp SHALL NOT sort keys, pretty-print, or apply another canonicalization
+pass. The exact returned string is then encoded as UTF-8. JSON escaping and
+property enumeration therefore contribute exactly the bytes emitted by that
+one call; the terminating LF is appended afterward and is not part of the
+event-size count.
+
+The serialization boundaries use these exact vectors:
+
+| Vector | Required result |
+|---|---|
+| `Buffer.byteLength(JSON.stringify(value), "utf8") === 32_768` | event-size validation passes; append writes those 32,768 bytes plus one LF |
+| `Buffer.byteLength(JSON.stringify(value), "utf8") === 32_769` | reject `invalid_input/event_too_large` with `limit: 32768`, `actual: 32769`, and no bus creation or modification |
+| existing bus bytes plus serialized bytes plus one LF equals `16_777_216` | projected-bus validation passes |
+| existing bus bytes plus serialized bytes plus one LF equals `16_777_217` | reject `bus_limit_exceeded` with `subject: "bus"`, `unit: "utf8_bytes"`, `limit: 16777216`, `actual: 16777217`, and preserve existing bytes exactly |
+
+Boundary fixtures SHALL include ASCII, escaped control characters, and
+non-ASCII scalar values so UTF-16 string length cannot substitute for the
+post-serialization UTF-8 byte count.
+
 Explicit `null` and unknown properties are invalid at the event root and in
 all defined nested bodies except recursively inside `command.payload`.
 
@@ -982,7 +1058,9 @@ process, or append a command.
 ## Exact MCP outputs and error mapping
 
 Every invoked tool returns one JSON envelope in MCP `structuredContent` and an
-identical compact JSON serialization in its sole text content item.
+identical compact JSON serialization in its sole text content item. That text
+is exactly Node 24 `JSON.stringify(envelope)` with the envelope as the sole
+argument and no replacer or spacing.
 
 Success:
 
@@ -1474,7 +1552,9 @@ follow the Stewards 0023 availability/support grammar received by ADR-0013.
 
 - **Given** each valid and one-property-invalid starting and ready record,
 - **When** discovery reads or publishes it,
-- **Then** only the exact discriminated schema is accepted and a ready record
+- **Then** only the exact closed discriminated shape is structurally accepted,
+  Wisp publishes and reuses only protocol `1`, another positive safe-integer
+  protocol reaches version conflict after identity proof, and a ready record
   becomes discoverable only through atomic replacement after the listener is
   live.
 
@@ -1529,8 +1609,10 @@ follow the Stewards 0023 availability/support grammar received by ADR-0013.
 - **When** the page bootstraps and authenticated calls are attempted with the
   current and stale capabilities,
 - **Then** the fragment is removed into closure-only memory, the current
-  capability succeeds, the stale capability fails generically, and neither
-  capability appears in persistence, logs, diagnostics, health, or errors.
+  capability succeeds, the stale capability fails generically, only the
+  matching private ready record persists the current capability, and neither
+  capability crosses any other persistence, log, diagnostic, health, error,
+  evidence, artifact, cache, upload, bus, or analytics sink.
 
 **S41 — HTTP boundary**
 
@@ -1723,6 +1805,47 @@ follow the Stewards 0023 availability/support grammar received by ADR-0013.
   evidence, and renewal policy, and every declared row follows the Stewards
   0023 availability/support grammar.
 
+**S70 — Malformed bus-lock salvage is identity-safe**
+
+- **Given** a readable schema-invalid bus-lock owner whose raw bytes contain a
+  valid PID and qualified identity, with same-token, inconclusive, absent, and
+  different-token provider observations,
+- **When** stale-lock recovery evaluates the owner,
+- **Then** same-token and inconclusive observations leave the lock untouched,
+  absent and different-token observations may recover it, and any recovery
+  rereads and byte-matches the exact original raw owner bytes before rename.
+
+**S71 — Invalid dashboard owners fail closed**
+
+- **Given** every `starting` and `ready` owner-schema violation, including
+  invalid owners whose PID, qualified identity, instance, project, protocol,
+  port, or capability is individually usable,
+- **When** dashboard discovery reads the owner,
+- **Then** it returns
+  `dashboard_unavailable/owner_identity_unverifiable` with `retryable: false`,
+  performs no process observation or health request, and neither quarantines
+  nor replaces the owner.
+
+**S72 — Capability locations are sink-bounded**
+
+- **Given** a live dashboard capability in the private ready record and each
+  permitted transient location,
+- **When** the owner, browser, HTTP transport, or test harness uses it,
+- **Then** only the private ready record persists it, transient copies remain
+  in memory or loopback transport, and no other Wisp-controlled query, log,
+  error, transcript, evidence, file, cache, artifact, upload, bus, or
+  analytics sink receives it.
+
+**S73 — Compact serialization has exact byte boundaries**
+
+- **Given** validated canonical events whose one-argument Node 24
+  `JSON.stringify` outputs encode to exactly 32,768 and 32,769 UTF-8 bytes,
+  plus projected buses ending at exactly 16,777,216 and 16,777,217 bytes,
+- **When** event-size and projected-bus validation run,
+- **Then** the two exact-limit vectors pass, the two limit-plus-one vectors
+  fail with the specified `actual` and `limit` values without modifying the
+  bus, and accepted storage is the unchanged JSON string followed by one LF.
+
 ### EARS requirements
 
 - **R1 (ubiquitous):** Wisp shall own the complete payload; any later Stewards
@@ -1850,10 +1973,13 @@ follow the Stewards 0023 availability/support grammar received by ADR-0013.
 - **R48 (event-driven):** When the dashboard bootstraps from a returned URL,
   it shall remove the fragment immediately, keep the capability only in
   memory, and authenticate API calls through the bearer header.
-- **R49 (ubiquitous):** Capability material shall exist only in the private
-  ready record, returned URL, and page memory, shall rotate per owner
-  generation, and shall never appear in persistence, logs, diagnostics,
-  health, analytics, or errors.
+- **R49 (ubiquitous):** The private ready record shall be the only
+  Wisp-controlled persistent location for capability material;
+  owning-process memory, the returned URL, page memory, loopback Authorization
+  transport, and volatile harness memory may hold transient copies, which
+  shall never cross any other Wisp-controlled persistence, query, log,
+  diagnostic, error, evidence, cache, artifact, upload, bus, health, or
+  analytics sink.
 - **R50 (event-driven):** When authenticated events are requested, Wisp shall
   return all valid events, malformed-line evidence, and all command states
   through the shared bounded bus reader and command reducer in physical
@@ -1957,6 +2083,25 @@ follow the Stewards 0023 availability/support grammar received by ADR-0013.
   write, verify that no observed or capability-shaped value remains, and
   block persistence and upload on failure while preserving only non-secret
   typed structural evidence.
+- **R88 (state-driven):** While a readable malformed bus-lock owner contains
+  a valid PID and qualified identity, recovery shall observe that PID, shall
+  never steal on a same-token or inconclusive result, may recover on absent or
+  different-token proof, and shall reread and byte-match the exact raw owner
+  snapshot before any stale rename.
+- **R89 (unwanted behavior):** If a dashboard owner fails any property of the
+  complete `starting` or `ready` schema, discovery shall return
+  `dashboard_unavailable/owner_identity_unverifiable` without using partial
+  fields, observing its PID, performing health proof, quarantining, or
+  acquiring ownership.
+- **R90 (ubiquitous):** Compact event serialization shall be exactly Node 24
+  `JSON.stringify(value)` with one argument and no replacer or spacing,
+  followed by UTF-8 encoding; size accounting shall accept exact event and bus
+  maxima, reject limit-plus-one with exact diagnostics, and exclude only the
+  appended LF from the event-size count.
+- **R91 (unwanted behavior):** If capability material leaves a permitted
+  transient memory or loopback-transport location, it shall cross no
+  persistence or output sink except the private ready record and shall trigger
+  fail-closed sanitization wherever evidence retention is attempted.
 
 ## Verification matrix
 
@@ -1965,12 +2110,13 @@ follow the Stewards 0023 availability/support grammar received by ADR-0013.
 | Constants and schemas | Generated-schema snapshot plus table-driven at-limit/over-limit tests for every fixed value, all seven tools, both owner-record variants, all six stored-event kinds, exact timestamp/version, null/unknown rejection, and recursively arbitrary command-payload JSON |
 | Resolution | Table-driven tests for environment root, capability absence, list failure/timeout, counts, URI validity, realpath, no-I/O, memoization, and dashboard-as-first-tool success/failure ordering; Codex host smoke verifies session-cwd binding |
 | Filesystem | Temp-project tests for missing read, first-write creation, lstat/symlink/type/containment rejection, one-line append, fatal UTF-8, LF/CR/final-segment/blank handling, limits, and no truncation |
-| Project write lock | Cross-process and injected-filesystem tests cover the qualified-identity/phase owner schema, `mkdir`/`O_EXCL`, concurrent MCP/dashboard appends, exact commit point and post-commit success, phase/release failure, 250 ms synchronous and `unref` same-owner recovery, retired-deletion failure with continued new acquisition, 5,000 ms/10 ms timing, live/dead/same-PID-new-birth/PID-less/malformed owners, 120,000 ms boundary, symlink/types, stale quarantine, matching-token/identity cleanup, redacted diagnostics, and every stable error |
-| Dashboard discovery | Fake-home and process-identity adapters prove exact root/key derivation, ownership/mode/type/symlink rejection, project-ancestor rejection, candidate promotion, mandatory post-acquisition recheck, authenticated reuse, bounded starting wait, live-owner refusal, deterministic same-PID/new-token recovery, contention, and distinct-project isolation |
+| Project write lock | Cross-process and injected-filesystem tests cover the qualified-identity/phase owner schema, `mkdir`/`O_EXCL`, concurrent MCP/dashboard appends, exact commit point and post-commit success, phase/release failure, 250 ms synchronous and `unref` same-owner recovery, retired-deletion failure with continued new acquisition, 5,000 ms/10 ms timing, live/dead/same-PID-new-birth/PID-less/malformed owners, 120,000 ms boundary, symlink/types, stale quarantine, matching-token/identity cleanup, redacted diagnostics, and every stable error; readable malformed-owner fixtures cover usable PID/identity with same, inconclusive, absent, and different-token observations plus byte-for-byte snapshot/reread races for JSON-valid and invalid raw bytes |
+| Dashboard discovery | Fake-home and process-identity adapters prove exact root/key derivation, ownership/mode/type/symlink rejection, project-ancestor rejection, candidate promotion, mandatory post-acquisition recheck, authenticated reuse, bounded starting wait, live-owner refusal, deterministic same-PID/new-token recovery, contention, and distinct-project isolation; a property-by-property invalid-owner table, including otherwise usable PID/identity/instance/capability and invalid protocol fields, proves exact `owner_identity_unverifiable`, zero provider/health calls, and no quarantine or replacement, while a complete owner with another positive integer protocol reaches `dashboard_version_conflict` only after identity proof |
 | Process identity | Linux fixtures prove boot-ID and `/proc/<pid>/stat` field-22 parsing including hostile `comm`; macOS fixtures prove absolute `/bin/ps` C-locale parsing and failures; live current/child/exit observations plus deterministic same-PID/new-birth-token adapters exercise both dashboard and bus recovery; Windows is rejected |
 | Dashboard faults/lifecycle | Fault injection before claim and after claim/bind/publish/completion plus stdio close, `SIGINT`, and `SIGTERM` proves failed-live-owner listener/record cleanup, no bound-unpublished survivor, dead-owner recovery, 1,000 ms bounded drain, forced tracked-socket destruction, matching-instance cleanup, and no daemon |
 | Dashboard HTTP/UI | Loopback and browser-DOM tests snapshot exact precedence, condition/status/code mapping including `command_conflict`→`409`, routes/envelopes/headers, acceptance-to-`CRLFCRLF` header bytes/deadline, header-to-body-complete deadline, acceptance-to-response-complete total deadline, keep-alive idle and cleanup-to-forced-close boundaries, bearer, Host, Origin, query, method, content type, body, CSP, capability-bootstrap/rotation/redaction, refresh/visibility/in-flight behavior, exact run/agent append-order projection, text-only rendering, event/parse-error/command-state views, explicit command controls, and zero-write failures |
-| Capability-safe host evidence | Host-smoke, canary, and Playwright-failure fixtures place the live capability in fragment, bearer, console, network, reporter, screenshot, video, trace, and attachment paths; prove raw bytes remain volatile and browser artifact writers are disabled or intercepted before a sink; require exact structural sentinels and typed fields; scan retained evidence/logs for observed and capability-shaped values; and prove a failed scan produces no persisted or uploaded artifact |
+| Capability-safe host evidence | Host-smoke, canary, and Playwright-failure fixtures place the live capability in every permitted transient location and in prohibited query, bus, cookie/storage, error-object, log, reporter, screenshot, video, trace, attachment, cache, artifact, and upload sinks; prove the private ready record is its sole persistent location, raw bytes remain volatile, browser artifact writers are disabled or intercepted before a sink, exact structural sentinels and typed fields are used, retained evidence/logs are absence-scanned, and a failed scan produces no persisted or uploaded artifact |
+| Compact serialization | Node 24 fixtures invoke one-argument `JSON.stringify(value)` with no replacer/spacing, compare exact UTF-8 bytes and property/escape output, cover ASCII, control escapes, and non-ASCII scalars, accept event size 32,768 and projected bus size 16,777,216, reject 32,769 and 16,777,217 with exact diagnostics, and prove the accepted event is followed by exactly one LF while every rejection preserves the bus |
 | Runtime boundary | Spies or dependency injection prove all six event/check MCP handlers call shared operations, `wisp_dashboard` calls the memoized coordinator, HTTP reads/writes reuse the canonical runtime, and HTTP/browser contain no second command reducer |
 | Command safety | Append-order tests prove issued fields, whole-check first-duplicate conflict/count/no-partial-data, ack duplicate conflict, unique-id-only reduction, same-run/following-ack filtering, last-ack wins, stable ordering, all-status dashboard projection, no execution, and every acknowledgement result |
 | Errors | Contract snapshots for all MCP and HTTP code/reason/JSON-pointer/detail shapes, retryability, `process_identity_unavailable`, parse reasons, `isError`, `-32601`, `-32602`, dashboard version conflict, HTTP `409` command conflict, post-commit diagnostic redaction, and unexpected-exception containment |
@@ -1995,16 +2141,18 @@ check uses `specs/README.md`.
 - **Approved dependencies:** PASS — ADR-0004, ADR-0005, ADR-0008, ADR-0009,
   ADR-0011, and ADR-0014 are approved and record the retained adapter,
   dashboard, package, Node technical boundary, and Preview-retirement intent.
-- **Testable acceptance criteria:** PASS — S1–S53, S64–S69, and S3a are GWT
-  scenarios, R1–R77 and R87 are EARS requirements, and the matrix names
-  executable evidence. The gaps preserve the historical identifiers of the
-  retained product-local security clauses while retiring intervening family
-  machinery.
+- **Testable acceptance criteria:** PASS — S1–S53, S64–S73, and S3a are GWT
+  scenarios, R1–R77 and R87–R91 are EARS requirements, and the matrix names
+  executable evidence. The remaining gaps preserve historical identifiers of
+  retired family machinery.
 - **Exactness:** PASS — all seven schemas, outputs, error mapping, project
   selection, stored-event validity, confinement/decoding, duplicate/unique
   command reduction, irreversible append/release behavior, qualified
   process-birth identity, finite limits, dashboard write-lock,
   discovery/ownership/HTTP deadline/error/UI-projection/lifecycle behavior,
+  malformed-owner raw-byte recovery, schema-invalid dashboard-owner refusal,
+  Node 24 one-argument JSON serialization and exact byte boundaries, the
+  capability's sole persistent location and permitted transient path,
   eight payload paths, `0.2.1-rc.4` carrier parity, retired-metadata absence,
   root-Claude/inline-Codex launch definitions, Node 24 technical targeting,
   Preview/no-support disclosure, and capability-safe evidence policy are
@@ -2045,4 +2193,14 @@ exact-surface machinery, eight-path payload, Preview/no-support posture,
 `0.2.1-rc.4` retained-carrier parity, and preserved runtime and security
 guarantees. The configured rubric self-check above passed, so this amendment
 is `gated`; no independent spec-adversary or conformance verdict is claimed
+here.
+
+The first intrinsic spec-adversary pass for gated v12 returned
+`NEEDS-REVISION`: malformed bus-lock salvage could steal a usable live
+identity or race without raw-byte comparison, invalid dashboard owners could
+be read as field-salvageable, capability locations contradicted their required
+transient authorization flow, and compact serialization lacked exact Node 24
+and boundary vectors. This repair makes each rule explicit in prose, GWT,
+EARS, and the verification matrix while preserving v12 and ADR-0014 scope;
+the rubric self-check remains `PASS`. No second adversary verdict is claimed
 here.
