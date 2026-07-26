@@ -407,6 +407,10 @@ returns `bus_unwritable/open_failed`; it does not perform an unlocked append.
 
 Recovery follows these exact rules:
 
+Recovery first snapshots `owner.json` as exactly one state: a complete valid
+owner record, present readable raw bytes that do not form a valid owner
+record, or `owner-missing` when `owner.json` is absent on that initial read.
+
 1. For an exact owner record, observe the recorded PID through the qualified
    provider. The same token means the recorded process instance may be live.
    A `held` lock is never stolen on age alone. An `inconclusive` observation
@@ -426,16 +430,19 @@ Recovery follows these exact rules:
    `absent` or a different qualified token proves that recorded process
    instance gone and permits immediate recovery. Individually usable
    `token`, `created`, or `phase` fields do not bypass this identity rule.
-5. For a missing owner, or a malformed owner without both a usable PID and
+5. For an initial `owner-missing` snapshot, Wisp uses the lock-directory
+   `mtime`. For a present malformed snapshot without both a usable PID and
    qualified identity, Wisp uses the exact valid `created` value when
-   available and otherwise the lock-directory `mtime`. Only an age strictly
-   greater than 120,000 ms permits ownerless-lock recovery.
+   available and otherwise that `mtime`. Only an age strictly greater than
+   120,000 ms permits ownerless-lock recovery.
 6. Before renaming a stale lock, Wisp rereads without following links. An
    exact valid owner must match the complete parsed record. Every readable
    malformed owner, including syntactically invalid JSON, must match the
    recovery snapshot byte-for-byte; field-level or normalized-JSON equality
-   is insufficient. A missing, unreadable, replaced, or byte-different
-   owner leaves the canonical lock untouched.
+   is insufficient. An initial `owner-missing` snapshot may proceed only when
+   the reread is also missing. Appearance after an `owner-missing` snapshot,
+   disappearance after any present snapshot, or any unreadable, replaced, or
+   byte-different owner leaves the canonical lock untouched.
 7. After the required reread succeeds, Wisp atomically renames `write.lock`
    to `write.lock.stale-<lowercase-UUID>`. A race or mismatch leaves the
    current lock untouched.
@@ -732,12 +739,20 @@ The HTML bootstrap accepts exactly that fragment form, immediately removes it
 from the visible URL with `history.replaceState`, retains the capability only
 in the page's in-memory closure, and sends it as the bearer header. Outside
 the private ready record, no transient copy may cross a Wisp-controlled
-persistent or output sink. The capability SHALL NOT persist in cookies, local
-storage, session
+persistent sink or any output sink except the exact response transports
+defined below. The capability SHALL NOT persist in cookies, local storage,
+session
 storage, query strings, buses, transcripts, evidence, files, caches,
 artifacts, uploads, logs, error bodies or objects, stderr diagnostics, health
 responses, or analytics. A replacement owner generates a new capability; an
 old capability cannot authenticate to it.
+
+The mandated `wisp_dashboard` MCP success response that carries the returned
+capability URL and the loopback HTTP request/response transport used by that
+dashboard are permitted Wisp-controlled output transports, not persistent
+sinks. Outside those exact transports, capability material SHALL cross no
+other Wisp-controlled output, log, diagnostic, error, transcript, evidence,
+artifact, cache, upload, bus, health-body, or analytics sink.
 
 A host smoke, canary, or browser harness may inspect the MCP-returned
 capability URL and construct its bearer header only in volatile process memory
@@ -1807,13 +1822,15 @@ follow the Stewards 0023 availability/support grammar received by ADR-0013.
 
 **S70 — Malformed bus-lock salvage is identity-safe**
 
-- **Given** a readable schema-invalid bus-lock owner whose raw bytes contain a
-  valid PID and qualified identity, with same-token, inconclusive, absent, and
-  different-token provider observations,
+- **Given** initial `owner-missing` and present readable-malformed snapshots,
+  usable malformed PID/identity pairs with every provider observation, and
+  owner appearance, disappearance, and raw-byte replacement races,
 - **When** stale-lock recovery evaluates the owner,
 - **Then** same-token and inconclusive observations leave the lock untouched,
-  absent and different-token observations may recover it, and any recovery
-  rereads and byte-matches the exact original raw owner bytes before rename.
+  absent and different-token observations may recover it, a missing snapshot
+  may rename only after a second missing read, every present malformed
+  snapshot must byte-match on reread, and appearance, disappearance, or byte
+  change fails closed.
 
 **S71 — Invalid dashboard owners fail closed**
 
@@ -1829,10 +1846,11 @@ follow the Stewards 0023 availability/support grammar received by ADR-0013.
 **S72 — Capability locations are sink-bounded**
 
 - **Given** a live dashboard capability in the private ready record and each
-  permitted transient location,
+  permitted transient location and mandated response transport,
 - **When** the owner, browser, HTTP transport, or test harness uses it,
 - **Then** only the private ready record persists it, transient copies remain
-  in memory or loopback transport, and no other Wisp-controlled query, log,
+  in memory, the exact `wisp_dashboard` MCP response, or loopback
+  request/response transport, and no other Wisp-controlled output, query, log,
   error, transcript, evidence, file, cache, artifact, upload, bus, or
   analytics sink receives it.
 
@@ -2083,11 +2101,12 @@ follow the Stewards 0023 availability/support grammar received by ADR-0013.
   write, verify that no observed or capability-shaped value remains, and
   block persistence and upload on failure while preserving only non-secret
   typed structural evidence.
-- **R88 (state-driven):** While a readable malformed bus-lock owner contains
-  a valid PID and qualified identity, recovery shall observe that PID, shall
-  never steal on a same-token or inconclusive result, may recover on absent or
-  different-token proof, and shall reread and byte-match the exact raw owner
-  snapshot before any stale rename.
+- **R88 (state-driven):** While stale bus-lock recovery holds an initial
+  owner snapshot, a readable malformed record with valid PID/identity shall
+  obey qualified observation and exact raw-byte reread equality, an initial
+  `owner-missing` snapshot shall rename only after a second missing read, and
+  appearance after missing or disappearance after any present snapshot shall
+  fail closed.
 - **R89 (unwanted behavior):** If a dashboard owner fails any property of the
   complete `starting` or `ready` schema, discovery shall return
   `dashboard_unavailable/owner_identity_unverifiable` without using partial
@@ -2098,10 +2117,12 @@ follow the Stewards 0023 availability/support grammar received by ADR-0013.
   followed by UTF-8 encoding; size accounting shall accept exact event and bus
   maxima, reject limit-plus-one with exact diagnostics, and exclude only the
   appended LF from the event-size count.
-- **R91 (unwanted behavior):** If capability material leaves a permitted
-  transient memory or loopback-transport location, it shall cross no
-  persistence or output sink except the private ready record and shall trigger
-  fail-closed sanitization wherever evidence retention is attempted.
+- **R91 (unwanted behavior):** If capability material leaves permitted
+  transient memory, it may cross only the mandated `wisp_dashboard` MCP
+  response and loopback request/response transport; it shall cross no other
+  Wisp-controlled output, log, error, or evidence sink, the private ready
+  record shall remain its sole persistent location, and evidence retention
+  shall sanitize and scan fail-closed.
 
 ## Verification matrix
 
@@ -2110,12 +2131,12 @@ follow the Stewards 0023 availability/support grammar received by ADR-0013.
 | Constants and schemas | Generated-schema snapshot plus table-driven at-limit/over-limit tests for every fixed value, all seven tools, both owner-record variants, all six stored-event kinds, exact timestamp/version, null/unknown rejection, and recursively arbitrary command-payload JSON |
 | Resolution | Table-driven tests for environment root, capability absence, list failure/timeout, counts, URI validity, realpath, no-I/O, memoization, and dashboard-as-first-tool success/failure ordering; Codex host smoke verifies session-cwd binding |
 | Filesystem | Temp-project tests for missing read, first-write creation, lstat/symlink/type/containment rejection, one-line append, fatal UTF-8, LF/CR/final-segment/blank handling, limits, and no truncation |
-| Project write lock | Cross-process and injected-filesystem tests cover the qualified-identity/phase owner schema, `mkdir`/`O_EXCL`, concurrent MCP/dashboard appends, exact commit point and post-commit success, phase/release failure, 250 ms synchronous and `unref` same-owner recovery, retired-deletion failure with continued new acquisition, 5,000 ms/10 ms timing, live/dead/same-PID-new-birth/PID-less/malformed owners, 120,000 ms boundary, symlink/types, stale quarantine, matching-token/identity cleanup, redacted diagnostics, and every stable error; readable malformed-owner fixtures cover usable PID/identity with same, inconclusive, absent, and different-token observations plus byte-for-byte snapshot/reread races for JSON-valid and invalid raw bytes |
+| Project write lock | Cross-process and injected-filesystem tests cover the qualified-identity/phase owner schema, `mkdir`/`O_EXCL`, concurrent MCP/dashboard appends, exact commit point and post-commit success, phase/release failure, 250 ms synchronous and `unref` same-owner recovery, retired-deletion failure with continued new acquisition, 5,000 ms/10 ms timing, live/dead/same-PID-new-birth/PID-less/malformed owners, 120,000 ms boundary, symlink/types, stale quarantine, matching-token/identity cleanup, redacted diagnostics, and every stable error; readable malformed-owner fixtures cover usable PID/identity with same, inconclusive, absent, and different-token observations plus byte-for-byte snapshot/reread races for JSON-valid and invalid raw bytes; missing-owner fixtures prove missing→missing stale recovery and fail-closed missing→present, present→missing, and present→byte-different transitions |
 | Dashboard discovery | Fake-home and process-identity adapters prove exact root/key derivation, ownership/mode/type/symlink rejection, project-ancestor rejection, candidate promotion, mandatory post-acquisition recheck, authenticated reuse, bounded starting wait, live-owner refusal, deterministic same-PID/new-token recovery, contention, and distinct-project isolation; a property-by-property invalid-owner table, including otherwise usable PID/identity/instance/capability and invalid protocol fields, proves exact `owner_identity_unverifiable`, zero provider/health calls, and no quarantine or replacement, while a complete owner with another positive integer protocol reaches `dashboard_version_conflict` only after identity proof |
 | Process identity | Linux fixtures prove boot-ID and `/proc/<pid>/stat` field-22 parsing including hostile `comm`; macOS fixtures prove absolute `/bin/ps` C-locale parsing and failures; live current/child/exit observations plus deterministic same-PID/new-birth-token adapters exercise both dashboard and bus recovery; Windows is rejected |
 | Dashboard faults/lifecycle | Fault injection before claim and after claim/bind/publish/completion plus stdio close, `SIGINT`, and `SIGTERM` proves failed-live-owner listener/record cleanup, no bound-unpublished survivor, dead-owner recovery, 1,000 ms bounded drain, forced tracked-socket destruction, matching-instance cleanup, and no daemon |
 | Dashboard HTTP/UI | Loopback and browser-DOM tests snapshot exact precedence, condition/status/code mapping including `command_conflict`→`409`, routes/envelopes/headers, acceptance-to-`CRLFCRLF` header bytes/deadline, header-to-body-complete deadline, acceptance-to-response-complete total deadline, keep-alive idle and cleanup-to-forced-close boundaries, bearer, Host, Origin, query, method, content type, body, CSP, capability-bootstrap/rotation/redaction, refresh/visibility/in-flight behavior, exact run/agent append-order projection, text-only rendering, event/parse-error/command-state views, explicit command controls, and zero-write failures |
-| Capability-safe host evidence | Host-smoke, canary, and Playwright-failure fixtures place the live capability in every permitted transient location and in prohibited query, bus, cookie/storage, error-object, log, reporter, screenshot, video, trace, attachment, cache, artifact, and upload sinks; prove the private ready record is its sole persistent location, raw bytes remain volatile, browser artifact writers are disabled or intercepted before a sink, exact structural sentinels and typed fields are used, retained evidence/logs are absence-scanned, and a failed scan produces no persisted or uploaded artifact |
+| Capability-safe host evidence | Host-smoke, canary, and Playwright-failure fixtures prove the exact capability URL is allowed in the mandated `wisp_dashboard` MCP response and its loopback request/response transport, place the live capability in every other permitted transient location and prohibited query, bus, cookie/storage, error-object, log, reporter, screenshot, video, trace, attachment, cache, artifact, and upload sink, prove the private ready record is its sole persistent location, intercept every other Wisp-controlled output before a sink, require exact structural sentinels and typed fields, absence-scan retained evidence/logs, and prove a failed scan produces no persisted or uploaded artifact |
 | Compact serialization | Node 24 fixtures invoke one-argument `JSON.stringify(value)` with no replacer/spacing, compare exact UTF-8 bytes and property/escape output, cover ASCII, control escapes, and non-ASCII scalars, accept event size 32,768 and projected bus size 16,777,216, reject 32,769 and 16,777,217 with exact diagnostics, and prove the accepted event is followed by exactly one LF while every rejection preserves the bus |
 | Runtime boundary | Spies or dependency injection prove all six event/check MCP handlers call shared operations, `wisp_dashboard` calls the memoized coordinator, HTTP reads/writes reuse the canonical runtime, and HTTP/browser contain no second command reducer |
 | Command safety | Append-order tests prove issued fields, whole-check first-duplicate conflict/count/no-partial-data, ack duplicate conflict, unique-id-only reduction, same-run/following-ack filtering, last-ack wins, stable ordering, all-status dashboard projection, no execution, and every acknowledgement result |
@@ -2204,3 +2225,14 @@ and boundary vectors. This repair makes each rule explicit in prose, GWT,
 EARS, and the verification matrix while preserving v12 and ADR-0014 scope;
 the rubric self-check remains `PASS`. No second adversary verdict is claimed
 here.
+
+Fresh intrinsic re-review found two residual contradictions in that repair:
+an initially missing owner had no distinct snapshot/reread success path, and
+the capability sink prohibition accidentally included the mandated
+`wisp_dashboard` response transport. The final v12 repair adds
+`owner-missing`→`owner-missing` as the sole missing-owner stale-rename path,
+fails closed on appearance or disappearance across the snapshot seam, retains
+raw-byte equality for present malformed owners, and exempts only the exact MCP
+response and loopback request/response transport from the otherwise
+fail-closed Wisp-controlled output-sink prohibition. Version 12 and ADR-0014
+scope remain unchanged; no fresh adversary verdict is claimed here.
