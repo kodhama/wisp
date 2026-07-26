@@ -1,4 +1,4 @@
-// SPEC-0001 v5: S9-S16, S26-S30 / R10-R18, R31-R36.
+// SPEC-0001@v15 S9-S16/S26-S30/S73 / R10-R18/R31-R36/R90; current bus-lock concurrency/recovery cases are ADR-0017 implementation characterization only.
 import { mkdir, readFile, readdir, symlink, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -110,6 +110,52 @@ describe("SPEC-0001 S12/S30 — exact validation", () => {
       code: "invalid_input",
       details: expect.objectContaining({ field: "", reason: "event_too_large" }),
     }));
+  });
+
+  it("uses the exact one-argument JSON serialization bytes at 32,768 and 32,769", () => {
+    const inputAt = (target: number, vector: string) => {
+      const input = {
+        run: "r",
+        agent: "a",
+        kind: "command",
+        command: {
+          id: "boundary",
+          type: "steer",
+          target: "a",
+          payload: { vector, padding: "" },
+        },
+      };
+      const baseline = createCanonicalEvent(input, () => new Date(ts));
+      const missing = target - Buffer.byteLength(JSON.stringify(baseline), "utf8");
+      return {
+        ...input,
+        command: {
+          ...input.command,
+          payload: { vector, padding: "x".repeat(missing) },
+        },
+      };
+    };
+    for (const vector of ["ascii", "\u0001".repeat(10), "é".repeat(10)]) {
+      const accepted = createCanonicalEvent(
+        inputAt(LIMITS.event, vector),
+        () => new Date(ts),
+      );
+      expect(Buffer.byteLength(JSON.stringify(accepted), "utf8")).toBe(
+        LIMITS.event,
+      );
+      expect(() => createCanonicalEvent(
+        inputAt(LIMITS.event + 1, vector),
+        () => new Date(ts),
+      )).toThrowError(expect.objectContaining({
+        code: "invalid_input",
+        details: {
+          field: "",
+          reason: "event_too_large",
+          limit: LIMITS.event,
+          actual: LIMITS.event + 1,
+        },
+      }));
+    }
   });
 });
 
@@ -230,7 +276,7 @@ describe("SPEC-0001 S14-S16/S29 — deterministic command safety", () => {
     expect(ack).toMatchObject({ kind: "command_ack", ack: { commandId: "wanted", result: "accepted" } });
   });
 
-  it("serializes concurrent first writes without loss or leaked locks", async () => {
+  it("characterizes current concurrent first writes without loss or leaked locks", async () => {
     const root = await project();
     await Promise.all(
       Array.from({ length: 24 }, (_, index) =>
@@ -279,7 +325,7 @@ describe("SPEC-0001 S14-S16/S29 — deterministic command safety", () => {
   });
 });
 
-describe("SPEC-0001 cross-process lock recovery", () => {
+describe("ADR-0017 implementation characterization — current cross-process bus-lock recovery", () => {
   it("never steals an aged lock whose usable owner PID is alive", async () => {
     const root = await project();
     const lock = join(root, ".wisp/write.lock");

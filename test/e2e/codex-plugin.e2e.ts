@@ -1,4 +1,4 @@
-// SPEC-0002@v7 S1-S5/S12/S14 / R1-R4/R14-R17.
+// SPEC-0002@v8 S1-S5/S12/S14/S17 / R1-R4/R14-R17/R20.
 import { createHash, randomUUID } from "node:crypto";
 import {
   appendFile,
@@ -25,7 +25,8 @@ import {
 } from "@playwright/test";
 import {
   directoryIsAbsentOrEmpty,
-  writeBrowserEvidence,
+  persistPreparedBrowserEvidence,
+  prepareBrowserEvidence,
 } from "../../scripts/capability-safety.mjs";
 
 const RELEASE_PATHS = [
@@ -35,10 +36,8 @@ const RELEASE_PATHS = [
   "README.md",
   "VERSION",
   "dist/wisp.mjs",
-  "qualification.json",
   "skills/dashboard/SKILL.md",
   "skills/wisp/SKILL.md",
-  "surfaces.json",
 ];
 const TOOL_NAMES = [
   "wisp_status",
@@ -222,7 +221,7 @@ async function health(browser: Browser, urlText: string): Promise<number> {
 
 async function runCapabilityInterval(
   browser: Browser,
-): Promise<Record<string, unknown>> {
+): Promise<Buffer> {
   const root = await mkdtemp(join(tmpdir(), "wisp-codex-e2e-"));
   const connections: Connected[] = [];
   const contexts: Awaited<ReturnType<Browser["newContext"]>>[] = [];
@@ -232,6 +231,7 @@ async function runCapabilityInterval(
   }> = [];
   const observedCapabilities: string[] = [];
   let browserEvidence: Record<string, unknown> | undefined;
+  let preparedBrowserEvidence: Buffer | undefined;
   let completed = false;
   const registerCapability = (urlText: string): string | undefined => {
     const capability = /#capability=([A-Za-z0-9_-]{43})(?:$|&)/u
@@ -490,24 +490,31 @@ async function runCapabilityInterval(
     const outputSafe = await directoryIsAbsentOrEmpty(
       resolve("test-results/playwright"),
     );
-    observedCapabilities.splice(0);
-    if (!cleanupSafe) throw new Error("browser cleanup failed");
-    if (!outputSafe) throw new Error("browser artifact writer was not disabled");
+    if (!cleanupSafe || !outputSafe || !completed || browserEvidence === undefined) {
+      observedCapabilities.splice(0);
+      if (!cleanupSafe) throw new Error("browser cleanup failed");
+      if (!outputSafe) throw new Error("browser artifact writer was not disabled");
+    } else {
+      preparedBrowserEvidence = prepareBrowserEvidence(
+        browserEvidence,
+        observedCapabilities,
+        { onDiscard: () => observedCapabilities.splice(0) },
+      ).bytes;
+    }
   }
-  if (!completed || browserEvidence === undefined) {
+  if (preparedBrowserEvidence === undefined) {
     throw new Error("browser evidence is incomplete");
   }
-  return browserEvidence;
+  return preparedBrowserEvidence;
 }
 
 test("staged Codex adapter, MCP, project singleton, dashboard UI, security, and recovery", async ({
   browser,
 }) => {
-  const browserEvidence = await runCapabilityInterval(browser);
+  const browserEvidenceBytes = await runCapabilityInterval(browser);
   await mkdir(resolve("test-results"), { recursive: true, mode: 0o700 });
-  await writeBrowserEvidence(
+  await persistPreparedBrowserEvidence(
     resolve("test-results/browser-evidence.json"),
-    browserEvidence,
-    [],
+    browserEvidenceBytes,
   );
 });

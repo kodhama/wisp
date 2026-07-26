@@ -33,9 +33,11 @@ in this repo's AGENTS.md) — plugin-carried since `grove/adr-0026`
 ## External reference registry
 
 Qualified external dependencies use `<repo>/<id>@vN` when the upstream is
-counter-versioned. Wisp registers `stewards/` as
-`https://github.com/kodhama/stewards`; structural corpus checks resolve that
-prefix and pin shape without treating the external repository as Wisp-owned.
+counter-versioned. Wisp registers `math-quest/` as
+`https://github.com/kodhama/math-quest` and `stewards/` as
+`https://github.com/kodhama/stewards`; structural corpus checks resolve those
+prefixes and pin shapes without treating either external repository as
+Wisp-owned.
 
 ## Decisions are append-only
 

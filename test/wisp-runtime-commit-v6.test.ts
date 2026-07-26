@@ -1,4 +1,4 @@
-// SPEC-0001 v6: S51 / R66-R67 — post-commit success, bounded release retry, and redacted diagnostics.
+// SPEC-0001@v15 S51/R66 — per-operation append evidence; current bus-lock release/retry/timing assertions are ADR-0017 implementation characterization only.
 import { join } from "node:path";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -48,7 +48,7 @@ vi.mock("../src/process-identity.ts", async () => {
   const actual = await vi.importActual<typeof import("../src/process-identity.ts")>(
     "../src/process-identity.ts",
   );
-  const token = "test-qualified-process:2026-07-24T12:00:00";
+  const token = "linux:00000000-0000-4000-8000-000000000001:1";
   return {
     ...actual,
     currentProcessIdentity: async () => token,
@@ -90,7 +90,7 @@ function diagnosticText(write: { mock: { calls: readonly (readonly unknown[])[] 
   return write.mock.calls.map((call) => String(call[0])).join("");
 }
 
-describe("SPEC-0001 v6 irreversible append commit", () => {
+describe("ADR-0017 implementation characterization — current bus-lock commit/release timing", () => {
   it("retries committed-phase publication yet returns the one committed event with one redacted diagnostic", async () => {
     const root = await mkdtemp(join(tmpdir(), "wisp-phase-publish-"));
     faults.phaseFailuresRemaining = 2;

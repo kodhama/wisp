@@ -9,6 +9,11 @@ updated: 2026-07-26
 
 # ADR-0013 — Receive the Stewards availability/support grammar
 
+> **Forward pointer.** `adr-0014-retire-preview-qualification-machinery`
+> supersedes only this receipt's statement that current Wisp qualification
+> metadata remains unchanged. Its constraint on every future exact-surface
+> row remains current.
+
 ## Decision state
 
 ### Decided

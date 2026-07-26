@@ -25,13 +25,11 @@ playwright-report
 !plugins/wisp/VERSION
 !plugins/wisp/dist/
 !plugins/wisp/dist/wisp.mjs
-!plugins/wisp/qualification.json
 !plugins/wisp/skills/
 !plugins/wisp/skills/dashboard/
 !plugins/wisp/skills/dashboard/SKILL.md
 !plugins/wisp/skills/wisp/
 !plugins/wisp/skills/wisp/SKILL.md
-!plugins/wisp/surfaces.json
 !scripts/
 !scripts/build-plugin.mjs
 !scripts/capability-safety.mjs

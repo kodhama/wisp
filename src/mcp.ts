@@ -378,7 +378,7 @@ export async function callWispTool(
       );
     }
     const incident = randomUUID();
-    diagnostic(`wisp internal error (${incident}): ${error instanceof Error ? error.stack ?? error.message : String(error)}`);
+    diagnostic(`wisp internal error (${incident})`);
     return toolResult(
       {
         ok: false,
@@ -405,7 +405,7 @@ const cleanupByServer = new WeakMap<Server, Promise<void>>();
 
 export function createWispServer(environmentRoot = process.env.WISP_PROJECT_ROOT): Server {
   const server = new Server(
-    { name: "wisp", version: "0.2.1-rc.3" },
+    { name: "wisp", version: "0.2.1-rc.4" },
     { capabilities: { tools: {} } },
   );
   let resolver: ProjectResolver | undefined;

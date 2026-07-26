@@ -17,6 +17,11 @@ updated: 2026-07-24
 > **Forward pointer.** `adr-0008-retire-family-release-certification`
 > supersedes that family release-certification addition. The session-directory
 > bootstrap and its manifest/cache equality remain current.
+>
+> **Forward pointer.** `adr-0014-retire-preview-qualification-machinery`
+> supersedes this ADR's exact-candidate marketplace-install qualification
+> requirement and future-qualification language. Its host-selected
+> session-directory bootstrap and version/cache equality remain current.
 
 ## Decision state
 

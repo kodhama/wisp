@@ -18,6 +18,9 @@ updated: 2026-07-24
 > deterministic installed-plugin boundary remains current.
 > `adr-0011-node-24-only-support` supersedes only the Node.js 20/22/24
 > fast-test matrix with one Node.js 24 job.
+> `adr-0014-retire-preview-qualification-machinery` supersedes the
+> candidate-release gate, exact-candidate verifier, and ten-path staging
+> requirement. Deterministic installed-plugin E2E remains current.
 
 ## Decision state
 

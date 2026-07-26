@@ -207,10 +207,49 @@ export async function writeBrowserEvidence(
   path,
   evidence,
   observedCapabilities,
+  hooks = {},
 ) {
-  validateBrowserEvidence(evidence);
-  const bytes = Buffer.from(`${JSON.stringify(evidence, null, 2)}\n`, "utf8");
-  assertCapabilityAbsent(bytes, observedCapabilities);
+  const prepared = prepareBrowserEvidence(
+    evidence,
+    observedCapabilities,
+    hooks,
+  );
+  await persistPreparedBrowserEvidence(path, prepared.bytes);
+}
+
+export function prepareBrowserEvidence(
+  evidence,
+  observedCapabilities,
+  hooks = {},
+) {
+  let discarded = false;
+  const discard = () => {
+    if (discarded) return;
+    discarded = true;
+    hooks.onDiscard?.();
+  };
+  try {
+    const frozenEvidence = Object.freeze({ ...evidence });
+    hooks.onFreeze?.(frozenEvidence);
+    validateBrowserEvidence(frozenEvidence);
+    hooks.onValidate?.(frozenEvidence);
+    const bytes = Buffer.from(
+      `${JSON.stringify(frozenEvidence, null, 2)}\n`,
+      "utf8",
+    );
+    hooks.onSerialize?.(bytes);
+    assertCapabilityAbsent(bytes, observedCapabilities);
+    hooks.onScan?.(bytes);
+    discard();
+    return Object.freeze({ evidence: frozenEvidence, bytes });
+  } catch {
+    discard();
+    throw safetyError();
+  }
+}
+
+export async function persistPreparedBrowserEvidence(path, bytes) {
+  if (!Buffer.isBuffer(bytes)) throw safetyError();
   await writeFile(path, bytes, { mode: 0o600 });
 }
 

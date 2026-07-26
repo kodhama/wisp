@@ -14,7 +14,7 @@ afterEach(async () => {
   await Promise.all(transports.splice(0).map((transport) => transport.close()));
 });
 
-describe("SPEC-0001 concurrent cross-process acknowledgement", () => {
+describe("ADR-0017 implementation characterization — current concurrent cross-process acknowledgement", () => {
   it("allows exactly one acknowledgement of one pending command", async () => {
     const project = await mkdtemp(join(tmpdir(), "wisp-ack-race-"));
     await mkdir(join(project, ".wisp"));
@@ -199,6 +199,6 @@ describe("SPEC-0001 v6 S2/S9/S11/S18/S21/S22/S31 — clean bundled stdio MCP", (
 
     expect(code).toBe(1);
     expect(stdout.join("")).toBe("");
-    expect(stderr.join("")).toMatch(/^wisp failed to load: /u);
+    expect(stderr.join("")).toBe("wisp failed to load\n");
   });
 });

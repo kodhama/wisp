@@ -12,6 +12,12 @@ updated: 2026-07-25
 
 # ADR-0011 — Support Node.js 24 only
 
+> **Forward pointer.** `adr-0014-retire-preview-qualification-machinery`
+> supersedes this ADR's affirmative support claim, qualification-ledger, and
+> aggregate release-qualification clauses. Node.js 24 remains Wisp's sole
+> runtime requirement, CI line, and bundle target, but that technical
+> compatibility boundary is not a Supported claim.
+
 ## Decision state
 
 ### Decided

@@ -7,16 +7,150 @@ depends_on:
   - adr-0005-plugin-dashboard-lifecycle
   - adr-0008-retire-family-release-certification
   - adr-0009-independent-plugin-package-metadata
-  - adr-0010-preserve-marketplace-observation-provenance
   - adr-0011-node-24-only-support
-  - stewards/kodhama-spec-0003-marketplace-test-observation@v1
-implements: adr-0005-plugin-dashboard-lifecycle
+  - adr-0014-retire-preview-qualification-machinery
+  - adr-0017-bound-preview-directory-lock-contract
+implements: adr-0017-bound-preview-directory-lock-contract
 owner: agent
-updated: 2026-07-25
-version: 11
+updated: 2026-07-26
+version: 15
 ---
 
 # SPEC-0001 — Dual-host Wisp plugin, bundled stdio MCP, and project dashboard
+
+> **AMENDED 2026-07-26**
+> **WHAT:** Replaced v14's positive project-bus `.wisp/write.lock`
+> mutual-exclusion and append-ordering contract with the minimal Preview
+> boundary, explicitly preserved ADR-0005's separate dashboard contract,
+> distinguished “no redesign or correctness claim” from PR #49's retained
+> repairs, excluded project-bus-lock-origin failures from generic error and
+> diagnostic guarantees, and advanced the behavioral version to 15.
+> **WHY:** Human-approved ADR-0017 supersedes ADR-0016's attempt to normatively
+> encode inherited project-bus mechanics; its targeted decision-adversary pass
+> found the first wording overbroad enough to swallow dashboard ownership and
+> factually overstated PR #49's runtime-lock scope.
+> **SCOPE:** Lock constants and prose, S47/S51/S52/S70/S74,
+> S17/S18, R19/R21, R58/R66–R69/R88/R90/R92–R94, HTTP/MCP error and stdio
+> prose, verification matrix, rubric, and gate record.
+> Unrelated schema, validation, exact serialization, project confinement,
+> per-operation byte accounting, ADR-0005 user-runtime dashboard ownership,
+> distribution, and security guarantees remain current.
+> **POINTER:** ADR-0017 and its targeted decision-adversary repair.
+> **VALUE:** A Preview user can distinguish Wisp's retained data and dashboard
+> contracts from project-bus lock behavior that is not promised until issue
+> #50 lands.
+> **CONFIDENCE:** verified.
+
+> **AMENDED 2026-07-26**
+> **WHAT:** Corrected v14 to the source-exact acquisition-deadline start,
+> committed background-release scheduler, post-operation horizon start, and
+> unconditional non-`EEXIST` acquisition-failure cleanup.
+> **WHY:** Conformance at exact head `3ed816e` found that the spec called all
+> inner background work unref'd, started the horizon too early, and invented
+> token verification that the acquisition-error cleanup does not perform; it
+> also measured acquisition from the first `mkdir` rather than the preceding
+> deadline computation.
+> **SCOPE:** Constants, acquisition cleanup, committed release timing,
+> S47/S51/S74, R58/R67/R92–R94, verification matrix, rubric, and gate record.
+> Version remains 14 and ADR-0016 remains the implemented decision because
+> this records inherited current behavior without selecting a lock redesign.
+> **POINTER:** ADR-0016 source-conformance amendment at head `3ed816e`.
+> **VALUE:** A Preview user sees which timers actually keep the process alive
+> and that failed acquisition cleanup can act on an unverified replacement
+> lock.
+> **CONFIDENCE:** verified.
+
+> **AMENDED 2026-07-26**
+> **WHAT:** Closed three intrinsic v14 exactness gaps: short-write rollback
+> outcomes, pathname-addressed post-rename cleanup, and distinct committed,
+> held/pre-commit, retired-cleanup, and stale-recovery budgets.
+> **WHY:** The first intrinsic spec-adversary pass found that v14 implied
+> byte-identical rollback restoration, omitted cleanup's own substitution
+> exposure, and applied committed-release retry behavior too broadly.
+> **SCOPE:** Fixed constants, append failure/commit prose, quarantine and
+> retired cleanup, release timing, S47/S51/S74, R66/R67/R92–R94, verification
+> matrix, rubric, and gate record. Version remains 14 because this repair
+> states the current implementation and ADR-0016 boundary exactly without a
+> new product decision.
+> **POINTER:** First intrinsic `NEEDS-REVISION` pass for SPEC-0001@v14.
+> **VALUE:** A Preview user can distinguish preserved original bytes from
+> best-effort suffix rollback and can see exactly when cleanup and retries stop
+> being owner-coupled.
+> **CONFIDENCE:** verified.
+
+> **AMENDED 2026-07-26**
+> **WHAT:** Expanded the inherited directory-lock limitation from stale
+> recovery to every owner-match-to-canonical-path mutation seam and bounded
+> the exclusivity-derived rollback and concurrent-size guarantees to periods
+> without the documented final-gap overlap.
+> **WHY:** ADR-0016 supersedes ADR-0015 after independent review demonstrated
+> the same pathname race in held and committed release and showed that an
+> overlap can lose later committed bytes or exceed the nominal bus maximum.
+> **SCOPE:** Lock recovery, held/committed release and cleanup, final-gap
+> filesystem outcomes, append rollback, projected-size accounting, GWT, EARS,
+> verification, rubric, and gate record; version advanced from 13 to 14.
+> Event schema, exact serialization, per-operation size accounting, append
+> commit point, identity validation, snapshot equality, observed-mismatch
+> refusal, and every unrelated product guarantee remain unchanged outside the
+> explicit overlap.
+> **POINTER:** ADR-0016 and issue #50.
+> **VALUE:** A Preview user sees the complete current data-safety boundary
+> without mistaking owner checks for uninterrupted cross-process exclusion.
+> **CONFIDENCE:** verified.
+
+> **AMENDED 2026-07-26**
+> **WHAT:** Replaced the absolute final-reread-to-rename stale-lock guarantee
+> with the checks Wisp actually provides and recorded the inherited final-gap
+> race as a Preview limitation tracked by issue #50.
+> **WHY:** ADR-0015 establishes that portable dependency-free Node 24
+> filesystem APIs cannot condition pathname rename on the inode that supplied
+> the reread snapshot and keeps the crash-safe lock redesign out of
+> qualification retirement.
+> **SCOPE:** Stale-lock recovery prose, GWT and EARS acceptance, verification
+> evidence, rubric, and gate record; version advanced from 12 to 13. Exact
+> valid-owner equality, malformed-owner byte equality, missing-owner equality,
+> observed-mismatch refusal, atomic pathname quarantine, and all unaffected
+> runtime, dashboard, distribution, and qualification-retirement guarantees
+> remain unchanged.
+> **POINTER:** ADR-0015 and issue #50.
+> **VALUE:** A Preview user sees the real inherited concurrency risk instead
+> of receiving a stronger lock-safety promise than the runtime can enforce.
+> **CONFIDENCE:** verified.
+
+> **AMENDED 2026-07-26**
+> **WHAT:** Closed four intrinsic safety gaps in v12: malformed bus-lock
+> salvage, schema-invalid dashboard-owner refusal, capability sink/location
+> semantics, and exact compact-event serialization and byte boundaries.
+> **WHY:** The first intrinsic spec-adversary pass found that the approved
+> runtime guarantees were under-specified at recovery races, secret-bearing
+> transient boundaries, and serialization limits.
+> **SCOPE:** Bus-lock recovery, dashboard-owner validation, capability
+> persistence, event serialization, acceptance criteria, verification matrix,
+> rubric, and gate record. Version remains 12 because this repair makes the
+> existing safety contract testable without adding a product or ADR choice.
+> **POINTER:** First intrinsic `NEEDS-REVISION` pass for SPEC-0001@v12.
+> **VALUE:** A Wisp user gets fail-closed ownership recovery and byte-exact
+> event handling without weakening dashboard capability secrecy.
+> **CONFIDENCE:** verified.
+
+> **AMENDED 2026-07-26**
+> **WHAT:** Retired the aggregate qualification and exact-surface carriers,
+> restored the distributed payload to eight paths, advanced every retained
+> package-version carrier to `0.2.1-rc.4`, and made Preview/no-support
+> disclosure explicit while preserving product behavior and safety checks.
+> **WHY:** ADR-0014 approves Preview distribution without standing
+> certification state and preserves ordinary CI, deterministic E2E, live
+> drift smoke, Node 24 compatibility, and every runtime/security guarantee.
+> **SCOPE:** Package inventory and identity, README posture, ordinary quality
+> checks, acceptance criteria, verification evidence, and removal of
+> qualification/surface schemas, joins, transitions, digests, disclosures,
+> and release gates; version advanced from 11 to 12. MCP tools, project
+> binding, bus semantics, dashboard lifecycle/security/recovery, qualified
+> process identity, and capability-safe evidence behavior are unchanged.
+> **POINTER:** ADR-0014.
+> **VALUE:** A Preview user receives the same safe, deterministic plugin
+> without mistaking package metadata or smoke results for a support promise.
+> **CONFIDENCE:** verified.
 
 > **AMENDED 2026-07-25**
 > **WHAT:** Narrowed runtime support and qualification to Node.js 24 only,
@@ -124,8 +258,8 @@ version: 11
 This specification defines one Wisp-owned, self-contained plugin with
 separate Claude and Codex distributions, one bundled stdio MCP server, a
 lazy project-singleton dashboard, portable lifecycle and dashboard skills,
-and product-owned package, qualification, and surface metadata. Marketplace
-catalog admission is external evidence, not part of this package contract.
+product-owned package identity, and Preview documentation. Marketplace
+presence is not a support claim or part of the runtime contract.
 
 MCP is the plugin's only launchable executable interface. Claude binds from
 its official project substitution; Codex binds from its host-selected active
@@ -147,8 +281,8 @@ specification.
 ## Fixed product constants
 
 All implementations and generated schemas SHALL import these values from one
-versioned source module; manifests and qualification tests MAY duplicate only
-values required by their external formats.
+versioned source module; manifests and package tests MAY duplicate only values
+required by their external formats.
 
 | Constant | Value |
 |---|---:|
@@ -170,11 +304,6 @@ values required by their external formats.
 | Dashboard shutdown grace | `1,000 ms` |
 | Dashboard request-body maximum | `32,768 UTF-8 bytes` |
 | Dashboard process-identity maximum | `512 UTF-8 bytes` |
-| Project bus write-lock wait | `5,000 ms` |
-| Project bus write-lock poll interval | `10 ms` |
-| Project bus ownerless-lock stale age | `120,000 ms` |
-| Project bus release-rename synchronous retry budget | `250 ms` |
-| Project bus retired-lock cleanup retries | `5` attempts at `50 ms` intervals |
 | Identifier maximum | `128 UTF-8 bytes` |
 | Verdict maximum | `256 UTF-8 bytes` |
 | Activity or acknowledgement note maximum | `2,048 UTF-8 bytes` |
@@ -186,7 +315,7 @@ values required by their external formats.
 | One bus line maximum, excluding newline | `65,536 UTF-8 bytes` |
 | Pending commands returned by one check maximum | `1,000` |
 | Parse errors returned by one check maximum | `1,000` |
-| Supported Node release line | `24.x` |
+| Required Node runtime line | `24.x` |
 
 An identifier is a JSON string that, after Unicode-preserving trim, is
 non-empty, contains no U+0000–U+001F or U+007F code point, and is within the
@@ -282,10 +411,10 @@ The bus path is exactly `<real-project>/.wisp/events.ndjson`.
 
 ## Qualified process-identity contract
 
-Dashboard ownership and project-bus write locks use one shared qualified
-process-identity provider. A PID without its birth identity is never a
-qualified identity and never proves that a recorded owner is still the same
-process instance.
+Dashboard ownership uses the qualified process-identity provider below. A PID
+without its birth identity is never a qualified dashboard-owner identity and
+never proves that a recorded dashboard owner is still the same process
+instance. This provider contract creates no guarantee for project-bus locking.
 
 The exact supported providers are:
 
@@ -315,133 +444,40 @@ Parser fixtures SHALL cover valid and malformed boot IDs; Linux `comm` values
 with spaces and `)`; short/malformed/non-decimal stat fields; macOS every
 month, single- and double-digit days, locale-dependent/malformed output,
 impossible dates, multiple lines, missing absolute binary, and nonzero exits.
-Live qualification repeats the current-PID observation for stability, proves
-a simultaneously live child has a different token, and proves that child
-becomes absent after exit. Deterministic injected evidence presents one PID
-with recorded birth token A and later current birth token B. Qualification
-never attempts to force OS PID reuse.
+Runtime-safety tests repeat the current-PID observation for stability, prove a
+simultaneously live child has a different token, and prove that child becomes
+absent after exit. Deterministic injected evidence presents one PID with
+recorded birth token A and later current birth token B. Tests never attempt to
+force OS PID reuse.
 
-## Project bus write-lock contract
+## Project bus append and Preview lock boundary
 
-Every bus append, whether initiated by an MCP report/acknowledgement or the
-dashboard command route, is serialized by the same project-local lock:
+MCP reports and acknowledgements and dashboard commands use the same canonical
+project-bus append operation. The event schema, validation, exact
+serialization, project confinement, and per-operation byte accounting in this
+specification apply to each call.
 
-```text
-<canonical-project>/.wisp/write.lock/
-  owner.json
-```
+The append commit point means only that the operation completed the full write
+of the compact canonical event plus its terminating LF. It does not guarantee
+that those bytes will later be preserved or remain durable when same-process
+or cross-process bus operations overlap through the project-bus lock.
 
-The lock directory is acquired by atomic `mkdir` with mode `0700`; no
-check-then-create sequence is allowed. The owner file is then opened inside
-the acquired directory with `O_WRONLY | O_CREAT | O_EXCL`, `O_NOFOLLOW` where
-available, and mode `0600`. It is written completely and closed before the
-protected bus operation begins. The exact owner schema rejects unknown
-properties:
+Wisp Preview makes no guarantee about the current project-bus
+`.wisp/write.lock` mutual-exclusion and append-ordering protocol's concurrency,
+ownership, recovery, cleanup, path identity, deadlines, timing, error mapping,
+or diagnostics. This boundary applies whether bus operations run concurrently
+in different processes or within one process. In particular, the
+specification makes no aggregate bus-size guarantee across concurrent
+operations.
 
-```json
-{
-  "token": "<lowercase UUID>",
-  "pid": 123,
-  "process_identity": "<qualified platform birth token>",
-  "created": 1784900000000,
-  "phase": "held"
-}
-```
+This boundary does not apply to the separate user-runtime dashboard
+ownership/coordinator contract under ADR-0005 and the dashboard clauses below.
 
-`pid` is a positive integer no greater than the platform maximum. `created`
-is a finite non-negative integer Unix epoch millisecond value. The token is
-new for every acquisition attempt. `process_identity` is the shared qualified
-provider's exact token for that PID. `phase` is exactly `held` or `committed`.
-Acquisition fails as `bus_unwritable/process_identity_unavailable` before
-`mkdir` if the current process cannot obtain a qualified identity.
-
-Before acquisition or recovery, Wisp `lstat`s `write.lock` and, when present,
-`owner.json`. A symbolic-link lock returns
-`bus_unwritable/path_is_symlink`; a non-directory lock returns
-`bus_unwritable/path_not_directory`; a symbolic-link owner returns
-`bus_unwritable/path_is_symlink`; and a non-regular owner returns
-`bus_unwritable/path_not_regular_file`. Stat/read failures return
-`bus_unwritable/stat_failed` or `bus_unwritable/open_failed` as applicable.
-Wisp never follows either path while deciding ownership.
-
-Acquisition waits at most 5,000 ms from the first `mkdir` attempt and retries
-an existing lock every 10 ms after recovery evaluation. A non-`EEXIST`
-`mkdir`, owner open, owner write, or short-write failure cleans up only the
-attempt's own owner file and directory when its token can be verified, then
-returns `bus_unwritable/open_failed`. Expiry of the acquisition deadline also
-returns `bus_unwritable/open_failed`; it does not perform an unlocked append.
-
-Recovery follows these exact rules:
-
-1. For an exact owner record, observe the recorded PID through the qualified
-   provider. The same token means the recorded process instance may be live.
-   A `held` lock is never stolen on age alone. An `inconclusive` observation
-   is also never treated as stale.
-2. `absent` or a different qualified token proves the recorded process
-   instance gone, including PID reuse, and permits immediate stale recovery.
-   PID existence alone never blocks or authorizes recovery.
-3. A matching live `committed` record is safe to retire because its append
-   commit point has passed. Any contender may retire it after rereading and
-   matching the complete record.
-4. For a missing or malformed owner that has no usable qualified identity,
-   Wisp uses the exact valid `created` value when available and otherwise the
-   lock-directory `mtime`. Only an age strictly greater than 120,000 ms
-   permits ownerless-lock recovery.
-5. Stale recovery rereads and matches the complete record when one was
-   readable, then atomically renames `write.lock` to
-   `write.lock.stale-<lowercase-UUID>`. A race or mismatch leaves the current
-   lock untouched.
-6. Wisp removes only `owner.json` from the quarantined directory and then the
-   empty directory. Deletion cleanup is best-effort; acquisition restarts
-   against the canonical `write.lock` path.
-
-After acquiring the lock, Wisp revalidates the bus path and its projected
-bounded append while protected. The append commit point is the successful
-single `O_APPEND` write of every byte of the compact canonical event plus its
-terminating LF. Before that point, a short or failed write attempts to restore
-the original size and returns `bus_unwritable/append_failed`. After that
-point, the event is irreversibly committed at the Wisp API boundary: Wisp
-never truncates it and never returns append failure, because a caller retry
-could duplicate the event.
-
-Immediately after commit, Wisp atomically rewrites its matching owner record
-from `phase: "held"` to `phase: "committed"` through a private
-write-close-rename. It then rereads and matches the complete owner and
-atomically renames canonical `write.lock` to
-`write.lock.retired-<token>`. That rename is the release point: new writers
-can acquire canonical `write.lock` even when deletion of the retired sibling
-fails.
-
-Owner-phase publication and canonical-release rename are retried
-synchronously every 10 ms for at most 250 ms. A failure after append commit
-still returns the exact append success and emits one redacted stderr
-diagnostic containing only a fresh incident ID and the stage
-`phase_publish`, `release_rename`, or `retired_cleanup`. It never exposes the
-event, project path, owner token, PID, or OS exception.
-
-If canonical-release rename still fails, the process records that token in a
-process-local committed-token set and schedules an `unref` release worker
-that retries matching-owner phase publication and release every 50 ms until
-success or the 5,000 ms lock-wait horizon from commit expires. A later writer
-in the same process encountering its own PID, qualified identity, and token
-in that set performs the same release retry before ordinary recovery. Another
-process may retire the lock only after it observes the committed phase or
-proves the recorded process instance gone. If the horizon expires while the
-canonical lock remains, subsequent writers follow ordinary acquisition and
-may return `bus_unwritable/open_failed`; the already committed append remains
-a success.
-
-After the release rename, deletion of the retired owner and directory is
-attempted at most five times at 50 ms intervals by an `unref` worker. Exhausted
-deletion emits one redacted diagnostic but cannot block canonical lock
-acquisition. For an operation that failed before commit, release uses the same
-matching-record atomic rename; cleanup failure never replaces the original
-bus error. A different token or identity never authorizes rename or deletion.
-No code path appends outside this lock.
-
-This project-local `write.lock` is transient bus serialization only. It is
-not dashboard discovery, listener ownership, or capability state; those live
-exclusively under the user-runtime dashboard root.
+Issue #50 is the sole venue for project-bus lock correctness, protocol,
+migration, and redesign. ADR-0017 adds no further runtime lock change. PR #49
+does not redesign the project-bus lock or claim its correctness, while
+retaining its already present bounded runtime, owner-validation, append, and
+canary repairs.
 
 ## Dashboard discovery and ownership contract
 
@@ -475,7 +511,8 @@ the canonical dashboard runtime root, `wisp_dashboard` returns
 `dashboard_unavailable/project_contains_runtime`. It does not choose a
 fallback rendezvous. Existing bus tools remain usable.
 
-`owner.json` rejects unknown properties and is exactly one of these records:
+`owner.json` rejects unknown properties and uses exactly one of these closed
+record shapes. Wisp writes protocol `1`:
 
 ```json
 {
@@ -515,12 +552,27 @@ nonblank strings without U+0000; process identity is within its fixed maximum.
 The record's project and project key SHALL recompute to the requesting
 process's canonical project and key before reuse.
 
+For discovery only, a positive safe-integer `protocol` other than `1` remains
+structurally schema-valid so Wisp can prove the complete owner's identity and
+return `dashboard_version_conflict`; it is protocol-incompatible, not
+schema-invalid. A non-integer, non-positive, or otherwise invalid protocol
+follows the unconditional schema-invalid refusal below.
+
 Dashboard ownership uses the shared qualified process-identity contract
 above; it does not define a weaker adapter. If the provider is unavailable
 before acquisition, return
 `dashboard_unavailable/process_identity_unavailable`. If an existing owner's
 identity cannot be compared conclusively, return
 `dashboard_unavailable/owner_identity_unverifiable` and never take ownership.
+Any readable `owner.json` that is invalid against the complete `starting` or
+`ready` schema SHALL return
+`dashboard_unavailable/owner_identity_unverifiable` with `retryable: false`
+immediately. This rule
+applies even when the invalid object contains an individually usable PID,
+process identity, instance, project, project key, protocol, port, capability,
+or timestamp. Wisp SHALL NOT observe such a PID, perform health proof, infer
+owner death, quarantine the owner, or continue acquisition from partial
+fields.
 
 Startup follows this exact state machine:
 
@@ -571,13 +623,14 @@ converge within the fixed timeout returns
 `dashboard_unavailable/ownership_contended`.
 
 A qualified provider result of `absent` or a different birth token proves that
-the recorded process instance is gone, including the PID-reuse case. Only then
-may a contender reread the same instance, atomically rename `owner/` to a
-private quarantine sibling, and restart acquisition. A missing, malformed, or
-incomplete record without conclusive process evidence fails closed as
-`owner_identity_unverifiable`; PID existence, age, or failed health alone
-never proves death. Quarantine cleanup is best-effort and never delays
-successful publication.
+the process instance recorded by a complete schema-valid owner is gone,
+including the PID-reuse case. Only then may a contender reread the same valid
+instance, atomically rename `owner/` to a private quarantine sibling, and
+restart acquisition. A missing owner record fails closed as
+`owner_identity_unverifiable`; every schema-invalid owner follows the
+unconditional refusal above. PID existence, age, failed health, or
+individually usable fields never repair an invalid owner or prove death.
+Quarantine cleanup is best-effort and never delays successful publication.
 
 During graceful HTTP shutdown, failed health against the still-live owner
 returns `dashboard_unavailable/owner_unhealthy`; callers retry explicitly
@@ -651,9 +704,13 @@ rejected before application work, and no permissive CORS header is emitted.
 
 The authorization header is exactly `Authorization: Bearer <capability>`.
 Missing, duplicated, malformed, or unequal authorization is rejected with the
-same response and compared without timing-dependent early exit. The
-capability appears only in the private ready record and in the MCP-returned
-URL:
+same response and compared without timing-dependent early exit. The private
+ready owner record is the capability's only permitted Wisp-controlled
+persistent at-rest location. Transient copies are permitted only in the
+owning process's memory,
+the MCP-returned URL, the page's in-memory closure, the loopback
+`Authorization` header while in transport, and a test harness's volatile
+memory:
 
 ```text
 http://127.0.0.1:<port>/#capability=<capability>
@@ -661,15 +718,26 @@ http://127.0.0.1:<port>/#capability=<capability>
 
 The HTML bootstrap accepts exactly that fragment form, immediately removes it
 from the visible URL with `history.replaceState`, retains the capability only
-in the page's in-memory closure, and sends it as the bearer header. It SHALL
-NOT store the capability in cookies, local storage, session storage, query
-strings, logs, error bodies, stderr diagnostics, health responses, or
-analytics. A replacement owner generates a new capability; an old capability
-cannot authenticate to it.
+in the page's in-memory closure, and sends it as the bearer header. Outside
+the private ready record, no transient copy may cross a Wisp-controlled
+persistent sink or any output sink except the exact response transports
+defined below. The capability SHALL NOT persist in cookies, local storage,
+session
+storage, query strings, buses, transcripts, evidence, files, caches,
+artifacts, uploads, logs, error bodies or objects, stderr diagnostics, health
+responses, or analytics. A replacement owner generates a new capability; an
+old capability cannot authenticate to it.
 
-A host qualification or canary harness may inspect the MCP-returned capability
-URL and construct its bearer header only in volatile process memory while
-proving dashboard behavior. Before any transcript or evidence crosses a
+The mandated `wisp_dashboard` MCP success response that carries the returned
+capability URL and the loopback HTTP request/response transport used by that
+dashboard are permitted Wisp-controlled output transports, not persistent
+sinks. Outside those exact transports, capability material SHALL cross no
+other Wisp-controlled output, log, diagnostic, error, transcript, evidence,
+artifact, cache, upload, bus, health-body, or analytics sink.
+
+A host smoke, canary, or browser harness may inspect the MCP-returned
+capability URL and construct its bearer header only in volatile process memory
+while proving dashboard behavior. Before any transcript or evidence crosses a
 filesystem, artifact, cache, log, or upload boundary, the harness SHALL replace
 every fragment-form or bearer-form capability with a non-secret structural
 redaction sentinel and verify that neither the observed capability bytes nor a
@@ -769,9 +837,9 @@ command-type contracts. `payload` is optional and, when present, is a JSON
 object under the existing recursive JSON and event-size rules. Wisp generates
 `command.id` as `cmd-<lowercase UUID>`, stamps `agent: "maintainer"`, omits
 `to` and `meta`, creates a canonical `command` event, and appends it through
-the same lock and bounded atomic append operation as MCP writes. Success is
-exactly `{"ok":true,"data":{"event":<canonical-command-event>}}`. Wisp never
-executes or automatically acknowledges the command.
+the same canonical project-bus operation as MCP writes. Success is exactly
+`{"ok":true,"data":{"event":<canonical-command-event>}}`. Wisp never executes
+or automatically acknowledges the command.
 
 The embedded UI is functionally complete at this minimum:
 
@@ -828,13 +896,15 @@ HTTP protocol failures return JSON
 | Total request deadline exceeded before response starts | `408` | `http_request_timeout` |
 | Invalid UTF-8, JSON, or command schema | `400` | `http_invalid_request` |
 
-Canonical runtime failures use the existing Wisp error envelope:
+Canonical runtime failures that do not originate in the project-bus
+`.wisp/write.lock` protocol use the existing Wisp error envelope:
 `invalid_input` returns `400`; `command_conflict` from `/api/events` returns
 `409`; `bus_unreadable`, `bus_unwritable`, and `bus_limit_exceeded` return
 `500`; and `internal_error` returns `500`. The `409` body preserves the exact
 existing `command_conflict` details (`command_id`, `count`) and returns no
-partial event data. Responses expose no OS exception text. No failure response
-contains the capability.
+partial event data. A project-bus-lock-origin failure has no contracted HTTP
+status, error envelope, exception-text treatment, or diagnostic emission.
+Regardless of origin, no failure response contains the capability.
 
 The dashboard coordinator is one memoized instance per MCP process. Reusable
 module import and ordinary MCP startup create no user-runtime path, candidate,
@@ -875,6 +945,32 @@ Every stored event is valid only when:
 - it contains all and only the fields allowed for that kind below; and
 - the UTF-8 size of its compact JSON serialization is within the event
   maximum, in addition to the raw bus line limit.
+
+“Compact JSON serialization” means the exact string produced under Node.js 24
+ECMAScript semantics by invoking `JSON.stringify(value)` with the validated
+canonical event as its sole argument: no replacer and no `space` argument.
+Wisp SHALL NOT sort keys, pretty-print, or apply another canonicalization
+pass. The exact returned string is then encoded as UTF-8. JSON escaping and
+property enumeration therefore contribute exactly the bytes emitted by that
+one call; the terminating LF is appended afterward and is not part of the
+event-size count.
+
+The serialization boundaries use these exact vectors:
+
+| Vector | Required result |
+|---|---|
+| `Buffer.byteLength(JSON.stringify(value), "utf8") === 32_768` | event-size validation passes; append writes those 32,768 bytes plus one LF |
+| `Buffer.byteLength(JSON.stringify(value), "utf8") === 32_769` | reject `invalid_input/event_too_large` with `limit: 32768`, `actual: 32769`, and no bus creation or modification |
+| for one operation, observed existing bus bytes plus serialized bytes plus one LF equals `16_777_216` | that operation's projected-bus validation passes |
+| for one operation, observed existing bus bytes plus serialized bytes plus one LF equals `16_777_217` | that operation rejects `bus_limit_exceeded` with `subject: "bus"`, `unit: "utf8_bytes"`, `limit: 16777216`, `actual: 16777217`, and does not append its event |
+
+Boundary fixtures SHALL include ASCII, escaped control characters, and
+non-ASCII scalar values so UTF-16 string length cannot substitute for the
+post-serialization UTF-8 byte count.
+
+Per-operation serialization and projected-size arithmetic use the bytes that
+operation observes. The nominal maximum is not an aggregate bound across
+concurrent operations.
 
 Explicit `null` and unknown properties are invalid at the event root and in
 all defined nested bodies except recursively inside `command.payload`.
@@ -963,8 +1059,13 @@ process, or append a command.
 
 ## Exact MCP outputs and error mapping
 
-Every invoked tool returns one JSON envelope in MCP `structuredContent` and an
-identical compact JSON serialization in its sole text content item.
+Every successful invoked tool and every failure covered by the error contract
+below returns one JSON envelope in MCP `structuredContent` and an identical
+compact JSON serialization in its sole text content item. That text is exactly
+Node 24 `JSON.stringify(envelope)` with the envelope as the sole argument and
+no replacer or spacing. A failure originating in the project-bus
+`.wisp/write.lock` protocol is excluded from this failure-envelope contract;
+stdout framing and capability-safety requirements still apply.
 
 Success:
 
@@ -972,14 +1073,14 @@ Success:
 {"ok":true,"data":{}}
 ```
 
-Expected failure:
+Contracted expected failure:
 
 ```json
 {"ok":false,"error":{"code":"project_unresolved","message":"Human-readable summary","details":{}}}
 ```
 
-`isError` is `false` for success and `true` for the failure envelope. Clients
-SHALL branch on `code`, not `message`.
+`isError` is `false` for success and `true` for a contracted failure envelope.
+Clients SHALL branch on `code`, not `message`, for contracted failures.
 
 Write-tool success data is `{"event": <canonical-event>}`.
 `wisp_check` success data is:
@@ -1019,7 +1120,9 @@ Write-tool success data is `{"event": <canonical-event>}`.
 it is `true` after an existing compatible owner passed the authenticated
 health proof. No other property is returned.
 
-Error `code`, `details.reason`, and `details.field` values are contractual;
+Except for failures originating in the non-contracted project-bus
+`.wisp/write.lock` mutual-exclusion and append-ordering protocol, error `code`,
+`details.reason`, and `details.field` values are contractual;
 human-readable `message` and operating-system exception text are not.
 `details.field` is an RFC 6901 JSON Pointer (`""` for the whole input,
 `/run`, `/refs/3`, and so on).
@@ -1031,22 +1134,27 @@ Stable `project_unresolved` reasons are `invalid_environment_root`,
 `roots_unsupported`, `roots_list_failed`, `roots_absent`,
 `roots_ambiguous`, and `invalid_file_root`.
 
-Stable bus reasons are `path_is_symlink`, `path_not_directory`,
+For failures not originating in the project-bus `.wisp/write.lock` protocol,
+stable bus reasons are `path_is_symlink`, `path_not_directory`,
 `path_not_regular_file`, `outside_project`, `stat_failed`, `mkdir_failed`,
-`open_failed`, `read_failed`, `append_failed`, `process_identity_unavailable`,
-and `invalid_utf8`.
+`open_failed`, `read_failed`, `append_failed`, and `invalid_utf8`.
 `bus_unreadable` uses the applicable reason except `mkdir_failed` and
-`append_failed` and never uses `process_identity_unavailable`;
+`append_failed`;
 `bus_unwritable` uses the applicable reason except `read_failed` and
 `invalid_utf8`. Stable parse-error reasons are `invalid_json` and
 `invalid_event`.
+
+No code, reason, retryability, message, operating-system text, or stderr
+diagnostic caused by project-bus `.wisp/write.lock` acquisition, ownership,
+recovery, release, or cleanup is contractual. This exception does not apply to
+the separate dashboard ownership/coordinator errors.
 
 | Error code | Used when | Required `details` |
 |---|---|---|
 | `invalid_input` | A named tool's arguments violate its schema or cross-field rule | `field`, stable `reason`, and `limit`/`actual` when bounded |
 | `project_unresolved` | Project selection fails | `reason` from the resolution contract and `source` (`environment` or `roots`) |
 | `bus_unreadable` | The selected bus cannot be safely statted, contained, decoded, or read | `path`, stable `reason` |
-| `bus_unwritable` | Directory validation/creation, containment, open, or append fails | `path`, stable `reason` |
+| `bus_unwritable` | Non-project-bus-lock directory validation/creation, containment, bus open, or append fails | `path`, stable `reason` |
 | `bus_limit_exceeded` | Bus, line, command count, or parse-error count exceeds a fixed maximum | `subject` (`bus`, `line`, `commands`, or `parse_errors`), `unit` (`utf8_bytes` or `items`), `limit`, `actual` |
 | `command_not_found` | No matching command exists in the run | `command_id` |
 | `command_conflict` | More than one matching command id exists in the run | `command_id`, `count` |
@@ -1054,7 +1162,7 @@ and `invalid_utf8`.
 | `command_not_targeted` | The unique pending command targets another agent | `command_id`, `target`, `agent` |
 | `dashboard_unavailable` | Dashboard startup, reuse, or safe recovery cannot complete | stable `reason`, `retryable` |
 | `dashboard_version_conflict` | A live owner uses another dashboard protocol | `expected_protocol`, `actual_protocol` |
-| `internal_error` | An unexpected server defect reaches the adapter | `incident_id` |
+| `internal_error` | An unexpected non-project-bus-lock server defect reaches the adapter | `incident_id` |
 
 Serialized-event excess is `invalid_input` with field `""`, reason
 `event_too_large`, `limit`, and `actual`. `command_not_pending.status` is
@@ -1073,8 +1181,11 @@ their envelope is stable across host SDKs. Unknown tool names use MCP
 `MethodNotFound` (`-32601`). Requests malformed before a named tool can be
 identified use MCP `InvalidParams` (`-32602`). MCP framing/internal transport
 failures may use their standard JSON-RPC errors; they are not tool results.
-An unexpected handler exception is caught, diagnosed on stderr, and returned
-as `internal_error` without terminating a valid session.
+An unexpected handler exception that does not originate in the project-bus
+`.wisp/write.lock` protocol is caught, diagnosed on stderr, and returned as
+`internal_error` without terminating a valid session. Project-bus-lock-origin
+exceptions have no contracted envelope, `isError`, `internal_error`, or
+diagnostic behavior.
 
 Malformed bus lines are data only on a successful `wisp_check` when all read
 limits are satisfied. They are never rewritten or represented as events.
@@ -1083,8 +1194,12 @@ limits are satisfied. They are never rewritten or represented as events.
 
 `node dist/wisp.mjs` starts the server over stdio and starts no CLI or HTTP
 listener before an explicit `wisp_dashboard` call. Stdout contains MCP
-protocol frames only, including while the dashboard runs. Startup text,
-diagnostics, and exception detail use stderr.
+protocol frames only, including while the dashboard runs and when a
+project-bus-lock-origin failure occurs. Startup text and every diagnostic or
+exception detail whose emission is contracted use stderr. The specification
+does not require a project-bus-lock-origin diagnostic to be emitted or
+constrain its content, but it may not violate stdout framing or
+capability-safety.
 
 The source is TypeScript. The distributed artifact is ordinary JavaScript
 containing all runtime dependencies, built with esbuild target `node24`, and
@@ -1094,9 +1209,9 @@ global `wisp`, or resolve project/global packages. Host configs MAY resolve
 the host-provided `node` executable from `PATH`. The payload declares no
 binary and the bundle has no CLI command dispatcher.
 
-## Plugin, skill, marketplace, and qualification contract
+## Plugin, skill, marketplace, and Preview contract
 
-`plugins/wisp/` SHALL contain exactly these ten candidate paths:
+`plugins/wisp/` SHALL contain exactly these eight distributed paths:
 
 - `.claude-plugin/plugin.json`;
 - `.codex-plugin/plugin.json`;
@@ -1105,31 +1220,30 @@ binary and the bundle has no CLI command dispatcher.
 - `dist/wisp.mjs`;
 - `skills/wisp/SKILL.md`;
 - `skills/dashboard/SKILL.md`;
-- `README.md`;
-- `qualification.json`; and
-- `surfaces.json`.
+- `README.md`.
 
 `VERSION` SHALL contain one canonical SemVer plus one terminal LF and no other
-bytes. For the first package under this contract it is exactly
-`0.2.1-rc.3\n`. Its value SHALL equal:
+bytes. For the package under this contract it is exactly `0.2.1-rc.4\n`. Its
+value SHALL equal:
 
 - both host manifest versions;
 - the Codex bootstrap's cache-path version segment;
 - root `package.json` and both root-package versions in `package-lock.json`;
-- the MCP server identity emitted by `src/mcp.ts` and projected into
-  `dist/wisp.mjs`;
-- `qualification.json.plugin_version`; and
-- `surfaces.json.version`.
+- the MCP server identity emitted by `src/mcp.ts`; and
+- the package identity projected into the generated `dist/wisp.mjs`; and
+- every existing package-version assertion in tests.
 
-For this candidate, the generated `dist/wisp.mjs` bytes SHALL use bundle
-target `node24`. `qualification.json.artifact_sha256` SHALL be recomputed from
-those exact generated bytes rather than retained from the preceding candidate.
-In the initial checked-in `0.2.1-rc.3` adoption state, before any fresh
-qualification run, advancing the candidate SHALL reset the Node 24, Claude,
-Codex, dashboard, and overall qualification results to `pending` and SHALL
-NOT manufacture marketplace evidence. That reset is not a permanent candidate
-state: fresh qualification MAY replace pending results with `pass` or `fail`
-under the qualification and release rules below.
+`qualification.json` and `surfaces.json` SHALL NOT exist in the distributed
+payload. They are not version carriers. No source, build, test, workflow,
+release, or documentation path SHALL read, write, mutate, join, validate, or
+require either file, an aggregate qualification result, a qualification
+digest, a disclosure matrix, a marketplace-observation join, or a
+support-like exact-surface row.
+
+The generated `dist/wisp.mjs` bytes SHALL use bundle target `node24` and run
+under Node.js 24.x. Node.js 24 is Wisp's sole runtime requirement, CI line,
+and bundle target. This technical compatibility boundary SHALL NOT be
+described or interpreted as a Supported claim.
 
 The SemVer validator SHALL implement the full SemVer 2.0.0 grammar, including
 nonnumeric prerelease identifiers that begin with a digit, and SHALL reject
@@ -1169,187 +1283,24 @@ start the Wisp dashboard. It calls `wisp_dashboard`, presents the exact
 returned link, and does not manufacture a URL, invoke a shell, open a browser,
 start the legacy server, or add lifecycle policy.
 
-`surfaces.json` SHALL be one closed object with exactly
-`schema_version`, `version`, and `rows`. `schema_version` is integer `1`;
-`version` equals `VERSION`; and `rows` is an array of closed row objects with
-exactly:
+The plugin README SHALL identify Wisp as Preview and state explicitly that
+support is not claimed. It SHALL NOT imply that marketplace presence,
+successful installation, ordinary CI, deterministic E2E, or live smoke
+creates a Supported claim. A Stewards marketplace listing SHALL carry the
+same disclosure or link to the distributed README. A later Stewards entry may
+point to `kodhama/wisp`, path `plugins/wisp`; Stewards carries neither bundle
+bytes nor a Wisp version.
 
-- `surface_id`: unique and matching
-  `^[a-z0-9][a-z0-9._/-]{0,127}$`;
-- `host`: `claude` or `codex`;
-- `qualification_path`: normalized plugin-relative `qualification.json`,
-  with no absolute or `..` segment and no symlink escape from the plugin;
-- `qualification_key`: the same host key in `qualification.json`;
-- `marketplace_test_observations`: a present array of normalized
-  repository-relative `.json` paths with no absolute, backslash, or `..`
-  segment; and
-- `disclosure`: nonblank UTF-8 text.
+Typecheck, unit, build, host-plugin validation, and deterministic
+Docker/Playwright E2E remain ordinary product-quality checks. Their success
+does not create an aggregate qualification result, release certificate, or
+support promise. Live marketplace smoke remains drift detection under
+SPEC-0002 and does not gate package identity or release.
 
-For this version, `disclosure` is also the sole at-rest provenance-reporting
-surface. Static package validation SHALL derive it from the referenced host
-qualification result and the observation-array length, with no other input:
-
-| Referenced host `result` | Exact prefix |
-|---|---|
-| `pending` | `Qualification is pending;` |
-| `pass` | `Qualification passed;` |
-| `fail` | `Qualification failed;` |
-
-The selected prefix SHALL be followed by this exact text, including its
-leading ASCII space:
-
-```text
- Stewards catalog admission and marketplace registration for 0.2.1-rc.3 are not evidenced.
-```
-
-When `marketplace_test_observations` is empty, `disclosure` SHALL end there.
-When the array contains one or more paths, validation SHALL append one ASCII
-space followed by this exact sentence:
-
-```text
-Marketplace observation provenance is unverified; structural validation does not authenticate the named run.
-```
-
-No other disclosure bytes are permitted.
-
-In the initial checked-in `0.2.1-rc.3` adoption state, before fresh host
-qualification, the rows SHALL be exactly:
-
-| `surface_id` | `host` | qualification | disclosure obligation |
-|---|---|---|---|
-| `claude-interactive` | `claude` | `qualification.json#claude` | `Qualification is pending; Stewards catalog admission and marketplace registration for 0.2.1-rc.3 are not evidenced.` |
-| `codex-cli-local-session` | `codex` | `qualification.json#codex` | `Qualification is pending; Stewards catalog admission and marketplace registration for 0.2.1-rc.3 are not evidenced.` |
-
-Every referenced qualification host object SHALL exist and remain closed
-under the qualification schema below. In that initial adoption state it SHALL
-have `result: "pending"`, and surface metadata SHALL NOT derive a support
-state from that value. Fresh qualification MAY later update the referenced
-host result; static validation SHALL then derive the exact corresponding
-disclosure above. Host and overall promotion remain governed by the
-qualification and release rules below, not by this initial table.
-
-Every present marketplace observation SHALL satisfy the exact closed
-`stewards/kodhama-spec-0003-marketplace-test-observation@v1` structure and
-match its row's `host` and `surface_id`. Passing those offline checks proves
-only structural validity; it does not authenticate the named GitHub Actions
-run or prove marketplace registration.
-
-SPEC-0001 v11 defines no authenticated runtime-provenance projection.
-Therefore, after structural validation succeeds, the deterministic predicate
-`marketplace_test_observations.length > 0` assigns the at-rest provenance
-report `unverified` through the exact disclosure suffix above. Static package
-validation SHALL NOT query GitHub or convert that state into a registration
-pass or failure. A later contract may add a separately authenticated runtime
-projection; even then, verified provenance would prove only that one exact
-marketplace checkout was registered by one host run and would not create or
-change plugin identity, qualification, behavior, support, release readiness,
-or current catalog availability. The initial observation arrays are empty.
-
-The plugin README SHALL describe the independent `VERSION`/manifest/surface
-carrier relationship and SHALL NOT state that a Wisp Stewards catalog entry
-presently exists. A later Stewards entry may point to `kodhama/wisp`, path
-`plugins/wisp`; Stewards carries neither bundle bytes nor a Wisp version.
-
-A plugin version is releasable only when one build:
-
-1. launches from a clean fixture with no project `node_modules` and no global
-   `wisp` on the latest available patch of Node 24.x;
-2. validates the Claude and Codex manifests independently;
-3. installs in a single-project fixture under current stable Claude Code,
-   lists the exact seven tools, invokes `wisp_check`, performs one write,
-   explicitly opens the dashboard, and verifies the exact
-   `<fixture>/.wisp/events.ndjson` bus;
-4. installs the exact candidate through a marketplace named `kodhama`, then
-   independently performs the same evidence under current stable Codex CLI;
-5. concurrently opens both installed hosts on one project and proves one
-   dashboard owner and URL, then proves distinct-project isolation; and
-6. hashes the exact `dist/wisp.mjs` artifact and records all evidence in
-   `qualification.json`.
-
-`qualification.json` rejects unknown properties and has this exact schema:
-
-```json
-{
-  "plugin_version": "semantic version",
-  "artifact_sha256": "64 lowercase hexadecimal characters",
-  "date": "YYYY-MM-DD",
-  "platform": "Node process.platform value",
-  "architecture": "Node process.arch value",
-  "node_versions": {
-    "24": {"version": "exact 24.x.y", "result": "pending"}
-  },
-  "claude": {
-    "version": "exact host version",
-    "result": "pending",
-    "tools_listed": false,
-    "check_passed": false,
-    "write_passed": false,
-    "bus_path_verified": false
-  },
-  "codex": {
-    "version": "exact host version",
-    "result": "pending",
-    "tools_listed": false,
-    "check_passed": false,
-    "write_passed": false,
-    "bus_path_verified": false
-  },
-  "dashboard": {
-    "result": "pending",
-    "explicit_start_only": false,
-    "claude_open_passed": false,
-    "codex_open_passed": false,
-    "cross_host_singleton_passed": false,
-    "project_isolation_passed": false,
-    "command_append_passed": false,
-    "security_passed": false,
-    "cleanup_recovery_passed": false,
-    "process_identity_passed": false
-  },
-  "result": "pending"
-}
-```
-
-Each `result` is exactly `pending`, `pass`, or `fail`; the four evidence
-fields in each host object and the nine evidence fields in `dashboard` are
-booleans. `plugin_version` is valid SemVer, `artifact_sha256`
-matches `^[0-9a-f]{64}$`, and `date` is a real calendar date in
-`YYYY-MM-DD`. `node_versions` is a closed object with exactly the key `"24"`;
-its value rejects unknown properties, requires exactly `version` and
-`result`, and uses an exact matching `24.x.y` version or the literal
-`pending`; its result uses the shared result enum. Each host `version` is
-either `pending` or a nonblank exact
-version string. The dashboard object rejects unknown properties and requires
-exactly the shown result and evidence fields. A development payload may use
-the shown false booleans, `pending` version sentinels, per-line/host/dashboard
-pending results, and overall `pending`.
-
-`process_identity_passed` becomes true only when both reproducible evidence
-classes and the platform parser suite pass:
-
-1. The applicable exact Linux or macOS parser fixtures in the qualified
-   process-identity contract all pass. A platform without a specified
-   provider, including Windows in v6, cannot set this evidence true.
-2. On the qualification platform, repeated provider observations of the
-   current PID return one stable exact token; an independently spawned live
-   child returns a different token; and after that child exits the provider
-   reports it absent.
-3. A deterministic injected provider presents the same numeric PID first with
-   recorded token A and then with current token B. Recovery classifies the
-   owner as the old process instance, quarantines only its matching record,
-   for both dashboard ownership and the project bus write lock.
-
-Qualification SHALL NOT claim or attempt to force live OS PID reuse. The
-deterministic same-PID/new-token vector is the required PID-reuse evidence.
-
-Overall `result` may be `pass` only when no version value is `pending`, the
-Node 24 result is `pass`, both host results and the dashboard result
-are `pass`, all eight host evidence fields and all nine dashboard evidence
-fields are true, manifest versions equal `plugin_version`, and
-`artifact_sha256` matches the shipped bundle. Release requires overall
-`pass`; any Node 24, host, or dashboard failure blocks release. Older host
-versions are unsupported unless a future qualification record explicitly
-adds them.
+Any future Supported claim SHALL require a new Wisp-local decision that names
+the exact host and surface promise, limitations, evidence, and renewal policy.
+If Wisp later declares machine-readable exact-surface rows, each row SHALL
+follow the Stewards 0023 availability/support grammar received by ADR-0013.
 
 ## Acceptance criteria
 
@@ -1441,7 +1392,8 @@ adds them.
 **S12 — Boundary validation**
 
 - **Given** each string, reference count, event size, bus size, line size, and
-  returned-count boundary,
+  returned-count boundary and, for projected bus size, one operation's
+  observed existing bus bytes,
 - **When** values at and one unit beyond the boundary are exercised,
 - **Then** boundary values succeed and excess values return the specified
   error without partial output or append.
@@ -1478,19 +1430,24 @@ adds them.
 
 **S17 — Error mapping**
 
-- **Given** each error class plus an unknown tool and a pre-tool malformed
-  request,
+- **Given** each contracted error class excluding project-bus
+  `.wisp/write.lock`-origin failures, plus an unknown tool and a pre-tool
+  malformed request,
 - **When** MCP handles them,
 - **Then** named-tool errors use the stable `isError` envelope, the unknown
-  tool uses `-32601`, and the malformed request uses `-32602`.
+  tool uses `-32601`, and the malformed request uses `-32602`; a
+  project-bus-lock-origin failure has no contracted envelope, `isError`,
+  `internal_error`, or diagnostic behavior.
 
 **S18 — Stdout purity**
 
-- **Given** startup, success, expected failures, and an unexpected handler
-  exception,
+- **Given** startup, success, contracted expected failures, an unexpected
+  non-project-bus-lock handler exception, and a project-bus-lock-origin
+  failure,
 - **When** the process is exercised over stdio,
-- **Then** stdout parses wholly as MCP traffic and diagnostics appear only on
-  stderr.
+- **Then** stdout parses wholly as MCP traffic in every case, contracted
+  diagnostics appear only on stderr, and no diagnostic emission or content is
+  required for the project-bus-lock-origin failure.
 
 **S19 — Import safety**
 
@@ -1502,8 +1459,9 @@ adds them.
 **S20 — Exact plugin payload**
 
 - **Given** the built `plugins/wisp/` directory,
-- **When** its release payload and executable surfaces are inspected,
-- **Then** it contains exactly the ten specified paths, declares no binary
+- **When** its distributed payload and executable surfaces are inspected,
+- **Then** it contains exactly the eight specified paths, contains neither
+  `qualification.json` nor `surfaces.json`, declares no binary
   or CLI dispatcher, Claude launches through root `.mcp.json`, and Codex
   launches through the manifest's inline server definition.
 
@@ -1529,24 +1487,21 @@ adds them.
   the returned URL, and neither contains prohibited host-, shell-, path-,
   Grove-, auto-obedience, URL-invention, or browser-launch policy.
 
-**S24 — Independent host releases**
+**S24 — Independent host integration**
 
-- **Given** a release candidate,
-- **When** Claude and Codex qualification run,
+- **Given** the same built Preview package installed for Claude and Codex,
+- **When** each host's ordinary integration smoke runs,
 - **Then** each independently proves tool listing, check, write, explicit
-  dashboard open, and exact bus path in a single-project fixture and either
-  failure blocks release.
+  dashboard open, and exact bus path in a single-project fixture without
+  creating an aggregate release or support result.
 
-**S25 — Node 24-only bundle and qualification**
+**S25 — Node 24 technical boundary**
 
-- **Given** the candidate build configuration, clean bundled artifact, and
-  qualification record,
-- **When** package and runtime qualification run,
+- **Given** the build configuration and clean bundled artifact,
+- **When** package and runtime checks run,
 - **Then** the bundle target is exactly `node24`, the artifact launches and
-  passes its contract suite on the recorded latest Node 24 patch without
-  dependency resolution, `node_versions` contains exactly key `"24"` with
-  that exact version/result pair, and Node 20/22 keys or support claims are
-  rejected.
+  passes its contract suite on Node 24 without dependency resolution, and the
+  technical Node requirement creates no Supported claim.
 
 **S26 — Filesystem confinement**
 
@@ -1566,15 +1521,13 @@ adds them.
   exact splitting rules, empty lines are skipped, and malformed records use
   the stable parse reasons.
 
-**S28 — Qualification lifecycle**
+**S28 — No aggregate qualification lifecycle**
 
-- **Given** the initial checked-in `0.2.1-rc.3` adoption state with reset
-  qualification evidence,
-- **When** fresh Node, host, and dashboard qualification subsequently runs,
-- **Then** each pending result may become `pass` or `fail`, but release
-  remains blocked until the artifact hash, the sole Node 24 result, both host
-  results, the dashboard result, all eight host evidence booleans, and all
-  nine dashboard evidence booleans satisfy overall `pass`.
+- **Given** a build, test, workflow, release, or documentation path,
+- **When** it processes the Preview package,
+- **Then** it neither requires nor mutates an aggregate qualification result,
+  qualification digest, disclosure matrix, marketplace-observation join, or
+  support-like exact-surface row.
 
 **S29 — Duplicate commands fail the complete check**
 
@@ -1624,7 +1577,9 @@ adds them.
 
 - **Given** each valid and one-property-invalid starting and ready record,
 - **When** discovery reads or publishes it,
-- **Then** only the exact discriminated schema is accepted and a ready record
+- **Then** only the exact closed discriminated shape is structurally accepted,
+  Wisp publishes and reuses only protocol `1`, another positive safe-integer
+  protocol reaches version conflict after identity proof, and a ready record
   becomes discoverable only through atomic replacement after the listener is
   live.
 
@@ -1679,8 +1634,10 @@ adds them.
 - **When** the page bootstraps and authenticated calls are attempted with the
   current and stale capabilities,
 - **Then** the fragment is removed into closure-only memory, the current
-  capability succeeds, the stale capability fails generically, and neither
-  capability appears in persistence, logs, diagnostics, health, or errors.
+  capability succeeds, the stale capability fails generically, only the
+  matching private ready record persists the current capability, and neither
+  capability crosses any other persistence, log, diagnostic, health, error,
+  evidence, artifact, cache, upload, bus, or analytics sink.
 
 **S41 — HTTP boundary**
 
@@ -1711,8 +1668,8 @@ adds them.
 - **Given** exact and invalid dashboard command bodies,
 - **When** authenticated same-origin `POST /api/commands` runs,
 - **Then** each valid body appends and returns exactly one canonical
-  `maintainer` command through the shared lock/append path, every invalid body
-  appends zero bytes, and no command is executed or acknowledged.
+  `maintainer` command through the shared canonical bus-append path, every
+  invalid body appends zero bytes, and no command is executed or acknowledged.
 
 **S44 — Project-key isolation**
 
@@ -1722,14 +1679,14 @@ adds them.
 - **Then** the SHA-256 keys, owners, listeners, event reads, and command
   appends remain isolated to their respective project buses.
 
-**S45 — Cross-host singleton qualification**
+**S45 — Cross-host singleton behavior**
 
-- **Given** current-stable Claude Code and Codex installed from the exact
-  candidate and opened on one project,
+- **Given** Claude Code and Codex installed from the same package and opened
+  on one project,
 - **When** both explicitly request the dashboard concurrently,
-- **Then** they return one URL and the qualification record proves both host
-  opens, cross-host singleton behavior, identity, security, commands, cleanup,
-  recovery, and project isolation.
+- **Then** direct integration evidence proves one returned URL, both host
+  opens, cross-host singleton behavior, identity, security, commands,
+  cleanup, recovery, and project isolation.
 
 **S46 — No legacy or detached surface**
 
@@ -1740,19 +1697,17 @@ adds them.
   remote transport, external dashboard resource, or legacy `.grove` data
   path, and only explicit dashboard invocation can start HTTP.
 
-**S47 — Exact project bus write lock**
+**S47 — Preview project-bus lock boundary**
 
-- **Given** concurrent appends, exact and malformed owner records, live/dead
-  qualified process identities, same-PID/different-birth tokens, ownerless
-  locks below/above 120,000 ms, symlink/wrong-type paths, and a held lock
-  beyond 5,000 ms,
-- **When** MCP and dashboard writers acquire, recover, use, and release
-  `.wisp/write.lock`,
-- **Then** `mkdir`/`O_EXCL` serialize every append, live owners are never
-  stolen by PID-only reasoning, same-PID/new-birth owners are recoverable,
-  only exact stale cases are quarantined, cleanup removes only the matching
-  token and identity, and each unsafe/timeout condition uses the specified
-  stable bus error without unlocked append.
+- **Given** same-process or cross-process bus operations and any current
+  `.wisp/write.lock` state, interleaving, failure, or delay,
+- **When** MCP or dashboard writers append to the project bus,
+- **Then** Wisp Preview makes no guarantee for that project-bus
+  mutual-exclusion and append-ordering protocol's concurrency, ownership,
+  recovery, cleanup, path identity, deadlines, timing, error mapping, or
+  diagnostics; issue #50 remains the sole venue for a positive project-bus
+  lock-correctness contract; and the separate ADR-0005 user-runtime dashboard
+  ownership/coordinator contract remains current.
 
 **S48 — Safe functional dashboard UI**
 
@@ -1785,17 +1740,14 @@ adds them.
   work, success keys the resolved canonical project, and failure creates no
   dashboard state or listener.
 
-**S51 — Irreversible append commit and nonblocking release**
+**S51 — Append commit has a per-operation meaning**
 
-- **Given** a full append followed by failures publishing committed phase,
-  renaming canonical lock, and deleting a retired lock, plus a caller that
-  would retry on failure,
-- **When** Wisp crosses the exact append commit point,
-- **Then** it always returns append success, never truncates or invites a
-  duplicate retry, emits only redacted incident diagnostics, retries matching
-  same-owner release synchronously and through `unref` recovery, and a
-  successfully retired canonical lock permits new writers despite deletion
-  failure.
+- **Given** one append that completes the full compact event-plus-LF write and
+  any overlapping same-process or cross-process project-bus lock activity,
+- **When** that operation reaches its append commit point,
+- **Then** commit establishes only that the complete write occurred for that
+  operation; it creates no guarantee that the bytes will later be preserved
+  or remain durable under overlap.
 
 **S52 — Exact qualified process providers**
 
@@ -1803,8 +1755,10 @@ adds them.
   observations, deterministic same-PID/new-birth tokens, and Windows,
 - **When** the shared identity provider is qualified,
 - **Then** only exact Linux boot-id/start-ticks and macOS absolute-`/bin/ps`
-  C-locale tokens qualify, both dashboard and bus recovery use them, Windows
-  remains unsupported, and no PID-only result is accepted.
+  C-locale tokens qualify for dashboard ownership, Windows remains
+  unsupported, and no PID-only result is accepted; these provider guarantees
+  create no project-bus `.wisp/write.lock` mutual-exclusion or append-ordering
+  guarantee and do not weaken the separate dashboard ownership contract.
 
 **S53 — HTTP deadline boundaries**
 
@@ -1820,7 +1774,7 @@ adds them.
 
 **S64 — Retained host and browser evidence contains no dashboard capability**
 
-- **Given** a host qualification, canary, or browser harness that has received
+- **Given** a host smoke, canary, or browser harness that has received
   a live dashboard fragment and used it as a bearer in volatile memory,
 - **When** the harness prepares any transcript or evidence for persistence or
   upload,
@@ -1831,58 +1785,103 @@ adds them.
   console/network/reporter data, and a failed redaction check blocks
   persistence and upload.
 
-**S65 — One independent candidate identity**
+**S65 — One independent package identity**
 
-- **Given** the initial checked-in `0.2.1-rc.3` candidate before fresh
-  qualification and its complete repository carriers,
+- **Given** the `0.2.1-rc.4` package and its retained repository carriers,
 - **When** package validation reads `VERSION`,
-- **Then** `VERSION` is canonical SemVer `0.2.1-rc.3` plus LF and every
-  manifest, cache-path, package, runtime, qualification, bundle, and surface
-  carrier equals that value, the bundle target is `node24`,
-  `qualification.json.artifact_sha256` matches the newly generated bundle,
-  and the Node 24, Claude, Codex, dashboard, and overall qualification results
-  remain reset to `pending` without any manufactured marketplace evidence;
-  later fresh qualification is free to replace those pending results under
-  S28.
+- **Then** `VERSION` is canonical SemVer `0.2.1-rc.4` plus LF and every
+  manifest, cache-path, root package, lock, MCP server, and generated-bundle
+  carrier and existing test assertion equals that value, while retired
+  aggregate metadata is not a carrier.
 
-**S66 — Pending surfaces remain nonclaims**
+**S66 — Preview disclosure is explicit**
 
-- **Given** pending Claude and Codex qualification and no retained marketplace
-  observation,
-- **When** `surfaces.json` is inspected,
-- **Then** it contains exactly the two closed host rows, links each to its
-  matching pending qualification object, discloses absent catalog/registration
-  evidence, and states no support or release result.
+- **Given** the distributed README or a Stewards marketplace listing,
+- **When** a user evaluates Wisp's adoption posture,
+- **Then** the package is identified as Preview, support is explicitly not
+  claimed, and the listing either repeats that disclosure or links to it.
 
-**S67 — Invalid evidence joins fail closed**
+**S67 — Quality evidence is not support**
 
-- **Given** a surface row with an absent observation array, escaping path,
-  unknown property, malformed Stewards record, or mismatched host/surface id,
-- **When** static package validation runs,
-- **Then** validation fails without changing qualification or manufacturing
-  marketplace, support, or release evidence.
+- **Given** marketplace presence, successful installation, ordinary CI,
+  deterministic E2E, or a live smoke result,
+- **When** package posture is derived,
+- **Then** none of those facts creates an aggregate qualification, release
+  certificate, or Supported claim.
 
-**S68 — At-rest observations report unverified provenance**
+**S68 — Retired metadata has no consumer**
 
-- **Given** a row with one or more structurally valid retained Stewards
-  observations,
-- **When** static package validation reads the row without network access,
-- **Then** validation requires the exact `unverified` disclosure suffix,
-  performs no external authentication, infers no registration pass or
-  failure, and changes no plugin, qualification, support, release, or catalog
-  state.
+- **Given** the source, build, test, workflow, release, and documentation
+  graphs,
+- **When** references to retired qualification and surface metadata are
+  inspected,
+- **Then** no path reads, writes, requires, mutates, joins, or validates
+  `qualification.json` or `surfaces.json`.
 
-**S69 — Surface disclosure follows qualification transitions**
+**S69 — Future support is claim-scoped**
 
-- **Given** an initial pending surface row and a fresh qualification that
-  leaves its referenced host `pending` or transitions it to `pass` or `fail`,
-  with either zero or one-or-more marketplace observations,
-- **When** static package validation re-derives its disclosure,
-- **Then** it selects exactly `Qualification is pending;`, `Qualification
-  passed;`, or `Qualification failed;` from that result alone, appends the
-  exact rc.3 catalog/registration non-evidence sentence, appends the exact
-  unverified-provenance sentence only when observations exist, and permits no
-  other disclosure bytes or support/release inference.
+- **Given** a future exact host or surface support proposal,
+- **When** Wisp would make a Supported claim or declare machine-readable
+  exact-surface rows,
+- **Then** a new Wisp-local decision defines the promise, limitations,
+  evidence, and renewal policy, and every declared row follows the Stewards
+  0023 availability/support grammar.
+
+**S70 — Project-bus lock recovery is not contracted**
+
+- **Given** any complete, malformed, missing, replaced, or concurrently
+  changed `.wisp/write.lock` state,
+- **When** current project-bus lock recovery runs,
+- **Then** Wisp Preview promises no owner interpretation, identity use,
+  recovery eligibility, mutation, error, timing, or cleanup result for that
+  protocol; issue #50 solely owns a future positive recovery contract, and
+  ADR-0005 dashboard recovery remains separately contracted.
+
+**S71 — Invalid dashboard owners fail closed**
+
+- **Given** every `starting` and `ready` owner-schema violation, including
+  invalid owners whose PID, qualified identity, instance, project, protocol,
+  port, or capability is individually usable,
+- **When** dashboard discovery reads the owner,
+- **Then** it returns
+  `dashboard_unavailable/owner_identity_unverifiable` with `retryable: false`,
+  performs no process observation or health request, and neither quarantines
+  nor replaces the owner.
+
+**S72 — Capability locations are sink-bounded**
+
+- **Given** a live dashboard capability in the private ready record and each
+  permitted transient location and mandated response transport,
+- **When** the owner, browser, HTTP transport, or test harness uses it,
+- **Then** only the private ready record persists it, transient copies remain
+  in memory, the exact `wisp_dashboard` MCP response, or loopback
+  request/response transport, and no other Wisp-controlled output, query, log,
+  error, transcript, evidence, file, cache, artifact, upload, bus, or
+  analytics sink receives it.
+
+**S73 — Compact serialization has exact byte boundaries**
+
+- **Given** validated canonical events whose one-argument Node 24
+  `JSON.stringify` outputs encode to exactly 32,768 and 32,769 UTF-8 bytes,
+  plus one operation's observed existing bus bytes producing projections of
+  exactly 16,777,216 and 16,777,217 bytes,
+- **When** event-size and projected-bus validation run,
+- **Then** the two exact-limit vectors pass, the two limit-plus-one vectors
+  fail with the specified `actual` and `limit` values without modifying the
+  bus, and accepted storage is the unchanged JSON string followed by one LF.
+
+**S74 — Retained data boundary under overlap**
+
+- **Given** validated events and same-process or cross-process bus operations
+  that may overlap,
+- **When** each operation validates, serializes, accounts for, and attempts
+  its append,
+- **Then** event schema, validation, exact serialization, project confinement,
+  and that operation's byte accounting remain contracted, while project-bus
+  `.wisp/write.lock` mutual exclusion and append ordering, later preservation
+  or durability of committed bytes, and an aggregate concurrent bus-size
+  bound are not guaranteed; the separate dashboard ownership/coordinator
+  contract remains current.
 
 ### EARS requirements
 
@@ -1926,13 +1925,19 @@ adds them.
   command as authority.
 - **R18 (unwanted behavior):** If acknowledgement authorization fails, Wisp
   shall return the exact command error without append.
-- **R19 (event-driven):** When a named tool fails, it shall return the stable
-  error envelope with `isError: true`.
+- **R19 (event-driven):** When a named tool fails for a contracted reason that
+  does not originate in the project-bus `.wisp/write.lock` protocol, it shall
+  return the stable error envelope with `isError: true`; a
+  project-bus-lock-origin failure shall have no contracted envelope,
+  `isError`, `internal_error`, or diagnostic behavior.
 - **R20 (unwanted behavior):** If a tool is unknown or a request is malformed
   before tool identification, MCP shall use `-32601` or `-32602`
   respectively.
 - **R21 (state-driven):** While in MCP mode, stdout shall contain MCP protocol
-  traffic only and diagnostics shall use stderr.
+  traffic only for every outcome, including project-bus-lock-origin failures;
+  diagnostics whose emission is contracted shall use stderr, while no
+  emission or content shall be required for a project-bus-lock-origin
+  diagnostic.
 - **R22 (event-driven):** When a reusable module is imported, it shall perform
   no entrypoint or I/O side effect.
 - **R23 (ubiquitous):** The six event/check MCP handlers shall call the shared
@@ -1940,22 +1945,23 @@ adds them.
   memoized dashboard coordinator.
 - **R24 (ubiquitous):** The plugin bundle shall expose no CLI entrypoint,
   binary declaration, or CLI command dispatch.
-- **R25 (ubiquitous):** The plugin payload shall contain exactly the ten
-  specified candidate paths, with Claude's server in root `.mcp.json` and
-  Codex's server inline in its manifest.
+- **R25 (ubiquitous):** The plugin payload shall contain exactly the eight
+  specified distributed paths, with Claude's server in root `.mcp.json`,
+  Codex's server inline in its manifest, and neither retired metadata file.
 - **R26 (ubiquitous):** The lifecycle and dashboard skills shall contain
   portable policy only and shall delegate mechanics to MCP.
 - **R27 (ubiquitous):** Multiple project processes shall not share a default
   bus or machine-wide daemon.
-- **R28 (ubiquitous):** The distributed bundle shall target `node24`; a
-  release shall pass clean-bundle tests on the latest patch of Node 24.x and
-  record that exact version and result as the sole `node_versions` entry.
-- **R29 (ubiquitous):** A release shall independently pass current-stable
+- **R28 (ubiquitous):** The distributed bundle shall target `node24` and pass
+  clean-bundle tests under Node 24 without turning that technical requirement
+  into a Supported claim.
+- **R29 (ubiquitous):** Ordinary product checks shall independently exercise
   Claude Code and Codex manifest, install, launch, tool-list, check, write,
-  explicit-dashboard-open, and exact-bus-path tests.
-- **R30 (event-driven):** When qualification completes, the checked-in record
-  shall name the exact plugin, Node, Claude, and Codex versions, date, and
-  result.
+  explicit-dashboard-open, and exact-bus-path behavior without producing an
+  aggregate qualification or release certificate.
+- **R30 (unwanted behavior):** No build, test, workflow, release, or
+  documentation path shall create or mutate a checked-in aggregate
+  qualification record.
 - **R31 (unwanted behavior):** If `.wisp` or the bus is a symlink, has the
   wrong type, or resolves outside the canonical project, Wisp shall return the
   stable bus error without bus content I/O.
@@ -1965,11 +1971,9 @@ adds them.
 - **R33 (event-driven):** When commands are reduced, Wisp shall preserve
   command append order, reduce only unique ids, and apply only later same-run
   acknowledgements, with the last applicable acknowledgement winning.
-- **R34 (ubiquitous):** `qualification.json` shall implement the exact schema,
-  including exactly the Node 24 version/result object and the dashboard
-  result and evidence object, shall reject Node 20 or 22 keys, may remain
-  `pending` before fresh qualification, may record `pass` or `fail` from
-  fresh qualification, and shall be overall `pass` before release.
+- **R34 (ubiquitous):** `qualification.json` and `surfaces.json` shall be
+  absent from the distributed payload and shall not participate in package
+  identity, validation, quality checks, release, or documentation.
 - **R35 (unwanted behavior):** If a requested run contains duplicate command
   ids, `wisp_check` shall return `command_conflict` for the first duplicated
   id in append order with its count and no partial data.
@@ -2012,17 +2016,20 @@ adds them.
 - **R48 (event-driven):** When the dashboard bootstraps from a returned URL,
   it shall remove the fragment immediately, keep the capability only in
   memory, and authenticate API calls through the bearer header.
-- **R49 (ubiquitous):** Capability material shall exist only in the private
-  ready record, returned URL, and page memory, shall rotate per owner
-  generation, and shall never appear in persistence, logs, diagnostics,
-  health, analytics, or errors.
+- **R49 (ubiquitous):** The private ready record shall be the only
+  Wisp-controlled persistent location for capability material;
+  owning-process memory, the returned URL, page memory, loopback Authorization
+  transport, and volatile harness memory may hold transient copies, which
+  shall never cross any other Wisp-controlled persistence, query, log,
+  diagnostic, error, evidence, cache, artifact, upload, bus, health, or
+  analytics sink.
 - **R50 (event-driven):** When authenticated events are requested, Wisp shall
   return all valid events, malformed-line evidence, and all command states
   through the shared bounded bus reader and command reducer in physical
   order.
 - **R51 (event-driven):** When an exact authenticated same-origin command is
   submitted, Wisp shall create one canonical `maintainer` command and append
-  it through the shared lock and atomic bus writer.
+  it through the shared canonical project-bus operation.
 - **R52 (unwanted behavior):** If an HTTP or command request is unauthorized,
   malformed, oversized, wrong-origin, wrong-host, or wrong-content-type, Wisp
   shall return the exact stable HTTP failure and append nothing.
@@ -2040,14 +2047,16 @@ adds them.
 - **R56 (ubiquitous):** The built plugin shall contain no CLI, daemon,
   detached child, remote transport, external dashboard runtime resource, or
   legacy `.grove` dashboard data path.
-- **R57 (ubiquitous):** Release qualification shall independently open the
+- **R57 (ubiquitous):** Direct integration tests shall independently open the
   dashboard in Claude Code and Codex and jointly prove cross-host singleton,
   project isolation, command append, security, cleanup/recovery, and qualified
   process identity.
-- **R58 (ubiquitous):** Every project-bus append shall use the exact
-  `.wisp/write.lock` location, owner schema, atomic `mkdir`/`O_EXCL`
-  acquisition, 5,000 ms wait, 10 ms poll, 120,000 ms ownerless-stale policy,
-  lstat defenses, recovery, matching-token cleanup, and stable error mapping.
+- **R58 (ubiquitous):** Wisp Preview shall make no guarantee for the current
+  project-bus `.wisp/write.lock` mutual-exclusion and append-ordering
+  protocol's concurrency, ownership, recovery, cleanup, path identity,
+  deadlines, timing, error mapping, or diagnostics, whether bus operations
+  are same-process or cross-process; ADR-0005's separate user-runtime
+  dashboard ownership/coordinator contract shall remain current.
 - **R59 (event-driven):** When a dashboard contender acquires ownership, it
   shall recheck authoritative owner, project, protocol, and process identity
   after acquisition and before listener bind.
@@ -2060,30 +2069,32 @@ adds them.
 - **R62 (ubiquitous):** The embedded UI shall meet the exact refresh,
   lifecycle/event/parse-error/command rendering, explicit command-control,
   in-flight, failure, and text-only insertion behavior.
-- **R63 (ubiquitous):** Process-identity qualification shall combine live
-  provider stability/child/absence evidence with a deterministic injected
-  same-PID/new-token recovery test and shall not require forced OS PID reuse.
+- **R63 (ubiquitous):** Dashboard qualified-process-identity tests shall
+  combine live provider stability/child/absence evidence with a deterministic
+  injected same-PID/new-token dashboard-recovery test and shall not require
+  forced OS PID reuse.
 - **R64 (event-driven):** When `wisp_dashboard` is the process's first tool,
   Wisp shall resolve and memoize the canonical project before user-runtime,
   discovery, or listener work.
 - **R65 (ubiquitous):** Dashboard command-state output shall use the same
   reducer and duplicate/acknowledgement semantics as `wisp_check`; neither the
   HTTP adapter nor browser shall implement a second reduction.
-- **R66 (state-driven):** Once the complete event-plus-LF append write
-  succeeds, Wisp shall treat it as irreversibly committed, return append
-  success regardless of later lock cleanup failure, never truncate it, and
-  emit only a redacted incident diagnostic for post-commit failures.
-- **R67 (event-driven):** When releasing a matching bus lock, Wisp shall
-  atomically rename canonical `write.lock` to its retired sibling, retry
-  release within the exact synchronous and `unref` budgets, let same-owner
-  committed-token recovery resume it, and ensure retired deletion failure
-  cannot block new canonical acquisitions.
-- **R68 (ubiquitous):** Bus-lock owner records shall include the qualified
-  process birth identity and phase, and stale/PID-reuse recovery shall never
-  use PID existence alone.
+- **R66 (state-driven):** Once one operation completes the full compact
+  event-plus-LF write, its append commit point shall mean only that the full
+  write occurred; it shall not guarantee later preservation or durability of
+  those bytes when bus operations overlap through the project-bus lock.
+- **R67 (ubiquitous):** No acquisition, release, recovery, cleanup, retry,
+  deadline, timer, error, or diagnostic behavior of the current project-bus
+  `.wisp/write.lock` protocol shall be normative under this specification.
+- **R68 (ubiquitous):** No current bus-lock owner schema, owner identity,
+  phase, liveness interpretation, or recovery authorization shall be
+  normative for the project-bus `.wisp/write.lock` protocol under this
+  specification.
 - **R69 (ubiquitous):** Qualified process identity shall use exactly Linux
   boot ID plus `/proc` start ticks or macOS absolute `/bin/ps` start time under
-  C locale; Windows and unspecified platforms shall remain unsupported.
+  C locale for dashboard ownership; Windows and unspecified platforms shall
+  remain unsupported, and this provider contract shall create no project-bus
+  lock guarantee.
 - **R70 (unwanted behavior):** If `/api/events` encounters a duplicate command
   id, it shall return HTTP `409` with the exact existing `command_conflict`
   Wisp envelope and no partial data.
@@ -2095,37 +2106,66 @@ adds them.
   status for state and activity-with-absence-clearing, last verdict for
   verdict, and render reduced command states and parse errors as safe text.
 - **R73 (ubiquitous):** `VERSION` shall be the sole Wisp package SemVer
-  authority, contain exactly canonical SemVer `0.2.1-rc.3` plus LF, and equal
-  every named manifest, cache, package, runtime, qualification, bundle, and
-  surface carrier; its qualification digest shall be recomputed from and
-  match the exact `node24` bundle bytes, and the initial checked-in adoption
-  state shall reset qualification results to `pending` without manufacturing
-  marketplace evidence.
-- **R74 (ubiquitous):** `surfaces.json` shall use the exact closed schema and
-  two-row qualification joins, with present observation arrays; validation
-  shall derive each disclosure solely from the referenced host result using
-  the exact pending/pass/fail prefix, append the exact rc.3
-  catalog/registration non-evidence sentence, append the exact unverified
-  suffix iff observations exist, and reject every other disclosure byte
-  without creating a support or release claim.
-- **R75 (unwanted behavior):** If a required surface or observation field is
-  absent, unknown, malformed, escaping, or inconsistent, static validation
-  shall fail and shall not alter or infer qualification, support, release
-  readiness, or catalog availability.
-- **R76 (ubiquitous):** Wisp package documentation shall describe carrier
-  parity and shall not claim a present Stewards catalog entry until separate
-  host-specific evidence and admission exist.
-- **R77 (state-driven):** While a surface row contains one or more
-  structurally valid observation paths, static package validation shall
-  require the exact `unverified` disclosure suffix, perform no external
-  authentication, and infer no registration pass or failure.
-- **R87 (event-driven):** When host qualification, canary, or browser evidence
+  authority, contain exactly canonical SemVer `0.2.1-rc.4` plus LF, and equal
+  every named manifest, cache-path, root-package, lock, MCP-server,
+  generated-bundle, and test assertion carrier; retired aggregate metadata
+  shall not be a carrier.
+- **R74 (ubiquitous):** The distributed package shall contain exactly the
+  eight named paths and neither `qualification.json` nor `surfaces.json`.
+- **R75 (unwanted behavior):** If any source, build, test, workflow, release,
+  or documentation path reads, writes, requires, mutates, joins, or validates
+  retired qualification or surface metadata, static verification shall fail.
+- **R76 (ubiquitous):** Wisp package documentation shall identify the package
+  as Preview and explicitly state that support is not claimed; a Stewards
+  listing shall repeat that disclosure or link to it.
+- **R77 (state-driven):** While Wisp makes no claim-scoped Supported promise,
+  marketplace presence, successful installation, ordinary CI, deterministic
+  E2E, and live smoke shall not be interpreted as support; a future claim
+  requires a new Wisp-local decision and future exact-surface rows shall
+  follow the Stewards 0023 availability/support grammar.
+- **R87 (event-driven):** When host smoke, canary, or browser evidence
   is retained, the harness shall use dashboard capability material only in
   volatile memory, disable or pre-sink sanitize every browser failure writer,
   redact fragment, bearer, and raw observed forms before the first persistent
   write, verify that no observed or capability-shaped value remains, and
   block persistence and upload on failure while preserving only non-secret
   typed structural evidence.
+- **R88 (ubiquitous):** No current project-bus `.wisp/write.lock` recovery
+  snapshot, malformed-owner salvage, identity observation, reread, mutation,
+  or failure behavior shall be normative under this specification; this does
+  not alter the separate dashboard recovery contract.
+- **R89 (unwanted behavior):** If a dashboard owner fails any property of the
+  complete `starting` or `ready` schema, discovery shall return
+  `dashboard_unavailable/owner_identity_unverifiable` without using partial
+  fields, observing its PID, performing health proof, quarantining, or
+  acquiring ownership.
+- **R90 (ubiquitous):** Compact event serialization shall be exactly Node 24
+  `JSON.stringify(value)` with one argument and no replacer or spacing,
+  followed by UTF-8 encoding; per-operation size accounting shall exclude only
+  the appended LF from the event-size count and shall accept or reject that
+  operation's exact event and projected bus sizes from the bytes it observes;
+  no aggregate bus-size guarantee shall apply across concurrent operations.
+- **R91 (unwanted behavior):** If capability material leaves permitted
+  transient memory, it may cross only the mandated `wisp_dashboard` MCP
+  response and loopback request/response transport; it shall cross no other
+  Wisp-controlled output, log, error, or evidence sink, the private ready
+  record shall remain its sole persistent location, and evidence retention
+  shall sanitize and scan fail-closed.
+- **R92 (ubiquitous):** The negative project-bus `.wisp/write.lock`
+  mutual-exclusion and append-ordering boundary shall apply equally to
+  same-process and cross-process bus operations and shall not imply a safe
+  case from any observed owner, path, timing, or absence of known contention;
+  it shall not apply to ADR-0005's user-runtime dashboard
+  ownership/coordinator contract.
+- **R93 (ubiquitous):** Event schema, validation, exact serialization, project
+  confinement, and per-operation byte accounting shall remain contracted
+  independently of the negative lock boundary.
+- **R94 (ubiquitous):** Issue #50 shall be the sole venue for project-bus
+  `.wisp/write.lock` correctness, research, decision, implementation,
+  migration, and positive guarantees; ADR-0017 shall add no further runtime
+  lock change; and PR #49 shall retain its already present bounded runtime,
+  owner-validation, append, and canary repairs without redesigning the
+  project-bus lock or claiming its correctness.
 
 ## Verification matrix
 
@@ -2134,57 +2174,73 @@ adds them.
 | Constants and schemas | Generated-schema snapshot plus table-driven at-limit/over-limit tests for every fixed value, all seven tools, both owner-record variants, all six stored-event kinds, exact timestamp/version, null/unknown rejection, and recursively arbitrary command-payload JSON |
 | Resolution | Table-driven tests for environment root, capability absence, list failure/timeout, counts, URI validity, realpath, no-I/O, memoization, and dashboard-as-first-tool success/failure ordering; Codex host smoke verifies session-cwd binding |
 | Filesystem | Temp-project tests for missing read, first-write creation, lstat/symlink/type/containment rejection, one-line append, fatal UTF-8, LF/CR/final-segment/blank handling, limits, and no truncation |
-| Project write lock | Cross-process and injected-filesystem tests cover the qualified-identity/phase owner schema, `mkdir`/`O_EXCL`, concurrent MCP/dashboard appends, exact commit point and post-commit success, phase/release failure, 250 ms synchronous and `unref` same-owner recovery, retired-deletion failure with continued new acquisition, 5,000 ms/10 ms timing, live/dead/same-PID-new-birth/PID-less/malformed owners, 120,000 ms boundary, symlink/types, stale quarantine, matching-token/identity cleanup, redacted diagnostics, and every stable error |
-| Dashboard discovery | Fake-home and process-identity adapters prove exact root/key derivation, ownership/mode/type/symlink rejection, project-ancestor rejection, candidate promotion, mandatory post-acquisition recheck, authenticated reuse, bounded starting wait, live-owner refusal, deterministic same-PID/new-token recovery, contention, and distinct-project isolation |
-| Process identity | Linux fixtures prove boot-ID and `/proc/<pid>/stat` field-22 parsing including hostile `comm`; macOS fixtures prove absolute `/bin/ps` C-locale parsing and failures; live current/child/exit observations plus deterministic same-PID/new-birth-token adapters exercise both dashboard and bus recovery; Windows is rejected |
+| Preview project-bus lock boundary | Contract scans prove no current project-bus `.wisp/write.lock` mutual-exclusion, append-ordering, ownership, recovery, cleanup, path-identity, deadline, timing, error, or diagnostic mechanic is normative for same-process or cross-process bus operations; append fixtures prove only that the commit point completes one full event-plus-LF write, without treating later preservation or durability as acceptance; characterization tests may observe the implementation but create no product guarantee; issue #50 is the sole positive project-bus lock-correctness venue; dashboard tests remain governed by the separate ADR-0005 ownership/coordinator contract |
+| Dashboard discovery | Fake-home and process-identity adapters prove exact root/key derivation, ownership/mode/type/symlink rejection, project-ancestor rejection, candidate promotion, mandatory post-acquisition recheck, authenticated reuse, bounded starting wait, live-owner refusal, deterministic same-PID/new-token recovery, contention, and distinct-project isolation; a property-by-property invalid-owner table, including otherwise usable PID/identity/instance/capability and invalid protocol fields, proves exact `owner_identity_unverifiable`, zero provider/health calls, and no quarantine or replacement, while a complete owner with another positive integer protocol reaches `dashboard_version_conflict` only after identity proof |
+| Process identity | Linux fixtures prove boot-ID and `/proc/<pid>/stat` field-22 parsing including hostile `comm`; macOS fixtures prove absolute `/bin/ps` C-locale parsing and failures; live current/child/exit observations plus deterministic same-PID/new-birth-token adapters exercise dashboard ownership and recovery only; Windows is rejected, and no result is treated as a bus-lock guarantee |
 | Dashboard faults/lifecycle | Fault injection before claim and after claim/bind/publish/completion plus stdio close, `SIGINT`, and `SIGTERM` proves failed-live-owner listener/record cleanup, no bound-unpublished survivor, dead-owner recovery, 1,000 ms bounded drain, forced tracked-socket destruction, matching-instance cleanup, and no daemon |
-| Dashboard HTTP/UI | Loopback and browser-DOM tests snapshot exact precedence, condition/status/code mapping including `command_conflict`→`409`, routes/envelopes/headers, acceptance-to-`CRLFCRLF` header bytes/deadline, header-to-body-complete deadline, acceptance-to-response-complete total deadline, keep-alive idle and cleanup-to-forced-close boundaries, bearer, Host, Origin, query, method, content type, body, CSP, capability-bootstrap/rotation/redaction, refresh/visibility/in-flight behavior, exact run/agent append-order projection, text-only rendering, event/parse-error/command-state views, explicit command controls, and zero-write failures |
-| Capability-safe host evidence | Qualification, canary, and Playwright-failure fixtures place the live capability in fragment, bearer, console, network, reporter, screenshot, video, trace, and attachment paths; prove raw bytes remain volatile and browser artifact writers are disabled or intercepted before a sink; require exact structural sentinels and typed fields; scan retained evidence/logs for observed and capability-shaped values; and prove a failed scan produces no persisted or uploaded artifact |
+| Dashboard HTTP/UI | Loopback and browser-DOM tests snapshot exact HTTP-protocol and non-project-bus-lock runtime precedence, condition/status/code mapping including `command_conflict`→`409`, routes/envelopes/headers, acceptance-to-`CRLFCRLF` header bytes/deadline, header-to-body-complete deadline, acceptance-to-response-complete total deadline, keep-alive idle and cleanup-to-forced-close boundaries, bearer, Host, Origin, query, method, content type, body, CSP, capability-bootstrap/rotation/redaction, refresh/visibility/in-flight behavior, exact run/agent append-order projection, text-only rendering, event/parse-error/command-state views, explicit command controls, and zero-write failures; project-bus-lock-origin failures retain only the independent capability-safety constraints |
+| Capability-safe host evidence | Host-smoke, canary, and Playwright-failure fixtures prove the exact capability URL is allowed in the mandated `wisp_dashboard` MCP response and its loopback request/response transport, place the live capability in every other permitted transient location and prohibited query, bus, cookie/storage, error-object, log, reporter, screenshot, video, trace, attachment, cache, artifact, and upload sink, prove the private ready record is its sole persistent location, intercept every other Wisp-controlled output before a sink, require exact structural sentinels and typed fields, absence-scan retained evidence/logs, and prove a failed scan produces no persisted or uploaded artifact |
+| Compact serialization | Node 24 fixtures invoke one-argument `JSON.stringify(value)` with no replacer/spacing, compare exact UTF-8 bytes and property/escape output, cover ASCII, control escapes, and non-ASCII scalars, accept event size 32,768 and one operation's observed projection of 16,777,216, reject 32,769 and that operation's observed projection of 16,777,217 with exact diagnostics, and prove the accepted event is followed by exactly one LF; no fixture result is represented as a concurrent aggregate bus-size guarantee |
 | Runtime boundary | Spies or dependency injection prove all six event/check MCP handlers call shared operations, `wisp_dashboard` calls the memoized coordinator, HTTP reads/writes reuse the canonical runtime, and HTTP/browser contain no second command reducer |
 | Command safety | Append-order tests prove issued fields, whole-check first-duplicate conflict/count/no-partial-data, ack duplicate conflict, unique-id-only reduction, same-run/following-ack filtering, last-ack wins, stable ordering, all-status dashboard projection, no execution, and every acknowledgement result |
-| Errors | Contract snapshots for all MCP and HTTP code/reason/JSON-pointer/detail shapes, retryability, `process_identity_unavailable`, parse reasons, `isError`, `-32601`, `-32602`, dashboard version conflict, HTTP `409` command conflict, post-commit diagnostic redaction, and unexpected-exception containment |
-| Stdio | Spawned-process transcript proves all stdout is MCP framing and diagnostics are stderr-only |
+| Errors | Contract snapshots for non-project-bus-lock MCP and HTTP code/reason/JSON-pointer/detail shapes, retryability, parse reasons, `isError`, `-32601`, `-32602`, dashboard version conflict, HTTP `409` command conflict, and unexpected-exception containment; structural checks prove project-bus `.wisp/write.lock`-originated errors and diagnostics are outside the contract while dashboard ownership/coordinator errors remain contracted |
+| Stdio | Spawned-process transcripts prove stdout is MCP framing only for every outcome, including project-bus-lock-origin failures; each diagnostic whose emission is contracted is observed on stderr and never stdout, while lock-origin failures have no diagnostic-emission or content oracle beyond stdout framing and capability safety |
 | Import safety | Isolated import probes for every reusable module prove no bus or dashboard state and no listener before explicit invocation |
-| Bundle | Build inspection proves target `node24`; a clean fixture with no global Wisp or dependency tree launches the exact distributed artifact on the recorded latest Node 24 patch; fixtures reject Node 20/22 support or qualification claims |
+| Bundle | Build inspection proves target `node24`; a clean fixture with no global Wisp or dependency tree launches the exact distributed artifact under Node 24; documentation and fixtures prove that this technical boundary creates no Supported claim |
 | Claude | Validate exact `.mcp.json`; installed current-stable smoke lists seven tools, checks, writes, explicitly opens the dashboard, and verifies fixture `.wisp/events.ndjson` |
 | Codex | Separately validate the manifest's one inline bootstrap, absent `cwd`, forwarded `CODEX_HOME`, exact marketplace/plugin/version cache path, and absence of a custom config path; install through marketplace `kodhama`, then smoke lists seven tools, checks, writes, explicitly opens the dashboard, and verifies fixture `.wisp/events.ndjson` |
-| Cross-host dashboard | Concurrent installed Claude and Codex sessions on one fixture return one URL; a second fixture remains isolated; command, security, lifecycle/recovery, live provider stability/child/absence evidence, and deterministic same-PID/new-token recovery populate the dashboard qualification object |
-| Plugin contents | Exact ten-path inventory, strict `VERSION` SemVer and all-carrier parity, closed two-row surface/qualification joins, observation-schema rejection fixtures, no CLI/binary/daemon/legacy dashboard path, two portable-skill static checks, recomputed bundle SHA-256, initial `rc.3` pending reset, fresh-qualification transition fixtures, exact disclosure derivation, and exact qualification schema/state rules including the sole Node 24, host, and dashboard result objects |
-| Marketplace separation | A result × observation-presence table proves all six exact disclosure strings, including the current pending rows, pass/fail transitions, and iff-appended unverified suffix; fixtures reject every extra or mismatched byte and malformed observation and prove no network query, registration verdict, authenticated projection, or plugin/qualification/support/release/catalog state change |
+| Cross-host dashboard | Concurrent installed Claude and Codex sessions on one fixture return one URL; a second fixture remains isolated; direct assertions cover command, security, lifecycle/recovery, live provider stability/child/absence evidence, and deterministic same-PID/new-token recovery |
+| Ordinary quality gates | Workflow and script inspection proves typecheck, unit, build, host-plugin validation, and deterministic Docker/Playwright E2E remain active without producing or consuming an aggregate qualification result |
+| Plugin contents | Exact eight-path inventory; strict `VERSION` SemVer `0.2.1-rc.4` and retained-carrier parity; absence of `qualification.json` and `surfaces.json`; whole-repository reference scans for retired schemas, joins, transitions, digests, disclosures, and release gates; no CLI/binary/daemon/legacy dashboard path; two portable-skill static checks; and exact Preview/no-support README text |
+| Preview posture | README and marketplace-listing fixtures prove explicit Preview/no-support disclosure; checks prove installation, CI, E2E, and live smoke do not create a Supported claim; future-claim documentation requires a new Wisp-local decision and preserves the Stewards 0023 grammar for any future exact-surface row |
 
 ## Rubric check
 
 The configured `SPEC_RUBRIC_PATH` says no dedicated rubric exists, so this
 check uses `specs/README.md`.
 
-- **Frontmatter:** PASS — all required fields are present; `version: 11`
-  records the Node 24-only amendment while preserving forward-only spec
-  identity.
+- **Frontmatter:** PASS — all required fields are present; `version: 15`
+  records the significant ADR-0017 behavioral amendment, `implements` names
+  ADR-0017, superseded ADR-0016 is absent from active dependencies, and
+  ADR-0014 remains a deliberate retained dependency.
 - **Approved dependencies:** PASS — ADR-0004, ADR-0005, ADR-0008, ADR-0009,
-  ADR-0010, and ADR-0011 are approved and record the adapter, dashboard,
-  reset, package, observation-provenance, and Node-support intent
-  respectively.
-- **Testable acceptance criteria:** PASS — S1–S53, S64–S69, and S3a are GWT
-  scenarios, R1–R77 and R87 are EARS requirements, and the matrix names
-  executable evidence. The gaps preserve the historical identifiers of the
-  retained product-local security clauses while retiring intervening family
-  machinery.
-- **Exactness:** PASS — all seven schemas, outputs, error mapping, project
+  ADR-0011, ADR-0014, and ADR-0017 are approved and record the retained
+  adapter, dashboard, package, Node technical boundary, Preview-retirement
+  intent, and minimal Preview project-bus `.wisp/write.lock`
+  mutual-exclusion and append-ordering boundary.
+- **Testable acceptance criteria:** PASS — S1–S53, S64–S74, and S3a are GWT
+  scenarios, R1–R77 and R87–R94 are EARS requirements, and the matrix names
+  executable evidence. The remaining gaps preserve historical identifiers of
+  retired family machinery.
+- **Exactness:** PASS — all seven schemas, all success outputs,
+  non-project-bus-lock failure envelopes and error mapping, project
   selection, stored-event validity, confinement/decoding, duplicate/unique
-  command reduction, irreversible append/release behavior, qualified
-  process-birth identity, finite limits, dashboard write-lock,
+  command reduction, the per-operation append-commit meaning, qualified
+  process-birth identity, finite limits, dashboard ownership,
   discovery/ownership/HTTP deadline/error/UI-projection/lifecycle behavior,
-  ten payload paths, package/surface/evidence joins and exact derived
-  disclosures,
-  root-Claude/inline-Codex launch definitions, and Node 24-only
-  bundle/qualification, host/dashboard qualification, and capability-safe
-  evidence policy are fixed rather than deferred.
+  schema-invalid dashboard-owner refusal, Node 24 one-argument JSON
+  serialization and exact per-operation byte boundaries, the negative
+  same-process/cross-process project-bus lock boundary, explicit preservation
+  of ADR-0005's separate dashboard ownership/coordinator contract, absence of
+  any concurrent aggregate-size or later-preservation/durability guarantee,
+  issue #50's sole ownership of project-bus lock correctness, the
+  capability's sole persistent location and permitted transient path,
+  eight payload paths, `0.2.1-rc.4` carrier parity, retired-metadata absence,
+  root-Claude/inline-Codex launch definitions, Node 24 technical targeting,
+  Preview/no-support disclosure, and capability-safe evidence policy are
+  fixed rather than deferred.
 - **Open questions:** PASS — the required section is present below.
-- **Scope fidelity:** PASS — the plugin-only distribution, dual-host evidence,
-  project bus and dashboard isolation, explicit skill boundary, session-owned
-  listener, and package evidence separation derive from ADR-0004, ADR-0005,
-  ADR-0009, ADR-0010, and ADR-0011; parked
-  CLI, daemon, remote transport, and legacy dashboard behavior are absent.
+- **Scope fidelity:** PASS — ADR-0017 preserves ADR-0014's qualification
+  retirement while superseding ADR-0016's positive project-bus lock-internal
+  contract,
+  makes no `.wisp/write.lock` mutual-exclusion or append-ordering promise for
+  same-process or cross-process bus operations, preserves ADR-0005's separate
+  user-runtime dashboard ownership/coordinator contract, and assigns all
+  project-bus lock correctness and redesign solely to issue #50; event schema,
+  validation, serialization, project confinement, per-operation byte
+  accounting, plugin-only distribution, dual-host runtime, dashboard
+  isolation/security/recovery, explicit skill boundary, and session-owned
+  listener remain intact.
 
 Result: **PASS**.
 
@@ -2210,3 +2266,121 @@ independent spec adversary returned `APPROVE-READY`, which is the agent-owned
 spec-gate ratification under the steward profile; the independent conformance
 review returned `PASS`, and the corpus review returned `PASS`. The version
 remains `gated`, the consumable state recorded by that agent-owned gate.
+
+Version 12 records ADR-0014's retirement of aggregate qualification and
+exact-surface machinery, eight-path payload, Preview/no-support posture,
+`0.2.1-rc.4` retained-carrier parity, and preserved runtime and security
+guarantees. The configured rubric self-check above passed, so this amendment
+is `gated`; no independent spec-adversary or conformance verdict is claimed
+here.
+
+The first intrinsic spec-adversary pass for gated v12 returned
+`NEEDS-REVISION`: malformed bus-lock salvage could steal a usable live
+identity or race without raw-byte comparison, invalid dashboard owners could
+be read as field-salvageable, capability locations contradicted their required
+transient authorization flow, and compact serialization lacked exact Node 24
+and boundary vectors. This repair makes each rule explicit in prose, GWT,
+EARS, and the verification matrix while preserving v12 and ADR-0014 scope;
+the rubric self-check remains `PASS`. No second adversary verdict is claimed
+here.
+
+Fresh intrinsic re-review found two residual contradictions in that repair:
+an initially missing owner had no distinct snapshot/reread success path, and
+the capability sink prohibition accidentally included the mandated
+`wisp_dashboard` response transport. The final v12 repair adds
+`owner-missing`→`owner-missing` as the sole missing-owner stale-rename path,
+fails closed on appearance or disappearance across the snapshot seam, retains
+raw-byte equality for present malformed owners, and exempts only the exact MCP
+response and loopback request/response transport from the otherwise
+fail-closed Wisp-controlled output-sink prohibition. Version 12 and ADR-0014
+scope remain unchanged; no fresh adversary verdict is claimed here.
+
+Final intrinsic review returned `APPROVE-READY` for exact commit `8dffff1`
+([durable PR record](https://github.com/kodhama/wisp/pull/49#issuecomment-5082408652)),
+and final fidelity review returned `PASS`
+([durable PR record](https://github.com/kodhama/wisp/pull/49#issuecomment-5082408751)).
+Under the steward profile's `spec=agent` gate, those durable records ratify
+gated SPEC-0001 v12 for downstream consumption. Its status remains `gated`.
+
+Version 13 derives the approved ADR-0015 scope correction: exact valid-owner,
+malformed-byte, and missing-owner equality checks remain; every mismatch
+observed before rename still fails closed; and the rename still atomically
+quarantines whichever directory occupies the canonical pathname when it
+executes. The spec no longer represents that pathname rename as conditional
+on the inode that supplied the reread snapshot. It names the inherited
+final-gap race as a Preview limitation, routes the crash-safe lock redesign
+solely through issue #50 and a future ADR, and leaves ADR-0014 qualification
+retirement plus all unaffected lock and product safety requirements intact.
+The configured rubric self-check passed and the amendment remains `gated`
+under the `spec=agent` profile; no v13 spec-adversary or conformance verdict
+is claimed here.
+
+Version 14 derives approved ADR-0016, which supersedes ADR-0015's incomplete
+stale-only boundary. The current contract now applies the non-atomic
+owner-match-to-pathname-mutation limitation to stale recovery, held release,
+committed release, and matching cleanup; records replacement, disappearance,
+symlink/type substitution, and rename failure as observed filesystem outcomes;
+and limits uninterrupted exclusivity, rollback preservation of later commits,
+and exact concurrent projected-size enforcement only under the resulting
+ownership overlap. Outside that overlap, the enumerated schema,
+serialization, per-operation size, commit-point, identity, snapshot, and
+observed-mismatch guarantees remain current. Issue #50 is the sole redesign
+venue. The configured rubric self-check passed and v14 remains `gated` under
+the `spec=agent` profile; no v14 spec-adversary or conformance verdict is
+claimed here.
+
+The first intrinsic spec-adversary pass for gated v14 returned
+`NEEDS-REVISION`: failed truncate was described as complete rollback,
+post-rename pathname cleanup omitted its own substitution exposure, and the
+release text conflated committed, held/pre-commit, retired-cleanup, and stale
+budgets. This repair states successful and failed truncate outcomes without
+weakening the original prefix, distinguishes completed append commit from
+failed/short attempts, exposes pathname-addressed cleanup without inventing a
+guard, and fixes each retry horizon in prose, GWT, EARS, and verification.
+Version 14, ADR-0016 scope, and `gated` status remain unchanged; the rubric
+self-check remains `PASS`, and no fresh adversary or conformance verdict is
+claimed here.
+
+Targeted conformance at exact head `3ed816e` then found four remaining source
+mismatches: the acquisition deadline is computed before owner construction
+and the first `mkdir`; the committed background scheduler has unref'd outer
+50 ms timers but referenced 10 ms delays inside each 45 ms release attempt;
+its 5,000 ms horizon starts after `operation()` returns, not at the event
+write; and every non-`EEXIST` acquisition error unconditionally attempts owner
+unlink then lock rmdir without token verification. The 250 ms and 45 ms
+deadlines admit attempts rather than hard-bound their completion, and a worker
+admitted at or before the horizon can finish, including successfully, after
+it. This repair states those current behaviors and their
+replacement/substitution exposure in constants, prose, GWT, EARS, and
+verification while leaving redesign parked in issue #50. ADR-0016, version
+14, `gated` status, and the rubric `PASS` remain unchanged; no new adversary
+or conformance verdict is claimed here.
+
+Version 15 derives approved ADR-0017 and significantly changes the behavioral
+contract, so the version advances rather than remaining 14 under Grove's
+versioning rule. It supersedes v14's positive project-bus `.wisp/write.lock`
+mutual-exclusion and append-ordering requirements with one minimal negative
+Preview boundary for both same-process and cross-process bus operations while
+preserving ADR-0005's separate user-runtime dashboard ownership/coordinator
+contract. The retained contract covers event schema, validation, exact
+serialization, project confinement, per-operation byte accounting, and only
+the fact that append commit completed the full event-plus-LF write; it
+promises neither later preservation or durability nor a concurrent aggregate
+bus-size bound. Issue #50 solely owns positive project-bus lock correctness.
+ADR-0017 adds no further runtime lock change; PR #49 does not redesign the
+project-bus lock or claim its correctness and retains its already present
+bounded runtime, owner-validation, append, and canary repairs. The configured
+rubric self-check passes, so v15 remains `gated`; no v15 adversary or
+conformance verdict is claimed here. This targeted decision-adversary repair
+corrects the scope and PR description without changing v15's behavioral
+boundary. Targeted conformance at exact head `903a2d6` then found that generic
+HTTP, MCP-envelope, unexpected-exception, and stdio-diagnostic clauses still
+promised behavior for project-bus-lock-origin failures. This repair excludes
+only those failures while preserving stable validation, non-lock MCP/HTTP,
+dashboard, stdout-framing, capability-safety, and unrelated diagnostic
+contracts. Final intrinsic review returned `APPROVE-READY`
+([durable PR record](https://github.com/kodhama/wisp/pull/49#issuecomment-5083038130)),
+and final fidelity review returned `PASS`
+([durable PR record](https://github.com/kodhama/wisp/pull/49#issuecomment-5083038079)).
+Under the steward profile's `spec=agent` gate, those records ratify gated
+SPEC-0001 v15 for downstream consumption; its status remains `gated`.

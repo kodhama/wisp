@@ -22,6 +22,11 @@ updated: 2026-07-24
 > `adr-0011-node-24-only-support` supersedes only this ADR's initial
 > `0.2.1-rc.2` candidate value; the independent version authority and carrier
 > rules remain current.
+>
+> `adr-0014-retire-preview-qualification-machinery` supersedes this ADR's
+> checked-in qualification/surface carriers, ten-path inventory, observation
+> joins, and qualification-dependent release posture. Independent Wisp
+> version authority remains current.
 
 ## Decision state
 

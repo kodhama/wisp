@@ -1,4 +1,4 @@
-// SPEC-0002@v7: S1-S6, S13-S14 / R1-R6, R15-R17.
+// SPEC-0002@v8: S1-S6, S13-S17 / R1-R6, R15-R20.
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
@@ -6,7 +6,7 @@ async function text(path: string): Promise<string> {
   return readFile(new URL(`../../${path}`, import.meta.url), "utf8");
 }
 
-describe("SPEC-0002@v7 reproducible Codex E2E surfaces", () => {
+describe("SPEC-0002@v8 reproducible Codex E2E and Preview smoke surfaces", () => {
   it("pins Playwright and exposes one direct and one container entrypoint", async () => {
     const packageJson = JSON.parse(await text("package.json"));
     expect(packageJson.devDependencies["@playwright/test"]).toBe("1.61.0");
@@ -21,7 +21,7 @@ describe("SPEC-0002@v7 reproducible Codex E2E surfaces", () => {
     );
   });
 
-  it("pins the official browser image and runs the copied candidate unprivileged", async () => {
+  it("pins the official browser image and runs the copied Preview package unprivileged", async () => {
     const dockerfile = await text("test/e2e/Dockerfile");
     expect(dockerfile).toContain(
       "FROM mcr.microsoft.com/playwright:v1.61.0-noble@sha256:57b65fdc9ceabe0ef613124c7bbe2babcf9362c4d85e382fe3b03604e84b428a",
@@ -59,10 +59,8 @@ describe("SPEC-0002@v7 reproducible Codex E2E surfaces", () => {
       "!plugins/wisp/README.md",
       "!plugins/wisp/VERSION",
       "!plugins/wisp/dist/wisp.mjs",
-      "!plugins/wisp/qualification.json",
       "!plugins/wisp/skills/dashboard/SKILL.md",
       "!plugins/wisp/skills/wisp/SKILL.md",
-      "!plugins/wisp/surfaces.json",
       "!scripts/build-plugin.mjs",
       "!scripts/capability-safety.mjs",
       "!scripts/node24-preflight.mjs",
@@ -116,12 +114,12 @@ describe("SPEC-0002@v7 reproducible Codex E2E surfaces", () => {
         "",
         "[packages.unit]",
         'paths = ["test/*.test.ts"]',
-        'specs = ["spec-0001-plugin-mcp-distribution@v11"]',
+        'specs = ["spec-0001-plugin-mcp-distribution@v15"]',
         "decisions = []",
         "",
         "[packages.e2e]",
         'paths = ["test/e2e/**"]',
-        'specs = ["spec-0001-plugin-mcp-distribution@v11", "spec-0002-codex-e2e-testing@v7"]',
+        'specs = ["spec-0001-plugin-mcp-distribution@v15", "spec-0002-codex-e2e-testing@v8"]',
         'decisions = ["adr-0006-codex-e2e-testing", "adr-0007-codex-canary-evidence", "adr-0011-node-24-only-support"]',
         "",
       ].join("\n"),
@@ -169,14 +167,12 @@ describe("SPEC-0002@v7 reproducible Codex E2E surfaces", () => {
     expect(canary).toMatch(/^on:\n  schedule:/mu);
     expect(canary).toContain("workflow_dispatch:");
     expect(canary).not.toMatch(/\n\s+(?:push|pull_request):/u);
-    for (const input of [
-      "candidate_version",
-      "candidate_bundle_sha256",
-      "candidate_marketplace_source",
-      "candidate_marketplace_ref",
-    ]) {
+    for (const input of ["marketplace_source", "marketplace_ref"]) {
       expect(canary).toMatch(new RegExp(`${input}:[\\s\\S]{0,120}required: true`, "u"));
     }
+    expect(canary).not.toMatch(
+      /candidate_version|candidate_bundle_sha256|bundle_sha256|CANARY_VERSION|CANARY_SHA256|verify-codex-canary/u,
+    );
     const jobPreamble = canary.slice(canary.indexOf("jobs:"), canary.indexOf("    steps:"));
     expect(jobPreamble).not.toMatch(/CODEX_API_KEY|OPENAI_API_KEY/u);
     expect(canary).toContain("CANARY_CODEX_API_KEY: ${{ secrets.CODEX_API_KEY }}");
@@ -192,14 +188,14 @@ describe("SPEC-0002@v7 reproducible Codex E2E surfaces", () => {
     expect(canary.indexOf("node --version")).toBeLessThan(canary.indexOf(nodePreflight));
     expect(canary.indexOf(nodePreflight)).toBeLessThan(canary.indexOf("id: install_codex"));
     expect(canary.indexOf(nodePreflight)).toBeLessThan(canary.indexOf("Run weekly canary"));
-    expect(canary.indexOf(nodePreflight)).toBeLessThan(canary.indexOf("Run candidate canary"));
+    expect(canary.indexOf(nodePreflight)).toBeLessThan(canary.indexOf("Run manual Preview smoke"));
     const canaryJobPreamble = canary.slice(
       canary.indexOf("jobs:"),
       canary.indexOf("    steps:"),
     );
     expect(canaryJobPreamble).not.toContain("runner.temp");
-    expect(canary.match(/CODEX_HOME: \$\{\{ runner\.temp \}\}/gu)).toHaveLength(3);
-    expect(canary.match(/EVIDENCE_DIR: \$\{\{ runner\.temp \}\}/gu)).toHaveLength(4);
+    expect(canary.match(/CODEX_HOME: \$\{\{ runner\.temp \}\}/gu)).toHaveLength(2);
+    expect(canary.match(/EVIDENCE_DIR: \$\{\{ runner\.temp \}\}/gu)).toHaveLength(3);
     const runBlocks = [...canary.matchAll(/\n\s+run:\s*>-([\s\S]*?)(?=\n\s+- name:|\n\s+- uses:|$)/gu)]
       .map((match) => match[1] ?? "");
     expect(runBlocks.join("\n")).not.toContain("${{ inputs.");
@@ -226,7 +222,7 @@ describe("SPEC-0002@v7 reproducible Codex E2E surfaces", () => {
     );
     expect(canaryDriver).toContain("let codexVersion = null");
     expect(canaryDriver).toContain("let pluginVersion = null");
-    expect(canaryDriver).toContain("let bundleSha256 = null");
+    expect(canaryDriver).not.toContain("bundleSha256");
     expect(canaryDriver).not.toContain('"unavailable"');
     expect(canaryDriver).toContain("writeSafeCanaryArtifacts");
     expect(canaryDriver).not.toContain(
@@ -237,7 +233,10 @@ describe("SPEC-0002@v7 reproducible Codex E2E surfaces", () => {
       "steps.weekly.outputs.artifact_ready == 'true'",
     );
     expect(canary).toContain(
-      "steps.candidate.outputs.artifact_ready == 'true'",
+      "steps.manual.outputs.artifact_ready == 'true'",
+    );
+    expect(canary).toContain(
+      "steps.manual.outcome == 'failure'",
     );
     expect(canary).not.toMatch(
       /name: Upload private canary evidence[\s\S]{0,100}if: always\(\)\s*$/mu,

@@ -22,6 +22,31 @@ export function writeBrowserEvidence(
   path: string,
   evidence: Record<string, unknown>,
   observedCapabilities: string[],
+  hooks?: {
+    onFreeze?(evidence: Readonly<Record<string, unknown>>): void;
+    onValidate?(evidence: Readonly<Record<string, unknown>>): void;
+    onSerialize?(bytes: Buffer): void;
+    onScan?(bytes: Buffer): void;
+    onDiscard?(): void;
+  },
+): Promise<void>;
+export function prepareBrowserEvidence(
+  evidence: Record<string, unknown>,
+  observedCapabilities: string[],
+  hooks?: {
+    onFreeze?(evidence: Readonly<Record<string, unknown>>): void;
+    onValidate?(evidence: Readonly<Record<string, unknown>>): void;
+    onSerialize?(bytes: Buffer): void;
+    onScan?(bytes: Buffer): void;
+    onDiscard?(): void;
+  },
+): Readonly<{
+  evidence: Readonly<Record<string, unknown>>;
+  bytes: Buffer;
+}>;
+export function persistPreparedBrowserEvidence(
+  path: string,
+  bytes: Buffer,
 ): Promise<void>;
 export function validateBrowserEvidence(
   evidence: Record<string, unknown>,

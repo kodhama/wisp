@@ -15491,6 +15491,18 @@ var execFileAsync = promisify(execFile);
 var BOOT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 var PS_DATE = /^(Sun|Mon|Tue|Wed|Thu|Fri|Sat) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) ([ 0-3][0-9]) ([0-2][0-9]):([0-5][0-9]):([0-5][0-9]) ([0-9]{4})$/;
 var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+function isQualifiedProcessIdentity(value) {
+  if (typeof value !== "string" || Buffer.byteLength(value, "utf8") > 512) {
+    return false;
+  }
+  if (/^linux:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}:[0-9]+$/u.test(value)) return true;
+  const darwin = /^darwin:(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})$/u.exec(value);
+  if (darwin === null) return false;
+  const [, yearText, monthText, dayText, hourText, minuteText, secondText] = darwin;
+  const [year, month, day, hour, minute, second] = [yearText, monthText, dayText, hourText, minuteText, secondText].map(Number);
+  const date3 = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+  return date3.getUTCFullYear() === year && date3.getUTCMonth() === month - 1 && date3.getUTCDate() === day && date3.getUTCHours() === hour && date3.getUTCMinutes() === minute && date3.getUTCSeconds() === second;
+}
 function parseLinuxIdentity(bootIdText, statText, pid) {
   const bootId = bootIdText.trim();
   if (!BOOT_ID.test(bootId)) return void 0;
@@ -15771,7 +15783,7 @@ function validateJson(value, seen = /* @__PURE__ */ new Set()) {
   if (proto !== Object.prototype && proto !== null) return false;
   return Object.values(value).every((item) => validateJson(item, seen));
 }
-function validateStoredEvent(value) {
+function validateStoredEvent(value, enforceSerializedLimit = true) {
   const event = storedRecord(value);
   const common = ["v", "ts", "run", "agent", "kind"];
   if (event.v !== 1 || !validTimestamp(event.ts)) storedFailure();
@@ -15841,28 +15853,40 @@ function validateStoredEvent(value) {
       break;
     }
   }
-  const actual = utf8Bytes(JSON.stringify(normalized));
-  if (actual > LIMITS.event) storedFailure();
+  if (enforceSerializedLimit) {
+    const actual = utf8Bytes(JSON.stringify(normalized));
+    if (actual > LIMITS.event) storedFailure();
+  }
   return normalized;
 }
-function createCanonicalEvent(input, now = () => /* @__PURE__ */ new Date()) {
-  const candidate = { v: 1, ts: now().toISOString(), ...input };
-  let serialized;
+var serializedEvents = /* @__PURE__ */ new WeakMap();
+function serializeEvent(event) {
+  const cached2 = serializedEvents.get(event);
+  if (cached2 !== void 0) return cached2;
+  const validated = validateStoredEvent(event, false);
+  let json;
   try {
-    serialized = JSON.stringify(candidate);
+    json = JSON.stringify(validated);
   } catch {
     storedFailure();
   }
-  const actual = utf8Bytes(serialized);
-  if (actual > LIMITS.event) {
+  const bytes = Buffer.from(json, "utf8");
+  if (bytes.byteLength > LIMITS.event) {
     throw new WispError("invalid_input", "Event exceeds byte limit", {
       field: "",
       reason: "event_too_large",
       limit: LIMITS.event,
-      actual
+      actual: bytes.byteLength
     });
   }
-  return validateStoredEvent(candidate);
+  const result = { event: validated, json, bytes };
+  serializedEvents.set(validated, result);
+  return result;
+}
+function createCanonicalEvent(input, now = () => /* @__PURE__ */ new Date()) {
+  const candidate = { v: 1, ts: now().toISOString(), ...input };
+  const event = validateStoredEvent(candidate, false);
+  return serializeEvent(event).event;
 }
 function validateStoredRefs(value) {
   if (!Array.isArray(value) || value.length === 0 || value.length > LIMITS.references) storedFailure();
@@ -16024,17 +16048,24 @@ async function readBus(project) {
   return parseBusBytes(bytes, checked.bus);
 }
 async function appendEventUnlocked(project, event) {
-  const serialized = JSON.stringify(validateStoredEvent(event));
-  const actual = utf8Bytes(serialized);
-  if (actual > LIMITS.event) {
-    throw new WispError("invalid_input", "Event exceeds byte limit", {
-      field: "",
-      reason: "event_too_large",
-      limit: LIMITS.event,
-      actual
+  const serialized = serializeEvent(event);
+  const checked = await inspectOwnedPaths(project, "write");
+  const originalSize = checked.busExists ? (await lstat(checked.bus).catch(() => {
+    throw new WispError("bus_unwritable", "Cannot stat bus", {
+      path: checked.bus,
+      reason: "stat_failed"
+    });
+  })).size : 0;
+  const bytes = Buffer.concat([serialized.bytes, Buffer.from("\n")]);
+  const projected = originalSize + bytes.byteLength;
+  if (projected > LIMITS.bus) {
+    throw new WispError("bus_limit_exceeded", "Bus exceeds byte limit", {
+      subject: "bus",
+      unit: "utf8_bytes",
+      limit: LIMITS.bus,
+      actual: projected
     });
   }
-  const checked = await inspectOwnedPaths(project, "write");
   const flags = fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_APPEND | (typeof fsConstants.O_NOFOLLOW === "number" ? fsConstants.O_NOFOLLOW : 0);
   let handle;
   try {
@@ -16045,7 +16076,6 @@ async function appendEventUnlocked(project, event) {
       reason: fsReason(error2, "open_failed")
     });
   }
-  let originalSize;
   try {
     const info = await handle.stat();
     if (!info.isFile()) {
@@ -16054,23 +16084,16 @@ async function appendEventUnlocked(project, event) {
         reason: "path_not_regular_file"
       });
     }
-    originalSize = info.size;
+    if (info.size !== originalSize) {
+      throw new WispError("bus_unwritable", "Bus changed before append", {
+        path: checked.bus,
+        reason: "stat_failed"
+      });
+    }
   } catch (error2) {
     await handle.close().catch(() => void 0);
     if (error2 instanceof WispError) throw error2;
     throw new WispError("bus_unwritable", "Cannot stat bus", { path: checked.bus, reason: "stat_failed" });
-  }
-  const bytes = Buffer.from(`${serialized}
-`, "utf8");
-  const projected = originalSize + bytes.byteLength;
-  if (projected > LIMITS.bus) {
-    await handle.close().catch(() => void 0);
-    throw new WispError("bus_limit_exceeded", "Bus exceeds byte limit", {
-      subject: "bus",
-      unit: "utf8_bytes",
-      limit: LIMITS.bus,
-      actual: projected
-    });
   }
   try {
     const { bytesWritten } = await handle.write(bytes, 0, bytes.byteLength, null);
@@ -16236,7 +16259,7 @@ function releaseDiagnostic(stage) {
   process.stderr.write(`wisp lock incident ${randomUUID()} stage=${stage}
 `);
 }
-async function recoverStaleLock(lockPath, ownerPath) {
+async function recoverStaleLock(lockPath, ownerPath, options = {}) {
   let info;
   try {
     info = await lstat(lockPath);
@@ -16249,42 +16272,30 @@ async function recoverStaleLock(lockPath, ownerPath) {
   if (!info.isDirectory()) {
     throw new WispError("bus_unwritable", "Write lock is not a directory", { path: lockPath, reason: "path_not_directory" });
   }
+  const snapshot = await readLockSnapshot(ownerPath);
+  if (snapshot === void 0) return;
   let dead = false;
-  let owner;
-  try {
-    const ownerInfo = await lstat(ownerPath);
-    if (ownerInfo.isSymbolicLink()) {
-      throw new WispError("bus_unwritable", "Write-lock owner is a symlink", {
-        path: ownerPath,
-        reason: "path_is_symlink"
-      });
-    }
-    if (!ownerInfo.isFile()) {
-      throw new WispError("bus_unwritable", "Write-lock owner is not a regular file", {
-        path: ownerPath,
-        reason: "path_not_regular_file"
-      });
-    }
-    owner = await readLockOwner(ownerPath);
-    const observed = await observeProcess(owner.pid);
-    const gone = processInstanceIsGone(owner.process_identity, observed);
+  if (snapshot.kind === "valid") {
+    const observed = await observeProcess(snapshot.owner.pid);
+    const gone = processInstanceIsGone(snapshot.owner.process_identity, observed);
     if (gone === void 0) return;
-    dead = gone || !gone && owner.phase === "committed";
-  } catch (error2) {
-    if (error2 instanceof WispError) throw error2;
-    const created = await readMalformedOwnerCreated(ownerPath);
+    dead = gone || !gone && snapshot.owner.phase === "committed";
+  } else if (snapshot.kind === "malformed" && snapshot.salvaged !== void 0) {
+    const observed = await observeProcess(snapshot.salvaged.pid);
+    const gone = processInstanceIsGone(
+      snapshot.salvaged.process_identity,
+      observed
+    );
+    if (gone === void 0 || gone === false) return;
+    dead = true;
+  } else {
+    const created = snapshot.kind === "malformed" ? snapshot.created : void 0;
     dead = Date.now() - (created ?? info.mtimeMs) > LOCK_STALE_MS;
   }
   if (!dead) return;
-  if (owner !== void 0) {
-    let current;
-    try {
-      current = await readLockOwner(ownerPath);
-    } catch {
-      return;
-    }
-    if (!sameLockOwner(current, owner)) return;
-  }
+  await options.beforeReread?.();
+  const current = await readLockSnapshot(ownerPath).catch(() => void 0);
+  if (current === void 0 || !sameLockSnapshot(snapshot, current)) return;
   const stale = `${lockPath}.stale-${randomUUID()}`;
   try {
     await rename(lockPath, stale);
@@ -16294,22 +16305,91 @@ async function recoverStaleLock(lockPath, ownerPath) {
   await unlink(join(stale, "owner.json")).catch(() => void 0);
   await rmdir(stale).catch(() => void 0);
 }
-function sameLockOwner(left, right) {
-  return left.token === right.token && left.pid === right.pid && left.process_identity === right.process_identity && left.created === right.created && left.phase === right.phase;
+function validPlatformPid(value) {
+  return Number.isSafeInteger(value) && Number(value) > 0 && Number(value) <= 2147483647;
 }
-async function readMalformedOwnerCreated(path) {
-  const flags = fsConstants.O_RDONLY | (typeof fsConstants.O_NOFOLLOW === "number" ? fsConstants.O_NOFOLLOW : 0);
-  try {
-    const handle = await open(path, flags);
-    try {
-      const value = JSON.parse(await handle.readFile("utf8"));
-      return typeof value.created === "number" && Number.isFinite(value.created) && Number.isInteger(value.created) && value.created >= 0 ? value.created : void 0;
-    } finally {
-      await handle.close();
-    }
-  } catch {
+function decodeLockOwner(value) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
     return void 0;
   }
+  const record2 = value;
+  if (Object.keys(record2).sort().join(",") !== "created,phase,pid,process_identity,token" || typeof record2.token !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u.test(record2.token) || !validPlatformPid(record2.pid) || !isQualifiedProcessIdentity(record2.process_identity) || typeof record2.created !== "number" || !Number.isFinite(record2.created) || !Number.isInteger(record2.created) || record2.created < 0 || record2.phase !== "held" && record2.phase !== "committed") return void 0;
+  return record2;
+}
+async function readLockSnapshot(path) {
+  let info;
+  try {
+    info = await lstat(path);
+  } catch (error2) {
+    if (error2 instanceof Error && "code" in error2 && error2.code === "ENOENT") {
+      return { kind: "missing" };
+    }
+    throw new WispError("bus_unwritable", "Cannot inspect write-lock owner", {
+      path,
+      reason: "stat_failed"
+    });
+  }
+  if (info.isSymbolicLink()) {
+    throw new WispError("bus_unwritable", "Write-lock owner is a symlink", {
+      path,
+      reason: "path_is_symlink"
+    });
+  }
+  if (!info.isFile()) {
+    throw new WispError("bus_unwritable", "Write-lock owner is not a regular file", {
+      path,
+      reason: "path_not_regular_file"
+    });
+  }
+  const flags = fsConstants.O_RDONLY | (typeof fsConstants.O_NOFOLLOW === "number" ? fsConstants.O_NOFOLLOW : 0);
+  let handle;
+  try {
+    handle = await open(path, flags);
+    const bytes = await handle.readFile();
+    let value;
+    try {
+      const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+      value = JSON.parse(text);
+    } catch {
+      return {
+        kind: "malformed",
+        bytes,
+        created: void 0,
+        salvaged: void 0
+      };
+    }
+    const owner = decodeLockOwner(value);
+    if (owner !== void 0) return { kind: "valid", owner };
+    const record2 = value !== null && typeof value === "object" && !Array.isArray(value) ? value : void 0;
+    const created = record2 !== void 0 && typeof record2.created === "number" && Number.isFinite(record2.created) && Number.isInteger(record2.created) && record2.created >= 0 ? Number(record2.created) : void 0;
+    const salvaged = record2 !== void 0 && validPlatformPid(record2.pid) && isQualifiedProcessIdentity(record2.process_identity) ? {
+      pid: record2.pid,
+      process_identity: record2.process_identity
+    } : void 0;
+    return { kind: "malformed", bytes, created, salvaged };
+  } catch (error2) {
+    if (error2 instanceof WispError) throw error2;
+    if (error2 instanceof Error && "code" in error2 && error2.code === "ENOENT") {
+      return void 0;
+    }
+    throw new WispError("bus_unwritable", "Cannot read write-lock owner", {
+      path,
+      reason: "open_failed"
+    });
+  } finally {
+    await handle?.close().catch(() => void 0);
+  }
+}
+function sameLockSnapshot(left, right) {
+  if (left.kind !== right.kind) return false;
+  if (left.kind === "missing") return true;
+  if (left.kind === "valid" && right.kind === "valid") {
+    return sameLockOwner(left.owner, right.owner);
+  }
+  return left.kind === "malformed" && right.kind === "malformed" && left.bytes.equals(right.bytes);
+}
+function sameLockOwner(left, right) {
+  return left.token === right.token && left.pid === right.pid && left.process_identity === right.process_identity && left.created === right.created && left.phase === right.phase;
 }
 async function readLockOwner(path) {
   const flags = fsConstants.O_RDONLY | (typeof fsConstants.O_NOFOLLOW === "number" ? fsConstants.O_NOFOLLOW : 0);
@@ -16318,8 +16398,9 @@ async function readLockOwner(path) {
     const info = await handle.stat();
     if (!info.isFile()) throw new Error("lock owner is not a regular file");
     const value = JSON.parse(await handle.readFile("utf8"));
-    if (Object.keys(value).sort().join(",") !== "created,phase,pid,process_identity,token" || typeof value.token !== "string" || !/^[0-9a-f-]{36}$/u.test(value.token) || typeof value.pid !== "number" || !Number.isInteger(value.pid) || value.pid <= 0 || typeof value.process_identity !== "string" || value.process_identity.length === 0 || typeof value.created !== "number" || !Number.isInteger(value.created) || value.created < 0 || value.phase !== "held" && value.phase !== "committed") throw new Error("invalid lock owner");
-    return value;
+    const owner = decodeLockOwner(value);
+    if (owner === void 0) throw new Error("invalid lock owner");
+    return owner;
   } finally {
     await handle.close().catch(() => void 0);
   }
@@ -16699,11 +16780,10 @@ var DashboardCoordinator = class {
     }
   }
   async #startOnce() {
-    const identity = await currentProcessIdentity();
-    if (identity === void 0) throw unavailable("process_identity_unavailable", false);
     const location = await runtimeLocation(this.#project);
     const deadline = this.#clock.now() + CONVERGENCE_MS;
     let liveStarting = false;
+    let identity;
     while (this.#clock.now() <= deadline) {
       const existing = await readOwner(location.ownerDir, location.ownerFile);
       if (existing !== void 0) {
@@ -16719,6 +16799,8 @@ var DashboardCoordinator = class {
         continue;
       }
       liveStarting = false;
+      identity ??= await currentProcessIdentity();
+      if (identity === void 0) throw unavailable("process_identity_unavailable", false);
       const instance = randomUUID2();
       const starting = {
         schema: 1,
@@ -17197,10 +17279,16 @@ async function readOwner(directory, path) {
     throw unavailable("owner_identity_unverifiable", false);
   }
 }
+function canonicalTimestamp(value) {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u.test(value) && !Number.isNaN(new Date(value).valueOf()) && new Date(value).toISOString() === value;
+}
+function nonblankBounded(value, maximum) {
+  return typeof value === "string" && value.trim().length > 0 && !value.includes("\0") && Buffer.byteLength(value, "utf8") <= maximum;
+}
 function validOwner(value) {
   const base = ["schema", "protocol", "state", "project", "project_key", "instance", "pid", "process_identity", "created_at"];
   const keys = value.state === "ready" ? [...base, "port", "capability", "published_at"] : base;
-  return Object.keys(value).sort().join(",") === keys.sort().join(",") && value.schema === 1 && typeof value.protocol === "number" && (value.state === "starting" || value.state === "ready") && typeof value.project === "string" && isAbsolute3(value.project) && typeof value.project_key === "string" && /^[0-9a-f]{64}$/u.test(value.project_key) && typeof value.instance === "string" && /^[0-9a-f-]{36}$/u.test(value.instance) && typeof value.pid === "number" && Number.isInteger(value.pid) && value.pid > 0 && typeof value.process_identity === "string" && value.process_identity.length > 0 && typeof value.created_at === "string" && !Number.isNaN(Date.parse(value.created_at)) && (value.state !== "ready" || typeof value.port === "number" && Number.isInteger(value.port) && value.port > 0 && value.port <= 65535 && typeof value.capability === "string" && /^[A-Za-z0-9_-]{43}$/u.test(value.capability) && typeof value.published_at === "string" && !Number.isNaN(Date.parse(value.published_at)));
+  return Object.keys(value).sort().join(",") === keys.sort().join(",") && value.schema === 1 && Number.isSafeInteger(value.protocol) && Number(value.protocol) > 0 && (value.state === "starting" || value.state === "ready") && nonblankBounded(value.project, Number.MAX_SAFE_INTEGER) && isAbsolute3(value.project) && typeof value.project_key === "string" && /^[0-9a-f]{64}$/u.test(value.project_key) && typeof value.instance === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u.test(value.instance) && Number.isSafeInteger(value.pid) && Number(value.pid) > 0 && Number(value.pid) <= 2147483647 && isQualifiedProcessIdentity(value.process_identity) && canonicalTimestamp(value.created_at) && (value.state !== "ready" || Number.isInteger(value.port) && Number(value.port) > 0 && Number(value.port) <= 65535 && typeof value.capability === "string" && /^[A-Za-z0-9_-]{43}$/u.test(value.capability) && canonicalTimestamp(value.published_at));
 }
 function exactOwner(left, right) {
   return left !== void 0 && JSON.stringify(left) === JSON.stringify(right);
@@ -17599,7 +17687,7 @@ async function callWispTool(name, args, resolver, runtimeFactory = createRuntime
       );
     }
     const incident = randomUUID3();
-    diagnostic(`wisp internal error (${incident}): ${error2 instanceof Error ? error2.stack ?? error2.message : String(error2)}`);
+    diagnostic(`wisp internal error (${incident})`);
     return toolResult(
       {
         ok: false,
@@ -17623,7 +17711,7 @@ function toolResult(envelope, isError) {
 var cleanupByServer = /* @__PURE__ */ new WeakMap();
 function createWispServer(environmentRoot = process.env.WISP_PROJECT_ROOT) {
   const server = new Server(
-    { name: "wisp", version: "0.2.1-rc.3" },
+    { name: "wisp", version: "0.2.1-rc.4" },
     { capabilities: { tools: {} } }
   );
   let resolver;
