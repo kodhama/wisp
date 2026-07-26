@@ -1,7 +1,7 @@
 ---
 id: adr-0013-receive-stewards-availability-support-grammar
 type: adr
-status: gated
+status: approved
 depends_on: [stewards/kodhama-0022-propagate-collective-strategy, stewards/kodhama-0023-separate-operational-availability-from-support]
 owner: agent
 updated: 2026-07-26
@@ -51,5 +51,6 @@ applicability and separate follow-up work are explicit.
 ## Lifecycle record
 
 The maintainer ratified Stewards decision 0023 and authorized rollout of its
-thin receipts on 2026-07-26. This receipt remains `gated` until independent
-decision review confirms its exact content.
+thin receipts on 2026-07-26. An independent decision adversary returned
+`SOUND` for exact commit `46c4cae`. Under that explicit rollout authorization,
+`approved` records the receipt after its required gate passed.
