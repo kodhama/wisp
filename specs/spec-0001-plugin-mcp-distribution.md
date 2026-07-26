@@ -23,13 +23,15 @@ version: 15
 > mutual-exclusion and append-ordering contract with the minimal Preview
 > boundary, explicitly preserved ADR-0005's separate dashboard contract,
 > distinguished “no redesign or correctness claim” from PR #49's retained
-> repairs, and advanced the behavioral version to 15.
+> repairs, excluded project-bus-lock-origin failures from generic error and
+> diagnostic guarantees, and advanced the behavioral version to 15.
 > **WHY:** Human-approved ADR-0017 supersedes ADR-0016's attempt to normatively
 > encode inherited project-bus mechanics; its targeted decision-adversary pass
 > found the first wording overbroad enough to swallow dashboard ownership and
 > factually overstated PR #49's runtime-lock scope.
 > **SCOPE:** Lock constants and prose, S47/S51/S52/S70/S74,
-> R58/R66–R69/R88/R90/R92–R94, verification matrix, rubric, and gate record.
+> S17/S18, R19/R21, R58/R66–R69/R88/R90/R92–R94, HTTP/MCP error and stdio
+> prose, verification matrix, rubric, and gate record.
 > Unrelated schema, validation, exact serialization, project confinement,
 > per-operation byte accounting, ADR-0005 user-runtime dashboard ownership,
 > distribution, and security guarantees remain current.
@@ -894,13 +896,15 @@ HTTP protocol failures return JSON
 | Total request deadline exceeded before response starts | `408` | `http_request_timeout` |
 | Invalid UTF-8, JSON, or command schema | `400` | `http_invalid_request` |
 
-Canonical runtime failures use the existing Wisp error envelope:
+Canonical runtime failures that do not originate in the project-bus
+`.wisp/write.lock` protocol use the existing Wisp error envelope:
 `invalid_input` returns `400`; `command_conflict` from `/api/events` returns
 `409`; `bus_unreadable`, `bus_unwritable`, and `bus_limit_exceeded` return
 `500`; and `internal_error` returns `500`. The `409` body preserves the exact
 existing `command_conflict` details (`command_id`, `count`) and returns no
-partial event data. Responses expose no OS exception text. No failure response
-contains the capability.
+partial event data. A project-bus-lock-origin failure has no contracted HTTP
+status, error envelope, exception-text treatment, or diagnostic emission.
+Regardless of origin, no failure response contains the capability.
 
 The dashboard coordinator is one memoized instance per MCP process. Reusable
 module import and ordinary MCP startup create no user-runtime path, candidate,
@@ -1055,10 +1059,13 @@ process, or append a command.
 
 ## Exact MCP outputs and error mapping
 
-Every invoked tool returns one JSON envelope in MCP `structuredContent` and an
-identical compact JSON serialization in its sole text content item. That text
-is exactly Node 24 `JSON.stringify(envelope)` with the envelope as the sole
-argument and no replacer or spacing.
+Every successful invoked tool and every failure covered by the error contract
+below returns one JSON envelope in MCP `structuredContent` and an identical
+compact JSON serialization in its sole text content item. That text is exactly
+Node 24 `JSON.stringify(envelope)` with the envelope as the sole argument and
+no replacer or spacing. A failure originating in the project-bus
+`.wisp/write.lock` protocol is excluded from this failure-envelope contract;
+stdout framing and capability-safety requirements still apply.
 
 Success:
 
@@ -1066,14 +1073,14 @@ Success:
 {"ok":true,"data":{}}
 ```
 
-Expected failure:
+Contracted expected failure:
 
 ```json
 {"ok":false,"error":{"code":"project_unresolved","message":"Human-readable summary","details":{}}}
 ```
 
-`isError` is `false` for success and `true` for the failure envelope. Clients
-SHALL branch on `code`, not `message`.
+`isError` is `false` for success and `true` for a contracted failure envelope.
+Clients SHALL branch on `code`, not `message`, for contracted failures.
 
 Write-tool success data is `{"event": <canonical-event>}`.
 `wisp_check` success data is:
@@ -1127,7 +1134,8 @@ Stable `project_unresolved` reasons are `invalid_environment_root`,
 `roots_unsupported`, `roots_list_failed`, `roots_absent`,
 `roots_ambiguous`, and `invalid_file_root`.
 
-Stable bus reasons are `path_is_symlink`, `path_not_directory`,
+For failures not originating in the project-bus `.wisp/write.lock` protocol,
+stable bus reasons are `path_is_symlink`, `path_not_directory`,
 `path_not_regular_file`, `outside_project`, `stat_failed`, `mkdir_failed`,
 `open_failed`, `read_failed`, `append_failed`, and `invalid_utf8`.
 `bus_unreadable` uses the applicable reason except `mkdir_failed` and
@@ -1146,7 +1154,7 @@ the separate dashboard ownership/coordinator errors.
 | `invalid_input` | A named tool's arguments violate its schema or cross-field rule | `field`, stable `reason`, and `limit`/`actual` when bounded |
 | `project_unresolved` | Project selection fails | `reason` from the resolution contract and `source` (`environment` or `roots`) |
 | `bus_unreadable` | The selected bus cannot be safely statted, contained, decoded, or read | `path`, stable `reason` |
-| `bus_unwritable` | Directory validation/creation, containment, open, or append fails | `path`, stable `reason` |
+| `bus_unwritable` | Non-project-bus-lock directory validation/creation, containment, bus open, or append fails | `path`, stable `reason` |
 | `bus_limit_exceeded` | Bus, line, command count, or parse-error count exceeds a fixed maximum | `subject` (`bus`, `line`, `commands`, or `parse_errors`), `unit` (`utf8_bytes` or `items`), `limit`, `actual` |
 | `command_not_found` | No matching command exists in the run | `command_id` |
 | `command_conflict` | More than one matching command id exists in the run | `command_id`, `count` |
@@ -1154,7 +1162,7 @@ the separate dashboard ownership/coordinator errors.
 | `command_not_targeted` | The unique pending command targets another agent | `command_id`, `target`, `agent` |
 | `dashboard_unavailable` | Dashboard startup, reuse, or safe recovery cannot complete | stable `reason`, `retryable` |
 | `dashboard_version_conflict` | A live owner uses another dashboard protocol | `expected_protocol`, `actual_protocol` |
-| `internal_error` | An unexpected server defect reaches the adapter | `incident_id` |
+| `internal_error` | An unexpected non-project-bus-lock server defect reaches the adapter | `incident_id` |
 
 Serialized-event excess is `invalid_input` with field `""`, reason
 `event_too_large`, `limit`, and `actual`. `command_not_pending.status` is
@@ -1173,8 +1181,11 @@ their envelope is stable across host SDKs. Unknown tool names use MCP
 `MethodNotFound` (`-32601`). Requests malformed before a named tool can be
 identified use MCP `InvalidParams` (`-32602`). MCP framing/internal transport
 failures may use their standard JSON-RPC errors; they are not tool results.
-An unexpected handler exception is caught, diagnosed on stderr, and returned
-as `internal_error` without terminating a valid session.
+An unexpected handler exception that does not originate in the project-bus
+`.wisp/write.lock` protocol is caught, diagnosed on stderr, and returned as
+`internal_error` without terminating a valid session. Project-bus-lock-origin
+exceptions have no contracted envelope, `isError`, `internal_error`, or
+diagnostic behavior.
 
 Malformed bus lines are data only on a successful `wisp_check` when all read
 limits are satisfied. They are never rewritten or represented as events.
@@ -1183,8 +1194,12 @@ limits are satisfied. They are never rewritten or represented as events.
 
 `node dist/wisp.mjs` starts the server over stdio and starts no CLI or HTTP
 listener before an explicit `wisp_dashboard` call. Stdout contains MCP
-protocol frames only, including while the dashboard runs. Startup text,
-diagnostics, and exception detail use stderr.
+protocol frames only, including while the dashboard runs and when a
+project-bus-lock-origin failure occurs. Startup text and every diagnostic or
+exception detail whose emission is contracted use stderr. The specification
+does not require a project-bus-lock-origin diagnostic to be emitted or
+constrain its content, but it may not violate stdout framing or
+capability-safety.
 
 The source is TypeScript. The distributed artifact is ordinary JavaScript
 containing all runtime dependencies, built with esbuild target `node24`, and
@@ -1415,19 +1430,24 @@ follow the Stewards 0023 availability/support grammar received by ADR-0013.
 
 **S17 — Error mapping**
 
-- **Given** each error class plus an unknown tool and a pre-tool malformed
-  request,
+- **Given** each contracted error class excluding project-bus
+  `.wisp/write.lock`-origin failures, plus an unknown tool and a pre-tool
+  malformed request,
 - **When** MCP handles them,
 - **Then** named-tool errors use the stable `isError` envelope, the unknown
-  tool uses `-32601`, and the malformed request uses `-32602`.
+  tool uses `-32601`, and the malformed request uses `-32602`; a
+  project-bus-lock-origin failure has no contracted envelope, `isError`,
+  `internal_error`, or diagnostic behavior.
 
 **S18 — Stdout purity**
 
-- **Given** startup, success, expected failures, and an unexpected handler
-  exception,
+- **Given** startup, success, contracted expected failures, an unexpected
+  non-project-bus-lock handler exception, and a project-bus-lock-origin
+  failure,
 - **When** the process is exercised over stdio,
-- **Then** stdout parses wholly as MCP traffic and diagnostics appear only on
-  stderr.
+- **Then** stdout parses wholly as MCP traffic in every case, contracted
+  diagnostics appear only on stderr, and no diagnostic emission or content is
+  required for the project-bus-lock-origin failure.
 
 **S19 — Import safety**
 
@@ -1905,13 +1925,19 @@ follow the Stewards 0023 availability/support grammar received by ADR-0013.
   command as authority.
 - **R18 (unwanted behavior):** If acknowledgement authorization fails, Wisp
   shall return the exact command error without append.
-- **R19 (event-driven):** When a named tool fails, it shall return the stable
-  error envelope with `isError: true`.
+- **R19 (event-driven):** When a named tool fails for a contracted reason that
+  does not originate in the project-bus `.wisp/write.lock` protocol, it shall
+  return the stable error envelope with `isError: true`; a
+  project-bus-lock-origin failure shall have no contracted envelope,
+  `isError`, `internal_error`, or diagnostic behavior.
 - **R20 (unwanted behavior):** If a tool is unknown or a request is malformed
   before tool identification, MCP shall use `-32601` or `-32602`
   respectively.
 - **R21 (state-driven):** While in MCP mode, stdout shall contain MCP protocol
-  traffic only and diagnostics shall use stderr.
+  traffic only for every outcome, including project-bus-lock-origin failures;
+  diagnostics whose emission is contracted shall use stderr, while no
+  emission or content shall be required for a project-bus-lock-origin
+  diagnostic.
 - **R22 (event-driven):** When a reusable module is imported, it shall perform
   no entrypoint or I/O side effect.
 - **R23 (ubiquitous):** The six event/check MCP handlers shall call the shared
@@ -2152,13 +2178,13 @@ follow the Stewards 0023 availability/support grammar received by ADR-0013.
 | Dashboard discovery | Fake-home and process-identity adapters prove exact root/key derivation, ownership/mode/type/symlink rejection, project-ancestor rejection, candidate promotion, mandatory post-acquisition recheck, authenticated reuse, bounded starting wait, live-owner refusal, deterministic same-PID/new-token recovery, contention, and distinct-project isolation; a property-by-property invalid-owner table, including otherwise usable PID/identity/instance/capability and invalid protocol fields, proves exact `owner_identity_unverifiable`, zero provider/health calls, and no quarantine or replacement, while a complete owner with another positive integer protocol reaches `dashboard_version_conflict` only after identity proof |
 | Process identity | Linux fixtures prove boot-ID and `/proc/<pid>/stat` field-22 parsing including hostile `comm`; macOS fixtures prove absolute `/bin/ps` C-locale parsing and failures; live current/child/exit observations plus deterministic same-PID/new-birth-token adapters exercise dashboard ownership and recovery only; Windows is rejected, and no result is treated as a bus-lock guarantee |
 | Dashboard faults/lifecycle | Fault injection before claim and after claim/bind/publish/completion plus stdio close, `SIGINT`, and `SIGTERM` proves failed-live-owner listener/record cleanup, no bound-unpublished survivor, dead-owner recovery, 1,000 ms bounded drain, forced tracked-socket destruction, matching-instance cleanup, and no daemon |
-| Dashboard HTTP/UI | Loopback and browser-DOM tests snapshot exact precedence, condition/status/code mapping including `command_conflict`→`409`, routes/envelopes/headers, acceptance-to-`CRLFCRLF` header bytes/deadline, header-to-body-complete deadline, acceptance-to-response-complete total deadline, keep-alive idle and cleanup-to-forced-close boundaries, bearer, Host, Origin, query, method, content type, body, CSP, capability-bootstrap/rotation/redaction, refresh/visibility/in-flight behavior, exact run/agent append-order projection, text-only rendering, event/parse-error/command-state views, explicit command controls, and zero-write failures |
+| Dashboard HTTP/UI | Loopback and browser-DOM tests snapshot exact HTTP-protocol and non-project-bus-lock runtime precedence, condition/status/code mapping including `command_conflict`→`409`, routes/envelopes/headers, acceptance-to-`CRLFCRLF` header bytes/deadline, header-to-body-complete deadline, acceptance-to-response-complete total deadline, keep-alive idle and cleanup-to-forced-close boundaries, bearer, Host, Origin, query, method, content type, body, CSP, capability-bootstrap/rotation/redaction, refresh/visibility/in-flight behavior, exact run/agent append-order projection, text-only rendering, event/parse-error/command-state views, explicit command controls, and zero-write failures; project-bus-lock-origin failures retain only the independent capability-safety constraints |
 | Capability-safe host evidence | Host-smoke, canary, and Playwright-failure fixtures prove the exact capability URL is allowed in the mandated `wisp_dashboard` MCP response and its loopback request/response transport, place the live capability in every other permitted transient location and prohibited query, bus, cookie/storage, error-object, log, reporter, screenshot, video, trace, attachment, cache, artifact, and upload sink, prove the private ready record is its sole persistent location, intercept every other Wisp-controlled output before a sink, require exact structural sentinels and typed fields, absence-scan retained evidence/logs, and prove a failed scan produces no persisted or uploaded artifact |
 | Compact serialization | Node 24 fixtures invoke one-argument `JSON.stringify(value)` with no replacer/spacing, compare exact UTF-8 bytes and property/escape output, cover ASCII, control escapes, and non-ASCII scalars, accept event size 32,768 and one operation's observed projection of 16,777,216, reject 32,769 and that operation's observed projection of 16,777,217 with exact diagnostics, and prove the accepted event is followed by exactly one LF; no fixture result is represented as a concurrent aggregate bus-size guarantee |
 | Runtime boundary | Spies or dependency injection prove all six event/check MCP handlers call shared operations, `wisp_dashboard` calls the memoized coordinator, HTTP reads/writes reuse the canonical runtime, and HTTP/browser contain no second command reducer |
 | Command safety | Append-order tests prove issued fields, whole-check first-duplicate conflict/count/no-partial-data, ack duplicate conflict, unique-id-only reduction, same-run/following-ack filtering, last-ack wins, stable ordering, all-status dashboard projection, no execution, and every acknowledgement result |
 | Errors | Contract snapshots for non-project-bus-lock MCP and HTTP code/reason/JSON-pointer/detail shapes, retryability, parse reasons, `isError`, `-32601`, `-32602`, dashboard version conflict, HTTP `409` command conflict, and unexpected-exception containment; structural checks prove project-bus `.wisp/write.lock`-originated errors and diagnostics are outside the contract while dashboard ownership/coordinator errors remain contracted |
-| Stdio | Spawned-process transcript proves all stdout is MCP framing and diagnostics are stderr-only |
+| Stdio | Spawned-process transcripts prove stdout is MCP framing only for every outcome, including project-bus-lock-origin failures; each diagnostic whose emission is contracted is observed on stderr and never stdout, while lock-origin failures have no diagnostic-emission or content oracle beyond stdout framing and capability safety |
 | Import safety | Isolated import probes for every reusable module prove no bus or dashboard state and no listener before explicit invocation |
 | Bundle | Build inspection proves target `node24`; a clean fixture with no global Wisp or dependency tree launches the exact distributed artifact under Node 24; documentation and fixtures prove that this technical boundary creates no Supported claim |
 | Claude | Validate exact `.mcp.json`; installed current-stable smoke lists seven tools, checks, writes, explicitly opens the dashboard, and verifies fixture `.wisp/events.ndjson` |
@@ -2186,7 +2212,8 @@ check uses `specs/README.md`.
   scenarios, R1–R77 and R87–R94 are EARS requirements, and the matrix names
   executable evidence. The remaining gaps preserve historical identifiers of
   retired family machinery.
-- **Exactness:** PASS — all seven schemas, outputs, error mapping, project
+- **Exactness:** PASS — all seven schemas, all success outputs,
+  non-project-bus-lock failure envelopes and error mapping, project
   selection, stored-event validity, confinement/decoding, duplicate/unique
   command reduction, the per-operation append-commit meaning, qualified
   process-birth identity, finite limits, dashboard ownership,
@@ -2346,4 +2373,9 @@ bounded runtime, owner-validation, append, and canary repairs. The configured
 rubric self-check passes, so v15 remains `gated`; no v15 adversary or
 conformance verdict is claimed here. This targeted decision-adversary repair
 corrects the scope and PR description without changing v15's behavioral
-boundary.
+boundary. Targeted conformance at exact head `903a2d6` then found that generic
+HTTP, MCP-envelope, unexpected-exception, and stdio-diagnostic clauses still
+promised behavior for project-bus-lock-origin failures. This repair excludes
+only those failures while preserving stable validation, non-lock MCP/HTTP,
+dashboard, stdout-framing, capability-safety, and unrelated diagnostic
+contracts; v15 remains `gated`, and no fresh verdict is claimed.
