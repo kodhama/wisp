@@ -12,6 +12,11 @@ updated: 2026-07-25
 
 # ADR-0011 — Support Node.js 24 only
 
+> **Forward pointer.** `adr-0014-retire-preview-qualification-machinery`
+> supersedes this ADR's qualification-ledger and aggregate
+> release-qualification clauses. Node.js 24-only support, testing, and bundle
+> targeting remain current.
+
 ## Decision state
 
 ### Decided

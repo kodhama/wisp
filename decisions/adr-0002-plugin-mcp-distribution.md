@@ -31,6 +31,11 @@ updated: 2026-07-24
 >
 > **Forward pointer.** `adr-0011-node-24-only-support` supersedes this ADR's
 > Node.js 20/22/24 compatibility policy with Node.js 24-only support.
+>
+> **Forward pointer.** `adr-0014-retire-preview-qualification-machinery`
+> supersedes this ADR's aggregate qualification policy, checked-in
+> `qualification.json`, release-pass gate, and “separately qualified”
+> wording. Its dual-host bundled-MCP and runtime behavior remain current.
 
 ## Decision state
 

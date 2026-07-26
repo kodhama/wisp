@@ -11,6 +11,11 @@ updated: 2026-07-24
 
 # ADR-0005 — Add an explicit, project-singleton dashboard to the Wisp plugin
 
+> **Forward pointer.** `adr-0014-retire-preview-qualification-machinery`
+> supersedes only this ADR's live-qualification and release-support
+> requirements. All dashboard lifecycle, security, isolation, and recovery
+> guarantees remain current.
+
 ## Decision state
 
 ### Decided

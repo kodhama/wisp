@@ -12,6 +12,10 @@ updated: 2026-07-24
 
 # ADR-0007 — Align Codex canary evidence with observable host output
 
+> **Forward pointer.** `adr-0014-retire-preview-qualification-machinery`
+> supersedes this ADR's candidate qualification and release-evidence
+> semantics. Its observable real-Codex smoke boundaries remain current.
+
 ## Decision state
 
 ### Decided

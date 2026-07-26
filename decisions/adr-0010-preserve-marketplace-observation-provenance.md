@@ -1,7 +1,7 @@
 ---
 id: adr-0010-preserve-marketplace-observation-provenance
 type: adr
-status: approved
+status: superseded
 depends_on:
   - adr-0009-independent-plugin-package-metadata
   - stewards/kodhama-spec-0003-marketplace-test-observation@v1
@@ -10,6 +10,11 @@ updated: 2026-07-25
 ---
 
 # ADR-0010 — Preserve marketplace-observation provenance
+
+> **Superseded by `adr-0014-retire-preview-qualification-machinery`.**
+> Wisp no longer consumes marketplace observations through checked-in surface
+> metadata. The governing Stewards boundary still says an observation does
+> not create a support claim.
 
 ## Decision state
 
