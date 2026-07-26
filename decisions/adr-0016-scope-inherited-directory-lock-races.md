@@ -14,9 +14,11 @@ changes:
 # ADR-0016 — Scope inherited directory-lock races out of qualification retirement
 
 > Superseded by `adr-0017-bound-preview-directory-lock-contract`, which
-> replaces this record's positive lock-internal contract with a minimal
-> Preview boundary. This record remains provenance for the decision not to
-> redesign the lock in PR #49.
+> replaces this record's positive project-bus `.wisp/write.lock`
+> mutual-exclusion and append-ordering contract with a minimal Preview
+> boundary while preserving the separate user-runtime dashboard
+> ownership/coordinator contract. This record remains provenance for the
+> decision not to redesign the project-bus lock in PR #49.
 
 ## Decision state
 

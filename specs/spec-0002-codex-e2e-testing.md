@@ -21,15 +21,17 @@ version: 8
 > **WHAT:** Advanced the current SPEC-0001 behavioral pin from v14 to v15
 > across dependency, staging, test-ledger, acceptance, verification, and
 > rubric references without changing this specification's behavior.
-> **WHY:** ADR-0017 removes positive directory-lock internals from the Preview
-> contract while preserving the package, adapter, dashboard, and retained data
-> behavior exercised here.
+> **WHY:** ADR-0017 removes positive project-bus `.wisp/write.lock`
+> mutual-exclusion and append-ordering internals from the Preview contract
+> while preserving the package, adapter, separate ADR-0005 user-runtime
+> dashboard ownership/coordinator contract, and retained data behavior
+> exercised here.
 > **SCOPE:** Upstream pin and current-behavior references only. Version remains
 > 8, status remains `gated`, and ADR-0014 remains the implemented decision
 > because this is a pin-only re-derivation rather than new E2E behavior.
 > **POINTER:** ADR-0017 and SPEC-0001@v15.
 > **VALUE:** A contributor's E2E contract does not turn characterization of
-> the current lock into a Preview product guarantee.
+> the current project-bus lock into a Preview product guarantee.
 > **CONFIDENCE:** verified.
 
 > **AMENDED 2026-07-26**
@@ -174,11 +176,14 @@ seven MCP tools, canonical bus, dashboard security, and ownership lifecycle,
 is inherited from `spec-0001-plugin-mcp-distribution@v15` and is not redefined
 here.
 
-SPEC-0001@v15 makes no positive guarantee for the current directory lock in
-same-process or cross-process operation. It changes none of the package or
-ordinary E2E behavior exercised here, and these layers do not turn
-characterization of lock concurrency, ownership, recovery, cleanup, path
-identity, timing, errors, or diagnostics into a product guarantee.
+SPEC-0001@v15 makes no positive guarantee for the current project-bus
+`.wisp/write.lock` mutual-exclusion and append-ordering protocol in
+same-process or cross-process bus operation. It changes none of the package or
+ordinary E2E behavior exercised here, preserves the separate ADR-0005
+user-runtime dashboard ownership/coordinator contract, and does not turn
+characterization of project-bus lock concurrency, ownership, recovery,
+cleanup, path identity, timing, errors, or diagnostics into a product
+guarantee.
 
 ## Required repository surfaces
 
@@ -798,8 +803,9 @@ None.
 **PASS.** Frontmatter is complete; ADR-0014 and SPEC-0001@v15 are consumable
 upstreams with the exact behavioral pin; the pin-only re-derivation confirms
 that v15 changes no E2E obligation here and that no clause turns current
-directory-lock characterization into a Preview product guarantee; scope is
-bounded; repository, execution, evidence,
+project-bus `.wisp/write.lock` characterization into a Preview product
+guarantee or weakens the separate dashboard ownership/coordinator contract;
+scope is bounded; repository, execution, evidence,
 cadence, retired-verifier, and eight-path staging contracts are implementable;
 GWT scenarios cover deterministic E2E, weekly and manual Preview smoke, Node
 24 execution, exact combined-output overflow, silent health/callback failure,
@@ -857,7 +863,9 @@ Under the steward profile's `spec=agent` gate, those durable records ratify
 gated SPEC-0002 v8 for downstream consumption. Its status remains `gated`.
 
 ADR-0017 advances the pinned upstream to SPEC-0001 v15, whose minimal negative
-directory-lock boundary changes no E2E behavior in this specification. This
-pin-only re-derivation therefore leaves SPEC-0002 at version 8 and `gated`;
-the rubric self-check remains `PASS`, and no new adversary or conformance
-verdict is claimed here.
+project-bus `.wisp/write.lock` mutual-exclusion and append-ordering boundary
+changes no E2E behavior in this specification and preserves ADR-0005's
+separate user-runtime dashboard ownership/coordinator contract. This pin-only
+re-derivation therefore leaves SPEC-0002 at version 8 and `gated`; the rubric
+self-check remains `PASS`, and no new adversary or conformance verdict is
+claimed here.

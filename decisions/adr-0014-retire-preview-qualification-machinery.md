@@ -23,11 +23,13 @@ changes:
 # ADR-0014 — Retire aggregate qualification machinery while Wisp is Preview
 
 > Partially superseded by `adr-0017-bound-preview-directory-lock-contract`:
-> Wisp Preview makes no positive guarantee for the current directory lock,
-> retains only the decision's unrelated product guarantees, and parks all
-> lock correctness and redesign in issue #50. ADR-0017 supersedes ADR-0016's
-> positive lock-internal contract; ADR-0016 remains provenance for the scoped
-> decision not to redesign the lock in PR #49.
+> Wisp Preview makes no positive guarantee for the current project-bus
+> `.wisp/write.lock` mutual-exclusion and append-ordering protocol, retains the
+> separate user-runtime dashboard ownership/coordinator contract and this
+> decision's other unrelated product guarantees, and parks project-bus lock
+> correctness and redesign in issue #50. ADR-0017 supersedes ADR-0016's
+> positive project-bus lock-internal contract; ADR-0016 remains provenance for
+> the scoped decision not to redesign the project-bus lock in PR #49.
 
 ## Decision state
 

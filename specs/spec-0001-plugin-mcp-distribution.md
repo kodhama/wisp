@@ -19,19 +19,24 @@ version: 15
 # SPEC-0001 — Dual-host Wisp plugin, bundled stdio MCP, and project dashboard
 
 > **AMENDED 2026-07-26**
-> **WHAT:** Replaced v14's positive directory-lock-internal contract with the
-> minimal Preview boundary and advanced the behavioral version to 15.
+> **WHAT:** Replaced v14's positive project-bus `.wisp/write.lock`
+> mutual-exclusion and append-ordering contract with the minimal Preview
+> boundary, explicitly preserved ADR-0005's separate dashboard contract,
+> distinguished “no redesign or correctness claim” from PR #49's retained
+> repairs, and advanced the behavioral version to 15.
 > **WHY:** Human-approved ADR-0017 supersedes ADR-0016's attempt to normatively
-> encode inherited concurrency, ownership, recovery, cleanup, path, timing,
-> and diagnostic mechanics.
+> encode inherited project-bus mechanics; its targeted decision-adversary pass
+> found the first wording overbroad enough to swallow dashboard ownership and
+> factually overstated PR #49's runtime-lock scope.
 > **SCOPE:** Lock constants and prose, S47/S51/S52/S70/S74,
 > R58/R66–R69/R88/R90/R92–R94, verification matrix, rubric, and gate record.
 > Unrelated schema, validation, exact serialization, project confinement,
-> per-operation byte accounting, dashboard, distribution, and security
-> guarantees remain current.
-> **POINTER:** ADR-0017.
-> **VALUE:** A Preview user can distinguish Wisp's retained data contract from
-> lock behavior that is not promised until issue #50 lands.
+> per-operation byte accounting, ADR-0005 user-runtime dashboard ownership,
+> distribution, and security guarantees remain current.
+> **POINTER:** ADR-0017 and its targeted decision-adversary repair.
+> **VALUE:** A Preview user can distinguish Wisp's retained data and dashboard
+> contracts from project-bus lock behavior that is not promised until issue
+> #50 lands.
 > **CONFIDENCE:** verified.
 
 > **AMENDED 2026-07-26**
@@ -452,18 +457,25 @@ specification apply to each call.
 
 The append commit point means only that the operation completed the full write
 of the compact canonical event plus its terminating LF. It does not guarantee
-that those bytes will later be preserved or remain durable when any
-same-process or cross-process operation overlaps.
+that those bytes will later be preserved or remain durable when same-process
+or cross-process bus operations overlap through the project-bus lock.
 
-Wisp Preview makes no guarantee about the current directory-lock
-implementation's concurrency, serialization, ownership, recovery, cleanup,
-path identity, deadlines, timing, error mapping, or diagnostics. This boundary
-applies whether operations run concurrently in different processes or within
-one process. In particular, the specification makes no aggregate bus-size
-guarantee across concurrent operations.
+Wisp Preview makes no guarantee about the current project-bus
+`.wisp/write.lock` mutual-exclusion and append-ordering protocol's concurrency,
+ownership, recovery, cleanup, path identity, deadlines, timing, error mapping,
+or diagnostics. This boundary applies whether bus operations run concurrently
+in different processes or within one process. In particular, the
+specification makes no aggregate bus-size guarantee across concurrent
+operations.
 
-Issue #50 is the sole venue for directory-lock correctness, protocol,
-migration, and redesign. PR #49 changes no runtime lock behavior.
+This boundary does not apply to the separate user-runtime dashboard
+ownership/coordinator contract under ADR-0005 and the dashboard clauses below.
+
+Issue #50 is the sole venue for project-bus lock correctness, protocol,
+migration, and redesign. ADR-0017 adds no further runtime lock change. PR #49
+does not redesign the project-bus lock or claim its correctness, while
+retaining its already present bounded runtime, owner-validation, append, and
+canary repairs.
 
 ## Dashboard discovery and ownership contract
 
@@ -1101,8 +1113,9 @@ Write-tool success data is `{"event": <canonical-event>}`.
 it is `true` after an existing compatible owner passed the authenticated
 health proof. No other property is returned.
 
-Except for failures originating in the non-contracted directory lock, error
-`code`, `details.reason`, and `details.field` values are contractual;
+Except for failures originating in the non-contracted project-bus
+`.wisp/write.lock` mutual-exclusion and append-ordering protocol, error `code`,
+`details.reason`, and `details.field` values are contractual;
 human-readable `message` and operating-system exception text are not.
 `details.field` is an RFC 6901 JSON Pointer (`""` for the whole input,
 `/run`, `/refs/3`, and so on).
@@ -1124,8 +1137,9 @@ Stable bus reasons are `path_is_symlink`, `path_not_directory`,
 `invalid_event`.
 
 No code, reason, retryability, message, operating-system text, or stderr
-diagnostic caused by directory-lock acquisition, ownership, recovery, release,
-or cleanup is contractual.
+diagnostic caused by project-bus `.wisp/write.lock` acquisition, ownership,
+recovery, release, or cleanup is contractual. This exception does not apply to
+the separate dashboard ownership/coordinator errors.
 
 | Error code | Used when | Required `details` |
 |---|---|---|
@@ -1663,15 +1677,17 @@ follow the Stewards 0023 availability/support grammar received by ADR-0013.
   remote transport, external dashboard resource, or legacy `.grove` data
   path, and only explicit dashboard invocation can start HTTP.
 
-**S47 — Preview directory-lock boundary**
+**S47 — Preview project-bus lock boundary**
 
-- **Given** same-process or cross-process bus operations and any current lock
-  state, interleaving, failure, or delay,
+- **Given** same-process or cross-process bus operations and any current
+  `.wisp/write.lock` state, interleaving, failure, or delay,
 - **When** MCP or dashboard writers append to the project bus,
-- **Then** Wisp Preview makes no guarantee for directory-lock concurrency,
-  serialization, ownership, recovery, cleanup, path identity, deadlines,
-  timing, error mapping, or diagnostics, and issue #50 remains the sole venue
-  for a positive lock-correctness contract.
+- **Then** Wisp Preview makes no guarantee for that project-bus
+  mutual-exclusion and append-ordering protocol's concurrency, ownership,
+  recovery, cleanup, path identity, deadlines, timing, error mapping, or
+  diagnostics; issue #50 remains the sole venue for a positive project-bus
+  lock-correctness contract; and the separate ADR-0005 user-runtime dashboard
+  ownership/coordinator contract remains current.
 
 **S48 — Safe functional dashboard UI**
 
@@ -1707,7 +1723,7 @@ follow the Stewards 0023 availability/support grammar received by ADR-0013.
 **S51 — Append commit has a per-operation meaning**
 
 - **Given** one append that completes the full compact event-plus-LF write and
-  any overlapping same-process or cross-process lock activity,
+  any overlapping same-process or cross-process project-bus lock activity,
 - **When** that operation reaches its append commit point,
 - **Then** commit establishes only that the complete write occurred for that
   operation; it creates no guarantee that the bytes will later be preserved
@@ -1721,7 +1737,8 @@ follow the Stewards 0023 availability/support grammar received by ADR-0013.
 - **Then** only exact Linux boot-id/start-ticks and macOS absolute-`/bin/ps`
   C-locale tokens qualify for dashboard ownership, Windows remains
   unsupported, and no PID-only result is accepted; these provider guarantees
-  create no project-bus lock guarantee.
+  create no project-bus `.wisp/write.lock` mutual-exclusion or append-ordering
+  guarantee and do not weaken the separate dashboard ownership contract.
 
 **S53 — HTTP deadline boundaries**
 
@@ -1790,14 +1807,15 @@ follow the Stewards 0023 availability/support grammar received by ADR-0013.
   evidence, and renewal policy, and every declared row follows the Stewards
   0023 availability/support grammar.
 
-**S70 — Bus-lock recovery is not contracted**
+**S70 — Project-bus lock recovery is not contracted**
 
 - **Given** any complete, malformed, missing, replaced, or concurrently
-  changed lock state,
-- **When** current directory-lock recovery runs,
+  changed `.wisp/write.lock` state,
+- **When** current project-bus lock recovery runs,
 - **Then** Wisp Preview promises no owner interpretation, identity use,
-  recovery eligibility, mutation, error, timing, or cleanup result; issue #50
-  solely owns a future positive recovery contract.
+  recovery eligibility, mutation, error, timing, or cleanup result for that
+  protocol; issue #50 solely owns a future positive recovery contract, and
+  ADR-0005 dashboard recovery remains separately contracted.
 
 **S71 — Invalid dashboard owners fail closed**
 
@@ -1839,9 +1857,11 @@ follow the Stewards 0023 availability/support grammar received by ADR-0013.
 - **When** each operation validates, serializes, accounts for, and attempts
   its append,
 - **Then** event schema, validation, exact serialization, project confinement,
-  and that operation's byte accounting remain contracted, while directory-lock
-  behavior, later preservation or durability of committed bytes, and an
-  aggregate concurrent bus-size bound are not guaranteed.
+  and that operation's byte accounting remain contracted, while project-bus
+  `.wisp/write.lock` mutual exclusion and append ordering, later preservation
+  or durability of committed bytes, and an aggregate concurrent bus-size
+  bound are not guaranteed; the separate dashboard ownership/coordinator
+  contract remains current.
 
 ### EARS requirements
 
@@ -2006,9 +2026,11 @@ follow the Stewards 0023 availability/support grammar received by ADR-0013.
   project isolation, command append, security, cleanup/recovery, and qualified
   process identity.
 - **R58 (ubiquitous):** Wisp Preview shall make no guarantee for the current
-  directory lock's concurrency, serialization, ownership, recovery, cleanup,
-  path identity, deadlines, timing, error mapping, or diagnostics, whether
-  operations are same-process or cross-process.
+  project-bus `.wisp/write.lock` mutual-exclusion and append-ordering
+  protocol's concurrency, ownership, recovery, cleanup, path identity,
+  deadlines, timing, error mapping, or diagnostics, whether bus operations
+  are same-process or cross-process; ADR-0005's separate user-runtime
+  dashboard ownership/coordinator contract shall remain current.
 - **R59 (event-driven):** When a dashboard contender acquires ownership, it
   shall recheck authoritative owner, project, protocol, and process identity
   after acquisition and before listener bind.
@@ -2034,13 +2056,14 @@ follow the Stewards 0023 availability/support grammar received by ADR-0013.
 - **R66 (state-driven):** Once one operation completes the full compact
   event-plus-LF write, its append commit point shall mean only that the full
   write occurred; it shall not guarantee later preservation or durability of
-  those bytes under overlap.
+  those bytes when bus operations overlap through the project-bus lock.
 - **R67 (ubiquitous):** No acquisition, release, recovery, cleanup, retry,
-  deadline, timer, error, or diagnostic behavior of the current directory
-  lock shall be normative under this specification.
+  deadline, timer, error, or diagnostic behavior of the current project-bus
+  `.wisp/write.lock` protocol shall be normative under this specification.
 - **R68 (ubiquitous):** No current bus-lock owner schema, owner identity,
   phase, liveness interpretation, or recovery authorization shall be
-  normative under this specification.
+  normative for the project-bus `.wisp/write.lock` protocol under this
+  specification.
 - **R69 (ubiquitous):** Qualified process identity shall use exactly Linux
   boot ID plus `/proc` start ticks or macOS absolute `/bin/ps` start time under
   C locale for dashboard ownership; Windows and unspecified platforms shall
@@ -2081,9 +2104,10 @@ follow the Stewards 0023 availability/support grammar received by ADR-0013.
   write, verify that no observed or capability-shaped value remains, and
   block persistence and upload on failure while preserving only non-secret
   typed structural evidence.
-- **R88 (ubiquitous):** No current bus-lock recovery snapshot, malformed-owner
-  salvage, identity observation, reread, mutation, or failure behavior shall
-  be normative under this specification.
+- **R88 (ubiquitous):** No current project-bus `.wisp/write.lock` recovery
+  snapshot, malformed-owner salvage, identity observation, reread, mutation,
+  or failure behavior shall be normative under this specification; this does
+  not alter the separate dashboard recovery contract.
 - **R89 (unwanted behavior):** If a dashboard owner fails any property of the
   complete `starting` or `ready` schema, discovery shall return
   `dashboard_unavailable/owner_identity_unverifiable` without using partial
@@ -2101,15 +2125,21 @@ follow the Stewards 0023 availability/support grammar received by ADR-0013.
   Wisp-controlled output, log, error, or evidence sink, the private ready
   record shall remain its sole persistent location, and evidence retention
   shall sanitize and scan fail-closed.
-- **R92 (ubiquitous):** The negative lock boundary shall apply equally to
-  same-process and cross-process operations and shall not imply a safe case
-  from any observed owner, path, timing, or absence of known contention.
+- **R92 (ubiquitous):** The negative project-bus `.wisp/write.lock`
+  mutual-exclusion and append-ordering boundary shall apply equally to
+  same-process and cross-process bus operations and shall not imply a safe
+  case from any observed owner, path, timing, or absence of known contention;
+  it shall not apply to ADR-0005's user-runtime dashboard
+  ownership/coordinator contract.
 - **R93 (ubiquitous):** Event schema, validation, exact serialization, project
   confinement, and per-operation byte accounting shall remain contracted
   independently of the negative lock boundary.
-- **R94 (ubiquitous):** Issue #50 shall be the sole venue for directory-lock
-  correctness, research, decision, implementation, migration, and positive
-  guarantees; PR #49 shall make no runtime lock change.
+- **R94 (ubiquitous):** Issue #50 shall be the sole venue for project-bus
+  `.wisp/write.lock` correctness, research, decision, implementation,
+  migration, and positive guarantees; ADR-0017 shall add no further runtime
+  lock change; and PR #49 shall retain its already present bounded runtime,
+  owner-validation, append, and canary repairs without redesigning the
+  project-bus lock or claiming its correctness.
 
 ## Verification matrix
 
@@ -2118,7 +2148,7 @@ follow the Stewards 0023 availability/support grammar received by ADR-0013.
 | Constants and schemas | Generated-schema snapshot plus table-driven at-limit/over-limit tests for every fixed value, all seven tools, both owner-record variants, all six stored-event kinds, exact timestamp/version, null/unknown rejection, and recursively arbitrary command-payload JSON |
 | Resolution | Table-driven tests for environment root, capability absence, list failure/timeout, counts, URI validity, realpath, no-I/O, memoization, and dashboard-as-first-tool success/failure ordering; Codex host smoke verifies session-cwd binding |
 | Filesystem | Temp-project tests for missing read, first-write creation, lstat/symlink/type/containment rejection, one-line append, fatal UTF-8, LF/CR/final-segment/blank handling, limits, and no truncation |
-| Preview directory-lock boundary | Contract scans prove no current directory-lock concurrency, serialization, ownership, recovery, cleanup, path-identity, deadline, timing, error, or diagnostic mechanic is normative for same-process or cross-process operations; append fixtures prove only that the commit point completes one full event-plus-LF write, without treating later preservation or durability as acceptance; characterization tests may observe the implementation but create no product guarantee; issue #50 is the sole positive lock-correctness venue |
+| Preview project-bus lock boundary | Contract scans prove no current project-bus `.wisp/write.lock` mutual-exclusion, append-ordering, ownership, recovery, cleanup, path-identity, deadline, timing, error, or diagnostic mechanic is normative for same-process or cross-process bus operations; append fixtures prove only that the commit point completes one full event-plus-LF write, without treating later preservation or durability as acceptance; characterization tests may observe the implementation but create no product guarantee; issue #50 is the sole positive project-bus lock-correctness venue; dashboard tests remain governed by the separate ADR-0005 ownership/coordinator contract |
 | Dashboard discovery | Fake-home and process-identity adapters prove exact root/key derivation, ownership/mode/type/symlink rejection, project-ancestor rejection, candidate promotion, mandatory post-acquisition recheck, authenticated reuse, bounded starting wait, live-owner refusal, deterministic same-PID/new-token recovery, contention, and distinct-project isolation; a property-by-property invalid-owner table, including otherwise usable PID/identity/instance/capability and invalid protocol fields, proves exact `owner_identity_unverifiable`, zero provider/health calls, and no quarantine or replacement, while a complete owner with another positive integer protocol reaches `dashboard_version_conflict` only after identity proof |
 | Process identity | Linux fixtures prove boot-ID and `/proc/<pid>/stat` field-22 parsing including hostile `comm`; macOS fixtures prove absolute `/bin/ps` C-locale parsing and failures; live current/child/exit observations plus deterministic same-PID/new-birth-token adapters exercise dashboard ownership and recovery only; Windows is rejected, and no result is treated as a bus-lock guarantee |
 | Dashboard faults/lifecycle | Fault injection before claim and after claim/bind/publish/completion plus stdio close, `SIGINT`, and `SIGTERM` proves failed-live-owner listener/record cleanup, no bound-unpublished survivor, dead-owner recovery, 1,000 ms bounded drain, forced tracked-socket destruction, matching-instance cleanup, and no daemon |
@@ -2127,7 +2157,7 @@ follow the Stewards 0023 availability/support grammar received by ADR-0013.
 | Compact serialization | Node 24 fixtures invoke one-argument `JSON.stringify(value)` with no replacer/spacing, compare exact UTF-8 bytes and property/escape output, cover ASCII, control escapes, and non-ASCII scalars, accept event size 32,768 and one operation's observed projection of 16,777,216, reject 32,769 and that operation's observed projection of 16,777,217 with exact diagnostics, and prove the accepted event is followed by exactly one LF; no fixture result is represented as a concurrent aggregate bus-size guarantee |
 | Runtime boundary | Spies or dependency injection prove all six event/check MCP handlers call shared operations, `wisp_dashboard` calls the memoized coordinator, HTTP reads/writes reuse the canonical runtime, and HTTP/browser contain no second command reducer |
 | Command safety | Append-order tests prove issued fields, whole-check first-duplicate conflict/count/no-partial-data, ack duplicate conflict, unique-id-only reduction, same-run/following-ack filtering, last-ack wins, stable ordering, all-status dashboard projection, no execution, and every acknowledgement result |
-| Errors | Contract snapshots for non-lock MCP and HTTP code/reason/JSON-pointer/detail shapes, retryability, parse reasons, `isError`, `-32601`, `-32602`, dashboard version conflict, HTTP `409` command conflict, and unexpected-exception containment; structural checks prove lock-originated errors and diagnostics are outside the contract |
+| Errors | Contract snapshots for non-project-bus-lock MCP and HTTP code/reason/JSON-pointer/detail shapes, retryability, parse reasons, `isError`, `-32601`, `-32602`, dashboard version conflict, HTTP `409` command conflict, and unexpected-exception containment; structural checks prove project-bus `.wisp/write.lock`-originated errors and diagnostics are outside the contract while dashboard ownership/coordinator errors remain contracted |
 | Stdio | Spawned-process transcript proves all stdout is MCP framing and diagnostics are stderr-only |
 | Import safety | Isolated import probes for every reusable module prove no bus or dashboard state and no listener before explicit invocation |
 | Bundle | Build inspection proves target `node24`; a clean fixture with no global Wisp or dependency tree launches the exact distributed artifact under Node 24; documentation and fixtures prove that this technical boundary creates no Supported claim |
@@ -2150,7 +2180,8 @@ check uses `specs/README.md`.
 - **Approved dependencies:** PASS — ADR-0004, ADR-0005, ADR-0008, ADR-0009,
   ADR-0011, ADR-0014, and ADR-0017 are approved and record the retained
   adapter, dashboard, package, Node technical boundary, Preview-retirement
-  intent, and minimal Preview directory-lock boundary.
+  intent, and minimal Preview project-bus `.wisp/write.lock`
+  mutual-exclusion and append-ordering boundary.
 - **Testable acceptance criteria:** PASS — S1–S53, S64–S74, and S3a are GWT
   scenarios, R1–R77 and R87–R94 are EARS requirements, and the matrix names
   executable evidence. The remaining gaps preserve historical identifiers of
@@ -2162,9 +2193,10 @@ check uses `specs/README.md`.
   discovery/ownership/HTTP deadline/error/UI-projection/lifecycle behavior,
   schema-invalid dashboard-owner refusal, Node 24 one-argument JSON
   serialization and exact per-operation byte boundaries, the negative
-  same-process/cross-process lock boundary, absence of any concurrent
-  aggregate-size or later-preservation/durability guarantee, issue #50's sole
-  ownership of lock correctness, the
+  same-process/cross-process project-bus lock boundary, explicit preservation
+  of ADR-0005's separate dashboard ownership/coordinator contract, absence of
+  any concurrent aggregate-size or later-preservation/durability guarantee,
+  issue #50's sole ownership of project-bus lock correctness, the
   capability's sole persistent location and permitted transient path,
   eight payload paths, `0.2.1-rc.4` carrier parity, retired-metadata absence,
   root-Claude/inline-Codex launch definitions, Node 24 technical targeting,
@@ -2172,9 +2204,12 @@ check uses `specs/README.md`.
   fixed rather than deferred.
 - **Open questions:** PASS — the required section is present below.
 - **Scope fidelity:** PASS — ADR-0017 preserves ADR-0014's qualification
-  retirement while superseding ADR-0016's positive lock-internal contract,
-  makes no lock promise for same-process or cross-process operations, and
-  assigns all lock correctness and redesign solely to issue #50; event schema,
+  retirement while superseding ADR-0016's positive project-bus lock-internal
+  contract,
+  makes no `.wisp/write.lock` mutual-exclusion or append-ordering promise for
+  same-process or cross-process bus operations, preserves ADR-0005's separate
+  user-runtime dashboard ownership/coordinator contract, and assigns all
+  project-bus lock correctness and redesign solely to issue #50; event schema,
   validation, serialization, project confinement, per-operation byte
   accounting, plugin-only distribution, dual-host runtime, dashboard
   isolation/security/recovery, explicit skill boundary, and session-owned
@@ -2296,13 +2331,19 @@ or conformance verdict is claimed here.
 
 Version 15 derives approved ADR-0017 and significantly changes the behavioral
 contract, so the version advances rather than remaining 14 under Grove's
-versioning rule. It supersedes v14's positive directory-lock-internal
-requirements with one minimal negative Preview boundary for both same-process
-and cross-process operations. The retained contract covers event schema,
-validation, exact serialization, project confinement, per-operation byte
-accounting, and only the fact that append commit completed the full
-event-plus-LF write; it promises neither later preservation or durability nor
-a concurrent aggregate bus-size bound. Issue #50 solely owns positive lock
-correctness, and PR #49 makes no runtime lock change. The configured rubric
-self-check passes, so v15 remains `gated`; no v15 adversary or conformance
-verdict is claimed here.
+versioning rule. It supersedes v14's positive project-bus `.wisp/write.lock`
+mutual-exclusion and append-ordering requirements with one minimal negative
+Preview boundary for both same-process and cross-process bus operations while
+preserving ADR-0005's separate user-runtime dashboard ownership/coordinator
+contract. The retained contract covers event schema, validation, exact
+serialization, project confinement, per-operation byte accounting, and only
+the fact that append commit completed the full event-plus-LF write; it
+promises neither later preservation or durability nor a concurrent aggregate
+bus-size bound. Issue #50 solely owns positive project-bus lock correctness.
+ADR-0017 adds no further runtime lock change; PR #49 does not redesign the
+project-bus lock or claim its correctness and retains its already present
+bounded runtime, owner-validation, append, and canary repairs. The configured
+rubric self-check passes, so v15 remains `gated`; no v15 adversary or
+conformance verdict is claimed here. This targeted decision-adversary repair
+corrects the scope and PR description without changing v15's behavioral
+boundary.
