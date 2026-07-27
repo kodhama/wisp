@@ -1,4 +1,4 @@
-// SPEC-0002@v8: S1-S6, S13-S17 / R1-R6, R15-R20.
+// SPEC-0002@v9: S1-S5, S13-S15, S17 / R1-R4, R15-R18, R20.
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
@@ -6,7 +6,7 @@ async function text(path: string): Promise<string> {
   return readFile(new URL(`../../${path}`, import.meta.url), "utf8");
 }
 
-describe("SPEC-0002@v8 reproducible Codex E2E and Preview smoke surfaces", () => {
+describe("SPEC-0002@v9 reproducible Codex E2E surfaces", () => {
   it("pins Playwright and exposes one direct and one container entrypoint", async () => {
     const packageJson = JSON.parse(await text("package.json"));
     expect(packageJson.devDependencies["@playwright/test"]).toBe("1.61.0");
@@ -114,13 +114,13 @@ describe("SPEC-0002@v8 reproducible Codex E2E and Preview smoke surfaces", () =>
         "",
         "[packages.unit]",
         'paths = ["test/*.test.ts"]',
-        'specs = ["spec-0001-plugin-mcp-distribution@v15"]',
+        'specs = ["spec-0001-plugin-mcp-distribution@v16"]',
         "decisions = []",
         "",
         "[packages.e2e]",
         'paths = ["test/e2e/**"]',
-        'specs = ["spec-0001-plugin-mcp-distribution@v15", "spec-0002-codex-e2e-testing@v8"]',
-        'decisions = ["adr-0006-codex-e2e-testing", "adr-0007-codex-canary-evidence", "adr-0011-node-24-only-support"]',
+        'specs = ["spec-0001-plugin-mcp-distribution@v16", "spec-0002-codex-e2e-testing@v9"]',
+        'decisions = ["adr-0006-codex-e2e-testing", "adr-0011-node-24-only-support"]',
         "",
       ].join("\n"),
     );
@@ -147,7 +147,7 @@ describe("SPEC-0002@v8 reproducible Codex E2E and Preview smoke surfaces", () =>
     expect(dashboard).not.toContain("innerHTML");
   });
 
-  it("defines one explicit Node 24 fast gate, isolated browser gate, and only the two canary triggers", async () => {
+  it("defines one explicit Node 24 fast gate, an isolated browser gate, and a keyless host gate", async () => {
     const ci = await text(".github/workflows/ci.yml");
     expect(ci).toMatch(/fast:[\s\S]*node-version:\s*24/u);
     expect(ci).not.toMatch(/\bmatrix\b|node-version:\s*(?:20|22)\b/u);
@@ -162,85 +162,6 @@ describe("SPEC-0002@v8 reproducible Codex E2E and Preview smoke surfaces", () =>
     }
     expect(ci).toMatch(/codex-e2e:[\s\S]*needs:\s*fast/u);
     expect(ci.match(/npm run test:e2e:container/gu)).toHaveLength(1);
-
-    const canary = await text(".github/workflows/codex-canary.yml");
-    expect(canary).toMatch(/^on:\n  schedule:/mu);
-    expect(canary).toContain("workflow_dispatch:");
-    expect(canary).not.toMatch(/\n\s+(?:push|pull_request):/u);
-    for (const input of ["marketplace_source", "marketplace_ref"]) {
-      expect(canary).toMatch(new RegExp(`${input}:[\\s\\S]{0,120}required: true`, "u"));
-    }
-    expect(canary).not.toMatch(
-      /candidate_version|candidate_bundle_sha256|bundle_sha256|CANARY_VERSION|CANARY_SHA256|verify-codex-canary/u,
-    );
-    const jobPreamble = canary.slice(canary.indexOf("jobs:"), canary.indexOf("    steps:"));
-    expect(jobPreamble).not.toMatch(/CODEX_API_KEY|OPENAI_API_KEY/u);
-    expect(canary).toContain("CANARY_CODEX_API_KEY: ${{ secrets.CODEX_API_KEY }}");
-    expect(canary).not.toContain("OPENAI_API_KEY");
-    expect(canary).toContain("id: install_codex");
-    expect(canary).toMatch(/id: install_codex[\s\S]{0,120}continue-on-error: true/u);
-    expect(canary).toContain("CODEX_INSTALL_OUTCOME: ${{ steps.install_codex.outcome }}");
-    expect(canary).toContain("timeout-minutes: 20");
-    const nodePreflight = "node scripts/node24-preflight.mjs";
-    const escapedNodePreflight = nodePreflight.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-    expect(canary.match(/\bnode --version\b/gu)).toHaveLength(1);
-    expect(canary.match(new RegExp(escapedNodePreflight, "gu"))).toHaveLength(1);
-    expect(canary.indexOf("node --version")).toBeLessThan(canary.indexOf(nodePreflight));
-    expect(canary.indexOf(nodePreflight)).toBeLessThan(canary.indexOf("id: install_codex"));
-    expect(canary.indexOf(nodePreflight)).toBeLessThan(canary.indexOf("Run weekly canary"));
-    expect(canary.indexOf(nodePreflight)).toBeLessThan(canary.indexOf("Run manual Preview smoke"));
-    const canaryJobPreamble = canary.slice(
-      canary.indexOf("jobs:"),
-      canary.indexOf("    steps:"),
-    );
-    expect(canaryJobPreamble).not.toContain("runner.temp");
-    expect(canary.match(/CODEX_HOME: \$\{\{ runner\.temp \}\}/gu)).toHaveLength(2);
-    expect(canary.match(/EVIDENCE_DIR: \$\{\{ runner\.temp \}\}/gu)).toHaveLength(3);
-    const runBlocks = [...canary.matchAll(/\n\s+run:\s*>-([\s\S]*?)(?=\n\s+- name:|\n\s+- uses:|$)/gu)]
-      .map((match) => match[1] ?? "");
-    expect(runBlocks.join("\n")).not.toContain("${{ inputs.");
-
-    const canaryDriver = await text("scripts/codex-canary.mjs");
-    expect(canaryDriver).toContain('approval_policy="on-request"');
-    expect(canaryDriver).toContain('approvals_reviewer="auto_review"');
-    expect(canaryDriver).not.toMatch(/dangerously-bypass|approval_policy="never"/u);
-    expect(canaryDriver).toMatch(/timeoutMs/u);
-    expect(canaryDriver).toContain("execTimedOut");
-    expect(canaryDriver).toContain("invalid GitHub workflow context");
-    expect(canaryDriver).toContain("commandEnvironments");
-    expect(canaryDriver).toMatch(
-      /runCommand\("codex", \["--version"\],[\s\S]{0,120}env: baseEnv/u,
-    );
-    expect(canaryDriver).toMatch(
-      /"plugin", "marketplace", "add"[\s\S]{0,300}env: baseEnv/u,
-    );
-    expect(canaryDriver).toMatch(
-      /\["plugin", "add", "wisp@kodhama", "--json"\][\s\S]{0,120}env: baseEnv/u,
-    );
-    expect(canaryDriver).toMatch(
-      /buildCodexExecArgs\(fixture, prompt\)[\s\S]{0,160}env: execEnv/u,
-    );
-    expect(canaryDriver).toContain("let codexVersion = null");
-    expect(canaryDriver).toContain("let pluginVersion = null");
-    expect(canaryDriver).not.toContain("bundleSha256");
-    expect(canaryDriver).not.toContain('"unavailable"');
-    expect(canaryDriver).toContain("writeSafeCanaryArtifacts");
-    expect(canaryDriver).not.toContain(
-      "await writeFile(transcriptPath, execution.stdout",
-    );
-
-    expect(canary).toContain(
-      "steps.weekly.outputs.artifact_ready == 'true'",
-    );
-    expect(canary).toContain(
-      "steps.manual.outputs.artifact_ready == 'true'",
-    );
-    expect(canary).toContain(
-      "steps.manual.outcome == 'failure'",
-    );
-    expect(canary).not.toMatch(
-      /name: Upload private canary evidence[\s\S]{0,100}if: always\(\)\s*$/mu,
-    );
   });
 
   it("ignores browser artifacts and cleans its fixture root", async () => {

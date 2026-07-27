@@ -40,7 +40,9 @@ function uniqueCapabilities(values) {
   ))];
 }
 
-export function extractCapabilities(bytes) {
+// Un-exported by adr-0018: its only external consumer was removed, but
+// `runSanitizedCommand` below still calls it, so the function itself stays.
+function extractCapabilities(bytes) {
   const value = text(bytes);
   return uniqueCapabilities([
     ...[...value.matchAll(FRAGMENT)].map((match) => match[1]),
@@ -54,16 +56,6 @@ function transformCapabilityBytes(bytes) {
     .replace(FRAGMENT, "#capability=<redacted>")
     .replace(BEARER, "Bearer <redacted>");
   return Buffer.from(value, "utf8");
-}
-
-export function sanitizeCapabilityBytes(bytes, observedCapabilities = []) {
-  const observed = uniqueCapabilities([
-    ...observedCapabilities,
-    ...extractCapabilities(bytes),
-  ]);
-  const sanitized = transformCapabilityBytes(bytes);
-  assertCapabilityAbsent(sanitized, observed);
-  return sanitized;
 }
 
 function extractAndStripControlFrames(bytes, nonce) {
@@ -161,46 +153,6 @@ async function clear(paths) {
   await Promise.all(paths.map((path) =>
     rm(path, { force: true }).catch(() => undefined)
   ));
-}
-
-export async function writeSafeCanaryArtifacts({
-  outputDirectory,
-  rawTranscript,
-  evidence,
-  observedCapabilities = [],
-  readyOutputPath,
-  injectFailure,
-}) {
-  const transcriptPath = join(outputDirectory, "codex.jsonl");
-  const evidencePath = join(outputDirectory, "evidence.json");
-  const paths = [transcriptPath, evidencePath];
-  await mkdir(outputDirectory, { recursive: true, mode: 0o700 });
-  await clear(paths);
-  try {
-    if (injectFailure === "transform") throw safetyError();
-    const transcript = sanitizeCapabilityBytes(
-      rawTranscript,
-      observedCapabilities,
-    );
-    const evidenceBytes = Buffer.from(
-      `${JSON.stringify(evidence, null, 2)}\n`,
-      "utf8",
-    );
-    if (injectFailure === "scan") throw safetyError();
-    assertCapabilityAbsent(transcript, observedCapabilities);
-    assertCapabilityAbsent(evidenceBytes, observedCapabilities);
-    await writeFile(transcriptPath, transcript, { mode: 0o600 });
-    await writeFile(evidencePath, evidenceBytes, { mode: 0o600 });
-    if (readyOutputPath !== undefined) {
-      await appendFile(readyOutputPath, "artifact_ready=true\n", {
-        encoding: "utf8",
-        mode: 0o600,
-      });
-    }
-  } catch {
-    await clear(paths);
-    throw safetyError();
-  }
 }
 
 export async function writeBrowserEvidence(

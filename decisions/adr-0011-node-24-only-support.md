@@ -12,6 +12,11 @@ updated: 2026-07-25
 
 # ADR-0011 — Support Node.js 24 only
 
+> **Forward pointer.** `adr-0018-retire-the-marketplace-canary` supersedes
+> the clause retaining the real-host canary unchanged; the canary is gone
+> and the browser E2E job is unaffected. Node 24 as sole runtime, CI line,
+> and bundle target remains current.
+
 > **Forward pointer.** `adr-0014-retire-preview-qualification-machinery`
 > supersedes this ADR's affirmative support claim, qualification-ledger, and
 > aggregate release-qualification clauses. Node.js 24 remains Wisp's sole

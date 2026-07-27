@@ -1,23 +1,10 @@
 export const CAPABILITY_REDACTION_ERROR: string;
 export const DEFAULT_OUTPUT_LIMIT_BYTES: number;
 
-export function extractCapabilities(bytes: Buffer): string[];
-export function sanitizeCapabilityBytes(
-  bytes: Buffer,
-  observedCapabilities?: string[],
-): Buffer;
 export function assertCapabilityAbsent(
   bytes: Buffer,
   observedCapabilities?: string[],
 ): void;
-export function writeSafeCanaryArtifacts(options: {
-  outputDirectory: string;
-  rawTranscript: Buffer;
-  evidence: Record<string, unknown>;
-  observedCapabilities?: string[];
-  readyOutputPath?: string;
-  injectFailure?: "transform" | "scan";
-}): Promise<void>;
 export function writeBrowserEvidence(
   path: string,
   evidence: Record<string, unknown>,

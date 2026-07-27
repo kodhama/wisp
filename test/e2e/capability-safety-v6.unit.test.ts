@@ -1,4 +1,4 @@
-// SPEC-0001@v15 S64/S72/R87/R91; SPEC-0002@v8 S11-S12/S17/R13-R14/R20.
+// SPEC-0001@v16 S64/S72/R87/R91; SPEC-0002@v9 S12/S17/R14/R20.
 import { spawnSync } from "node:child_process";
 import {
   mkdir,
@@ -17,10 +17,8 @@ import {
   persistPreparedBrowserEvidence,
   prepareBrowserEvidence,
   runSanitizedCommand,
-  sanitizeCapabilityBytes,
   validateBrowserEvidence,
   writeBrowserEvidence,
-  writeSafeCanaryArtifacts,
 } from "../../scripts/capability-safety.mjs";
 import {
   failureCasePassed,
@@ -29,53 +27,7 @@ import {
 const capability = "A".repeat(43);
 const secondCapability = "B".repeat(43);
 
-describe("SPEC-0002@v8 capability-safe evidence boundary", () => {
-  it("replaces only fragment and bearer forms byte-exactly", () => {
-    const raw = Buffer.from([
-      '{"url":"http://127.0.0.1:43123/#capability=',
-      capability,
-      '","nested":{"authorization":"Bearer ',
-      capability,
-      '"},"other":"unchanged"}\n',
-      '{"url":"http://127.0.0.1:43124/#capability=',
-      secondCapability,
-      '","authorization":"Bearer ',
-      secondCapability,
-      '"}\n',
-    ].join(""));
-    const sanitized = sanitizeCapabilityBytes(raw, [capability, secondCapability]);
-    expect(sanitized.toString("utf8")).toBe([
-      '{"url":"http://127.0.0.1:43123/#capability=<redacted>",',
-      '"nested":{"authorization":"Bearer <redacted>"},',
-      '"other":"unchanged"}\n',
-      '{"url":"http://127.0.0.1:43124/#capability=<redacted>",',
-      '"authorization":"Bearer <redacted>"}\n',
-    ].join(""));
-    expect(() => assertCapabilityAbsent(sanitized, [capability, secondCapability]))
-      .not.toThrow();
-  });
-
-  it("fails canary retention when an observed capability remains standalone", () => {
-    expect(() => sanitizeCapabilityBytes(
-      Buffer.from(
-        `{"url":"#capability=${capability}","raw":"${capability}"}\n`,
-      ),
-      [capability],
-    )).toThrow(CAPABILITY_REDACTION_ERROR.trim());
-  });
-
-  it("preserves every non-capability byte for pass, fail, and inconclusive JSONL", () => {
-    for (const result of ["pass", "fail", "inconclusive"]) {
-      const raw = Buffer.from(
-        `{"result":"${result}","url":"#capability=${capability}","authorization":"Bearer ${capability}","unchanged":"é"}\n`,
-      );
-      const expected = Buffer.from(
-        `{"result":"${result}","url":"#capability=<redacted>","authorization":"Bearer <redacted>","unchanged":"é"}\n`,
-      );
-      expect(sanitizeCapabilityBytes(raw, [capability])).toEqual(expected);
-    }
-  });
-
+describe("SPEC-0002@v9 capability-safe evidence boundary", () => {
   it("rejects observed, fragment-shaped, and bearer-shaped capability bytes", () => {
     for (const value of [
       capability,
@@ -84,56 +36,6 @@ describe("SPEC-0002@v8 capability-safe evidence boundary", () => {
     ]) {
       expect(() => assertCapabilityAbsent(Buffer.from(value), [capability]))
         .toThrow(CAPABILITY_REDACTION_ERROR.trim());
-    }
-  });
-
-  it("writes only scanned transcript/evidence before an upload-ready signal", async () => {
-    const root = await mkdtemp(join(tmpdir(), "wisp-safe-canary-"));
-    const ready = join(root, "..", `${basename(root)}-github-output`);
-    const evidence = {
-      schema: 1,
-      result: "pass",
-      dashboard_url_shape:
-        "http://127.0.0.1:43123/#capability=<redacted>",
-      authorization_shape: "Bearer <redacted>",
-    };
-    await writeSafeCanaryArtifacts({
-      outputDirectory: root,
-      rawTranscript: Buffer.from(
-        `{"url":"http://127.0.0.1:43123/#capability=${capability}"}\n`,
-      ),
-      evidence,
-      observedCapabilities: [capability],
-      readyOutputPath: ready,
-    });
-
-    expect((await readdir(root)).sort()).toEqual([
-      "codex.jsonl",
-      "evidence.json",
-    ]);
-    const transcript = await readFile(join(root, "codex.jsonl"));
-    const evidenceBytes = await readFile(join(root, "evidence.json"));
-    expect(await readFile(ready, "utf8")).toBe("artifact_ready=true\n");
-    expect(() => assertCapabilityAbsent(transcript, [capability])).not.toThrow();
-    expect(() => assertCapabilityAbsent(evidenceBytes, [capability])).not.toThrow();
-  });
-
-  it("leaves no artifact when transformation or absence scanning fails", async () => {
-    for (const failure of ["transform", "scan"] as const) {
-      const root = await mkdtemp(join(tmpdir(), "wisp-unsafe-canary-"));
-      const ready = join(root, "..", `${basename(root)}-github-output`);
-      await expect(writeSafeCanaryArtifacts({
-        outputDirectory: root,
-        rawTranscript: Buffer.from(`#capability=${capability}\n`),
-        evidence: { schema: 1, result: "fail" },
-        observedCapabilities: [capability],
-        readyOutputPath: ready,
-        injectFailure: failure,
-      })).rejects.toThrow(CAPABILITY_REDACTION_ERROR.trim());
-      expect(await readdir(root)).toEqual([]);
-      await expect(readFile(ready, "utf8")).rejects.toMatchObject({
-        code: "ENOENT",
-      });
     }
   });
 

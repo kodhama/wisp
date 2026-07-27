@@ -13,6 +13,11 @@ changes:
 
 # ADR-0017 — Bound the Preview project-bus lock contract
 
+> **Forward pointer.** `adr-0018-retire-the-marketplace-canary` supersedes
+> the clauses requiring PR #49 to retain its canary repairs — their carrier
+> is deleted. The bounded Preview directory-lock contract this ADR owns is
+> unchanged, as is the lineage it inherits from `adr-0015` and `adr-0016`.
+
 ## Decision state
 
 ### Decided

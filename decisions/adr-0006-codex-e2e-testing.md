@@ -11,6 +11,15 @@ updated: 2026-07-24
 
 # ADR-0006 — Establish reproducible Codex end-to-end testing
 
+> **Forward pointer.** `adr-0018-retire-the-marketplace-canary` supersedes
+> this ADR's real-host canary: the Decided clause mandating the weekly and
+> pre-release runs, the `Real-host release canary` section and both its
+> triggers, the isolated-`CODEX_HOME` execution requirements, the
+> inconclusive-run and release-gate clauses, and the canary Consequences. It
+> also supersedes the host-selected-project-binding requirement. The
+> deterministic gate, the `/proc` macOS note, and the rejection of
+> Playwright/Docker as the entire Codex e2e claim all remain current.
+
 > **PARTIAL SUPERSESSION:** `adr-0007-codex-canary-evidence` supersedes only
 > this decision's real-Codex canary evidence and headless-approval details.
 > `adr-0009-independent-plugin-package-metadata` supersedes only the exact

@@ -10,13 +10,25 @@ depends_on:
   - adr-0011-node-24-only-support
   - adr-0014-retire-preview-qualification-machinery
   - adr-0017-bound-preview-directory-lock-contract
+  - adr-0018-retire-the-marketplace-canary
 implements: adr-0017-bound-preview-directory-lock-contract
 owner: agent
-updated: 2026-07-26
-version: 15
+updated: 2026-07-27
+version: 16
 ---
 
 # SPEC-0001 — Dual-host Wisp plugin, bundled stdio MCP, and project dashboard
+
+> **AMENDED 2026-07-27 — v15 → v16**
+> **WHAT:** Removed the canary conjunct from the `Capability-safe host
+> evidence` verification row and the "canary repairs" clause from R94.
+> **WHY:** `adr-0018` deleted the host-smoke and canary fixtures both named.
+> The row was **conjunctive** — "Host-smoke, canary, and Playwright-failure
+> fixtures prove …" — so recording non-impact was not available.
+> **SCOPE:** Reference reconciliation only. No behaviour changes: the
+> Playwright half still proves every clause of that row, and the project-bus
+> lock behaviour behind R94 is untouched. ADR-0017 remains the implemented
+> decision.
 
 > **AMENDED 2026-07-26**
 > **WHAT:** Replaced v14's positive project-bus `.wisp/write.lock`
@@ -476,8 +488,9 @@ ownership/coordinator contract under ADR-0005 and the dashboard clauses below.
 Issue #50 is the sole venue for project-bus lock correctness, protocol,
 migration, and redesign. ADR-0017 adds no further runtime lock change. PR #49
 does not redesign the project-bus lock or claim its correctness, while
-retaining its already present bounded runtime, owner-validation, append, and
-canary repairs.
+retaining its already present bounded runtime, owner-validation, and append
+repairs. *(v15 → v16: the canary repairs are removed here and from R94
+because `adr-0018` deleted their carrier.)*
 
 ## Dashboard discovery and ownership contract
 
@@ -2164,8 +2177,10 @@ follow the Stewards 0023 availability/support grammar received by ADR-0013.
   `.wisp/write.lock` correctness, research, decision, implementation,
   migration, and positive guarantees; ADR-0017 shall add no further runtime
   lock change; and PR #49 shall retain its already present bounded runtime,
-  owner-validation, append, and canary repairs without redesigning the
-  project-bus lock or claiming its correctness.
+  owner-validation, and append repairs without redesigning the project-bus
+  lock or claiming its correctness. *(v15 → v16: the canary repairs are
+  removed from this requirement because `adr-0018` deleted their carrier. The
+  lock behaviour itself is unchanged.)*
 
 ## Verification matrix
 
@@ -2179,7 +2194,7 @@ follow the Stewards 0023 availability/support grammar received by ADR-0013.
 | Process identity | Linux fixtures prove boot-ID and `/proc/<pid>/stat` field-22 parsing including hostile `comm`; macOS fixtures prove absolute `/bin/ps` C-locale parsing and failures; live current/child/exit observations plus deterministic same-PID/new-birth-token adapters exercise dashboard ownership and recovery only; Windows is rejected, and no result is treated as a bus-lock guarantee |
 | Dashboard faults/lifecycle | Fault injection before claim and after claim/bind/publish/completion plus stdio close, `SIGINT`, and `SIGTERM` proves failed-live-owner listener/record cleanup, no bound-unpublished survivor, dead-owner recovery, 1,000 ms bounded drain, forced tracked-socket destruction, matching-instance cleanup, and no daemon |
 | Dashboard HTTP/UI | Loopback and browser-DOM tests snapshot exact HTTP-protocol and non-project-bus-lock runtime precedence, condition/status/code mapping including `command_conflict`→`409`, routes/envelopes/headers, acceptance-to-`CRLFCRLF` header bytes/deadline, header-to-body-complete deadline, acceptance-to-response-complete total deadline, keep-alive idle and cleanup-to-forced-close boundaries, bearer, Host, Origin, query, method, content type, body, CSP, capability-bootstrap/rotation/redaction, refresh/visibility/in-flight behavior, exact run/agent append-order projection, text-only rendering, event/parse-error/command-state views, explicit command controls, and zero-write failures; project-bus-lock-origin failures retain only the independent capability-safety constraints |
-| Capability-safe host evidence | Host-smoke, canary, and Playwright-failure fixtures prove the exact capability URL is allowed in the mandated `wisp_dashboard` MCP response and its loopback request/response transport, place the live capability in every other permitted transient location and prohibited query, bus, cookie/storage, error-object, log, reporter, screenshot, video, trace, attachment, cache, artifact, and upload sink, prove the private ready record is its sole persistent location, intercept every other Wisp-controlled output before a sink, require exact structural sentinels and typed fields, absence-scan retained evidence/logs, and prove a failed scan produces no persisted or uploaded artifact |
+| Capability-safe host evidence | Playwright-failure fixtures prove the exact capability URL is allowed in the mandated `wisp_dashboard` MCP response and its loopback request/response transport, place the live capability in every other permitted transient location and prohibited query, bus, cookie/storage, error-object, log, reporter, screenshot, video, trace, attachment, cache, artifact, and upload sink, prove the private ready record is its sole persistent location, intercept every other Wisp-controlled output before a sink, require exact structural sentinels and typed fields, absence-scan retained evidence/logs, and prove a failed scan produces no persisted or uploaded artifact. *(`adr-0018` deleted the host-smoke and canary fixtures this row also named; the Playwright half is unchanged and still proves every clause.)* |
 | Compact serialization | Node 24 fixtures invoke one-argument `JSON.stringify(value)` with no replacer/spacing, compare exact UTF-8 bytes and property/escape output, cover ASCII, control escapes, and non-ASCII scalars, accept event size 32,768 and one operation's observed projection of 16,777,216, reject 32,769 and that operation's observed projection of 16,777,217 with exact diagnostics, and prove the accepted event is followed by exactly one LF; no fixture result is represented as a concurrent aggregate bus-size guarantee |
 | Runtime boundary | Spies or dependency injection prove all six event/check MCP handlers call shared operations, `wisp_dashboard` calls the memoized coordinator, HTTP reads/writes reuse the canonical runtime, and HTTP/browser contain no second command reducer |
 | Command safety | Append-order tests prove issued fields, whole-check first-duplicate conflict/count/no-partial-data, ack duplicate conflict, unique-id-only reduction, same-run/following-ack filtering, last-ack wins, stable ordering, all-status dashboard projection, no execution, and every acknowledgement result |

@@ -22,6 +22,15 @@ changes:
 
 # ADR-0014 — Retire aggregate qualification machinery while Wisp is Preview
 
+> **Forward pointer.** `adr-0018-retire-the-marketplace-canary` supersedes
+> this ADR's retention of live host-drift smoke: the `Live host smoke`
+> section, the marketplace-drift clause, the rejected alternative that
+> declined to delete the canary, and the acceptance criterion requiring the
+> live workflow. **ADR-0018 overrides that rejection on cost grounds, not
+> because the drift reasoning became false — it did not.** Preview posture,
+> the qualification retirement, and the retained product guarantees remain
+> current.
+
 > Partially superseded by `adr-0017-bound-preview-directory-lock-contract`:
 > Wisp Preview makes no positive guarantee for the current project-bus
 > `.wisp/write.lock` mutual-exclusion and append-ordering protocol, retains the
