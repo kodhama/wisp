@@ -23,6 +23,12 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm run validate:plugin
+      # Hand the built payload to keyless-host so the build runs exactly once.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plugin-payload
+          path: plugins/wisp
+          retention-days: 1
 
   codex-e2e:
     name: Codex adapter and dashboard E2E
@@ -34,3 +40,28 @@ jobs:
         with:
           node-version: 24
       - run: npm run test:e2e:container
+
+  # Proves a real host accepts this commit's package and starts its MCP server.
+  # The container E2E spawns the server itself from the manifest's values, so it
+  # cannot show that. Costs no API key and runs no model turn.
+  #
+  # The CLI is pinned so a pull request fails for its own reasons, never for an
+  # upstream release. Detecting host drift is a scheduled, cross-plugin concern
+  # and belongs to kodhama/stewards#45, not to this gate.
+  keyless-host:
+    name: Keyless host install and launch
+    needs: fast
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      # The payload built by `fast`, not a second build: SPEC-0002 requires the
+      # workflow to execute each build command exactly once.
+      - uses: actions/download-artifact@v4
+        with:
+          name: plugin-payload
+          path: plugins/wisp
+      - run: npm install --global @anthropic-ai/claude-code@2.1.220
+      - run: node scripts/keyless-host-check.mjs
