@@ -1,12 +1,23 @@
 # Archive — the Codex marketplace canary
 
-**This branch is a reference archive, not a maintained branch.** Nothing here runs.
-It is not merged into `main` and must not be.
+**This branch is a reference archive, not a maintained branch.** It is not merged into
+`main` and must not be. The driver loads and is executable (see *Running it*); its unit
+tests are here to be read, not run.
 
-Retired from `kodhama/wisp` `main` on 2026-07-27. The mechanism was sound; its **home**
-was wrong — it tested whether the published `@kodhama` marketplace still served an
-installable plugin, which is family distribution health, not a Wisp product concern.
-The successor belongs in `kodhama/stewards`, which owns the install door.
+Proposed for retirement from `kodhama/wisp` `main` on 2026-07-27, under a decision that is
+**not yet ratified**. The mechanism is sound. It is being retired because the coverage
+unique to it has narrowed: the per-pull-request container suite already proves the
+seven-tool inventory, the bus write, authenticated dashboard health and project isolation
+keylessly, and a keyless host check now proves the built package installs and starts on a
+real host. What stays unique to the canary is prompt-driven, model-mediated host
+behaviour, which no static check can reach.
+
+**Corrections to an earlier version of this file.** It said the canary's *home* was wrong
+because it tested "family distribution health, not a Wisp product concern". That framing
+was refuted — the canary asserts bus writes and dashboard health under a real host, which
+are Wisp product properties. It also asserted a successor "belongs in `kodhama/stewards`";
+whether Stewards may own such a check is governed by `kodhama-0017` and is not settled.
+Both claims are withdrawn.
 
 ## What it did
 
@@ -37,12 +48,22 @@ Claude runner, and to several plugins in one run.
 It is also the honest record of what such a check costs: it needs a real API key
 (`secrets.CODEX_API_KEY`), so every fire spends money.
 
-## What replaces it
+## What replaces it, and what does not
 
-`kodhama/stewards` issue — a family-level marketplace canary covering every published
-plugin, on both hosts, with the **no-key asset-availability checks separated from the
-key-spending live-session checks** so the cheap half can run often and the expensive
-half rarely or on demand.
+**Already replaced, keylessly, on every pull request:** `scripts/keyless-host-check.mjs`
+on `main` installs the built package through the real Claude plugin path and asserts the
+host launches its MCP server. That covers marketplace install and host launch — for
+Claude, at no API cost.
+
+**Proposed, not committed:** [`kodhama/stewards#45`](https://github.com/kodhama/stewards/issues/45)
+(keyless asset availability across every published plugin) and
+[`#47`](https://github.com/kodhama/stewards/issues/47) (a live-session ping, which needs
+`kodhama-0017` widened and is deferred). Neither is a commitment, and the retirement does
+not depend on either landing.
+
+**Not replaced by anything:** prompt-driven, model-mediated host behaviour, and the
+Codex-side project binding that follows from an omitted `cwd`. Those are accepted losses,
+named in the retirement decision rather than argued away.
 
 ## Contents
 
@@ -79,5 +100,11 @@ request at no API cost, and is not retired.
 never part of the canary". That was wrong — the driver imports four symbols from it, and
 without it the archived driver failed to load at all. The file is genuinely shared:
 `runSanitizedCommand` and `assertCapabilityAbsent` serve the dashboard suite and stay on
-`main`, while `writeSafeCanaryArtifacts`, `extractCapabilities` and
-`DEFAULT_OUTPUT_LIMIT_BYTES` had the canary driver as their only production consumer.
+`main`, while `writeSafeCanaryArtifacts` — and `sanitizeCapabilityBytes`, which only it
+calls — had the canary driver as their only production consumer.
+
+A second correction: an earlier version also listed `extractCapabilities` and
+`DEFAULT_OUTPUT_LIMIT_BYTES` as canary-only. **Both are wrong.**
+`runSanitizedCommand` calls `extractCapabilities` directly (`capability-safety.mjs:429-430`)
+and is bounded by `DEFAULT_OUTPUT_LIMIT_BYTES` (`:340`), and that function is the spine of
+the surviving container and Playwright suites. Neither retires with the canary.
