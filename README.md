@@ -51,15 +51,33 @@ half rarely or on demand.
 | `.github/workflows/codex-canary.yml` | the workflow, cron + `workflow_dispatch` |
 | `scripts/codex-canary.mjs` | the driver (780 lines) — arg parsing, isolated `CODEX_HOME`, session drive, assertions, redacted evidence |
 | `scripts/codex-canary.d.mts` | its type surface |
+| `scripts/capability-safety.mjs` + `.d.mts` | vendored: the driver imports four symbols from it |
+| `package.json` | minimal, so the driver resolves as ESM |
 | `test/e2e/codex-canary-driver-v2.unit.test.ts` | the driver's unit tests (753 lines) |
 | `governing/adr-0006-codex-e2e-testing.md` | the decision that established reproducible Codex e2e |
 | `governing/adr-0007-codex-canary-evidence.md` | the decision that shaped the canary's evidence |
 | `governing/spec-0002-codex-e2e-testing.md` | the governing spec as of retirement |
 
+## Running it
+
+The driver imports `CAPABILITY_REDACTION_ERROR`, `DEFAULT_OUTPUT_LIMIT_BYTES`,
+`extractCapabilities` and `writeSafeCanaryArtifacts` from `scripts/capability-safety.mjs`,
+so that file is vendored here. With the minimal `package.json` the driver **loads and is
+executable**; it is otherwise zero-dependency, using only `node:` builtins.
+
+`test/e2e/codex-canary-driver-v2.unit.test.ts` needs `vitest`, which is not vendored —
+that file is here to be read, not run.
+
 ## What did NOT come here
 
-The **dashboard end-to-end test stays on `main` and is unaffected** — `ci.yml`'s
-`codex-e2e` job, `scripts/run-e2e-container.mjs`, `scripts/run-capability-safe-playwright.mjs`,
-`scripts/capability-safety.mjs` and `test/e2e/codex-plugin.e2e.ts`. That is a Playwright
-suite that drives the real Wisp dashboard on every pull request, at no API cost. It was
-never part of the canary and is not retired.
+The **dashboard end-to-end suite stays on `main` and is unaffected** — `ci.yml`'s
+`codex-e2e` job, `scripts/run-e2e-container.mjs`, `scripts/run-capability-safe-playwright.mjs`
+and `test/e2e/codex-plugin.e2e.ts`. It drives the real Wisp dashboard on every pull
+request at no API cost, and is not retired.
+
+**Correction.** An earlier version of this file said `scripts/capability-safety.mjs` "was
+never part of the canary". That was wrong — the driver imports four symbols from it, and
+without it the archived driver failed to load at all. The file is genuinely shared:
+`runSanitizedCommand` and `assertCapabilityAbsent` serve the dashboard suite and stay on
+`main`, while `writeSafeCanaryArtifacts`, `extractCapabilities` and
+`DEFAULT_OUTPUT_LIMIT_BYTES` had the canary driver as their only production consumer.
