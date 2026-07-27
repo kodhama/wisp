@@ -12,6 +12,10 @@ updated: 2026-07-24
 
 # ADR-0007 — Align Codex canary evidence with observable host output
 
+> **Forward pointer.** `adr-0018-retire-the-marketplace-canary` supersedes
+> this ADR's canary evidence semantics. Its clause that the deterministic
+> installed-plugin gate owns the exact seven-tool inventory remains current.
+
 > **Forward pointer.** `adr-0014-retire-preview-qualification-machinery`
 > supersedes this ADR's candidate qualification and release-evidence
 > semantics. Its observable real-Codex smoke boundaries remain current.

@@ -2,10 +2,10 @@ schema = 1
 
 [packages.unit]
 paths = ["test/*.test.ts"]
-specs = ["spec-0001-plugin-mcp-distribution@v15"]
+specs = ["spec-0001-plugin-mcp-distribution@v16"]
 decisions = []
 
 [packages.e2e]
 paths = ["test/e2e/**"]
-specs = ["spec-0001-plugin-mcp-distribution@v15", "spec-0002-codex-e2e-testing@v8"]
-decisions = ["adr-0006-codex-e2e-testing", "adr-0007-codex-canary-evidence", "adr-0011-node-24-only-support"]
+specs = ["spec-0001-plugin-mcp-distribution@v16", "spec-0002-codex-e2e-testing@v9"]
+decisions = ["adr-0006-codex-e2e-testing", "adr-0011-node-24-only-support"]
