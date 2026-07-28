@@ -4,7 +4,7 @@ type: adr
 status: approved
 depends_on: [stewards/kodhama-0022-propagate-collective-strategy, stewards/kodhama-0023-separate-operational-availability-from-support]
 owner: agent
-updated: 2026-07-26
+updated: 2026-07-28
 ---
 
 # ADR-0013 — Receive the Stewards availability/support grammar
