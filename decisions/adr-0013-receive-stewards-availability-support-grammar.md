@@ -4,7 +4,7 @@ type: adr
 status: approved
 depends_on: [stewards/kodhama-0022-propagate-collective-strategy, stewards/kodhama-0023-separate-operational-availability-from-support]
 owner: agent
-updated: 2026-07-26
+updated: 2026-07-28
 ---
 
 # ADR-0013 — Receive the Stewards availability/support grammar
@@ -13,6 +13,14 @@ updated: 2026-07-26
 > supersedes only this receipt's statement that current Wisp qualification
 > metadata remains unchanged. Its constraint on every future exact-surface
 > row remains current.
+>
+> **Forward pointer.** Stewards
+> [`kodhama-0025`](https://github.com/kodhama/stewards/blob/main/decisions/0025-retire-the-surface-matrix.md)
+> supersedes `kodhama-0023` in full, which retires exactly the remainder the
+> pointer above preserved: no exact-surface row, `availability_state` or
+> `support_claim` field is required of Wisp by any family contract. What this
+> receipt records — that Wisp received the grammar on 2026-07-26 — still
+> happened; what it forwards no longer binds.
 
 ## Decision state
 
