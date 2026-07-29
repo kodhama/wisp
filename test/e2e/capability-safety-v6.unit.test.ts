@@ -12,6 +12,7 @@ import { basename, join, resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
   CAPABILITY_REDACTION_ERROR,
+  DEFAULT_OUTPUT_LIMIT_BYTES,
   assertCapabilityAbsent,
   directoryIsAbsentOrEmpty,
   persistPreparedBrowserEvidence,
@@ -236,6 +237,50 @@ describe("SPEC-0002@v9 capability-safe evidence boundary", () => {
     );
     expect(overflow).toMatchObject({ status: 1, safetyFailed: true });
   });
+
+  // SPEC-0002@v9 S15 at its NORMATIVE value. `adr-0018` recorded that retiring
+  // the canary took this boundary to zero coverage — the only test at 4,194,304
+  // was the deleted driver's, against `createOutputCollector`, which excluded
+  // the crossing chunk and returned the accepted prefix. `runSanitizedCommand`
+  // differs on both points, so porting the old assertion would have been wrong.
+  // The test above proves the mechanism with an explicit `maxOutputBytes: 10`
+  // override and therefore proves nothing about the DEFAULT, which is the value
+  // the spec actually pins. Logged on issue #55; this closes that half of it.
+  it("bounds combined output at exactly DEFAULT_OUTPUT_LIMIT_BYTES, with no override", async () => {
+    expect(DEFAULT_OUTPUT_LIMIT_BYTES).toBe(4_194_304);
+
+    // At the limit: accepted. The comparison is `total > limit`, so the exact
+    // value is the last accepted one — "crosses" in S15 means strictly over.
+    const atLimit = await runSanitizedCommand(
+      process.execPath,
+      ["-e", `process.stdout.write("x".repeat(${DEFAULT_OUTPUT_LIMIT_BYTES}))`],
+      { emit: false },
+    );
+    expect(atLimit.safetyFailed).toBe(false);
+    expect(atLimit.status).toBe(0);
+    expect(atLimit.stdout?.byteLength).toBe(DEFAULT_OUTPUT_LIMIT_BYTES);
+
+    // One byte over: unsafe, and S15's "no captured stdout or stderr is
+    // retained or persisted at all" — not a truncated prefix.
+    const overLimit = await runSanitizedCommand(
+      process.execPath,
+      ["-e", `process.stdout.write("x".repeat(${DEFAULT_OUTPUT_LIMIT_BYTES + 1}))`],
+      { emit: false },
+    );
+    expect(overLimit).toMatchObject({ status: 1, safetyFailed: true });
+    expect(overLimit.stdout?.byteLength ?? 0).toBe(0);
+    expect(overLimit.stderr?.byteLength ?? 0).toBe(0);
+
+    // The split is SHARED across the two streams, not per-stream: half the
+    // budget on each, plus one byte, must still fail.
+    const half = DEFAULT_OUTPUT_LIMIT_BYTES / 2;
+    const split = await runSanitizedCommand(
+      process.execPath,
+      ["-e", `process.stdout.write("x".repeat(${half + 1}));process.stderr.write("y".repeat(${half}))`],
+      { emit: false },
+    );
+    expect(split).toMatchObject({ status: 1, safetyFailed: true });
+  }, 60_000);
 
   it("emits exactly the fixed error when sanitizer safety cannot be proved", () => {
     const result = spawnSync(
