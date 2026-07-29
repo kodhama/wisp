@@ -1,4 +1,5 @@
-// SPEC-0001@v16 S64/S72/R87/R91; SPEC-0002@v9 S12/S17/R14/R20.
+// SPEC-0001@v16 S64/S72/R87/R91; SPEC-0002@v9 S12/S15/S17/R14/R18/R20.
+// S15/R18 added 2026-07-29 with the DEFAULT_OUTPUT_LIMIT_BYTES boundary test.
 import { spawnSync } from "node:child_process";
 import {
   mkdir,
