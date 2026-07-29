@@ -32,7 +32,10 @@ version: 9
 > **SCOPE:** S15/R18 are the one behavioural change — they described the
 > retired `createOutputCollector`, which excluded the crossing chunk and kept
 > the accepted prefix; `runSanitizedCommand` counts the chunk and retains
-> nothing. **The exact 4,194,304-byte boundary now has no test.** The `/proc`
+> nothing. ~~**The exact 4,194,304-byte boundary now has no test.**~~ *(True at
+> this amendment; closed 2026-07-29 by wisp#59. Struck rather than deleted —
+> this banner records what v9 did, and what it left owing is part of that.)*
+> The `/proc`
 > identity-provider note survives and relocates to the gate section. No
 > deterministic-gate behaviour changes and no identifier is renumbered.
 
@@ -485,8 +488,12 @@ does not exercise or replace SPEC-0001's macOS `/bin/ps` provider tests.
 > command collector" — `createOutputCollector`, which lived in the retired
 > canary driver and excluded the crossing chunk while returning the accepted
 > prefix. `runSanitizedCommand`, the surviving implementation, differs on both
-> points. **The exact 4,194,304 value is no longer covered by any test**: the
-> only test at that boundary was the canary driver's. See `adr-0018` §The
+> points. ~~**The exact 4,194,304 value is no longer covered by any test**: the
+> only test at that boundary was the canary driver's.~~ **Closed 2026-07-29
+> (wisp#59)** — covered at the default against `runSanitizedCommand`, the
+> surviving implementation, rather than by porting the deleted driver's
+> assertion against `createOutputCollector`. That port would have been *wrong*
+> on both of the points named above, not merely stale. See `adr-0018` §The
 > 4,194,304-byte boundary loses its only test, and issue #55.
 
 **S17 — Browser evidence is scanned before capability discard**
@@ -547,7 +554,7 @@ does not exercise or replace SPEC-0001's macOS `/bin/ps` provider tests.
 | Contract area | Minimum evidence |
 |---|---|
 | Installed Preview payload | Fixture staging proves byte-for-byte copying of exactly SPEC-0001@v16's eight paths into the manifest-version cache, rejects `qualification.json` and `surfaces.json`, launches the literal manifest bootstrap, lists seven tools, and confines bus writes to the fixture project |
-| Capability-safe artifacts | Positive fixtures cover one and multiple fragment/bearer occurrences in top-level and nested JSON strings; byte comparisons prove exact sentinel replacement and otherwise-identical retained bytes; a shared stdout/stderr budget terminates the process group and retains no output once crossed; raw-output spies prove no tee or raw stderr write. **The exact 4,194,304-byte boundary has no test after `adr-0018` — see issue #55.** |
+| Capability-safe artifacts | Positive fixtures cover one and multiple fragment/bearer occurrences in top-level and nested JSON strings; byte comparisons prove exact sentinel replacement and otherwise-identical retained bytes; a shared stdout/stderr budget terminates the process group and retains no output once crossed; raw-output spies prove no tee or raw stderr write. **The exact 4,194,304-byte boundary is covered at the default, both sides** (2026-07-29, wisp#59): accepted at exactly 4,194,304 with the full stream retained, unsafe at one byte over with zero bytes retained on either stream, and unsafe when the two streams split the budget plus one — proving it shared rather than per-stream. |
 | Capability-safe browser failures | Playwright configuration inspection proves trace/video/screenshot/retry/file reporters and attachments are disabled; injected assertion, timeout, crash, signal, and cleanup failures at every browser stage place the observed capability in page URL, bearer, console, network, exception, and reporter inputs; ordering spies prove cleanup then freeze→validate→single serialization→exact-capability scan→discard/end→same-buffer persistence, mutation attempts cannot alter frozen evidence, persisted bytes equal the pre-scanned buffer, no write occurs before discard, and every preparation/order/failure injection writes nothing |
 | Fast Node gate | Workflow inspection proves one explicit Node 24 setup, no strategy matrix or Node 20/22 entry, one execution of typecheck/unit/build/plugin-validation, and `codex-e2e` dependency on that successful job; documentation treats Node 24 as a technical target, not support |
 | Node runtime preflights | The pinned Playwright image reports `v24.16.0`; container fixtures record exact runtime output, accept major 24, and fail before test execution for missing, malformed, Node 20, or Node 22 observations |
